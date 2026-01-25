@@ -35,9 +35,11 @@ pub async fn authenticate_api_v1_middleware(
     path.starts_with("/api/v1/projects") || path.starts_with("/api/v1/api-keys/project/");
   let is_events_stream = path == "/api/v1/events/stream";
   let is_internal = path.starts_with("/internal/");
+  let is_signout = path == "/api/v1/auth/signout";
 
   // For /internal routes, X-Project-ID is optional (API keys don't need it)
-  let optional_project_id_header = is_projects_endpoint || is_events_stream || is_internal;
+  let optional_project_id_header =
+    is_projects_endpoint || is_events_stream || is_internal || is_signout;
 
   // In local mode, skip authentication but still require X-Project-ID header
   if state.local_mode {

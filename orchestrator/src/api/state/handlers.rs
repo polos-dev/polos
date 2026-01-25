@@ -3,12 +3,11 @@ use axum::{
   http::{HeaderMap, StatusCode},
   Json,
 };
+use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::api::auth::helpers::{
-  authenticate_and_validate_execution_project, authenticate_api_key,
-};
+use crate::api::auth::helpers::authenticate_and_validate_execution_project;
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::AppState;
 
@@ -36,18 +35,23 @@ pub struct GetConversationHistoryResponse {
 pub async fn add_conversation_history(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(conversation_id): Path<String>,
   Json(req): Json<AddConversationHistoryRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project if agent_run_id is provided
+  // Validate execution project if agent_run_id is provided (middleware already authenticated)
   let (agent_run_id, project_id) = if let Some(run_id_str) = &req.agent_run_id {
-    // agent_run_id is execution_id - validate it matches the API key's project
+    // agent_run_id is execution_id - validate it matches the authenticated project
     let (exec_id, exec_project_id) =
-      authenticate_and_validate_execution_project(&state, &headers, run_id_str).await?;
+      authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, run_id_str)
+        .await?;
     (Some(exec_id), exec_project_id)
   } else {
-    // If no agent_run_id, just authenticate API key and use its project_id
-    let api_key_project_id = authenticate_api_key(&state, &headers).await?;
+    // If no agent_run_id, get project_id from authenticated request
+    // For API keys, extract from API key; for JWT, require X-Project-ID header
+    use crate::api::auth::helpers::authenticate_api_v1_request;
+    let api_key_project_id =
+      authenticate_api_v1_request(&state, &headers, &cookie_jar, "", true).await?;
     (None, api_key_project_id)
   };
 

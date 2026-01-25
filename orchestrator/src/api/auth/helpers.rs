@@ -320,11 +320,14 @@ pub async fn authenticate_api_key(
   Ok(api_key_record.project_id)
 }
 
-// Helper function to authenticate API key and validate it matches an execution's project
-// Returns (execution_id_uuid, project_id) on success
+// Helper function to validate that an execution belongs to the authenticated project
+// This function assumes the request has already been authenticated by middleware
+// (either via API key or JWT cookie). It verifies that the execution belongs to
+// the authenticated project.
 pub async fn authenticate_and_validate_execution_project(
   state: &Arc<AppState>,
   headers: &HeaderMap,
+  cookie_jar: &axum_extra::extract::CookieJar,
   execution_id: &str,
 ) -> Result<(Uuid, Uuid), (StatusCode, axum::Json<ErrorResponse>)> {
   // Parse execution ID
@@ -399,8 +402,26 @@ pub async fn authenticate_and_validate_execution_project(
     return Ok((execution_id_uuid, header_project_id));
   }
 
-  // Authenticate API key and get project_id
-  let api_key_project_id = authenticate_api_key(state, headers).await?;
+  // Get the authenticated project_id (middleware already authenticated the request)
+  let auth_header = headers
+    .get("Authorization")
+    .and_then(|h| h.to_str().ok())
+    .and_then(|s| {
+      s.strip_prefix("Bearer ")
+        .map(|stripped| stripped.to_string())
+    });
+
+  let is_api_key = auth_header
+    .as_ref()
+    .map(|token| token.starts_with("sk_"))
+    .unwrap_or(false);
+
+  // For API keys, X-Project-ID is not required (project_id comes from API key)
+  // For JWT tokens, X-Project-ID is required (unless it's a projects endpoint)
+  let require_project_header = !is_api_key;
+
+  let authenticated_project_id =
+    authenticate_api_v1_request(state, headers, cookie_jar, "", require_project_header).await?;
 
   // Get project_id from execution
   let execution_project_id = state
@@ -418,34 +439,18 @@ pub async fn authenticate_and_validate_execution_project(
       )
     })?;
 
-  // Verify that the API key's project_id matches the execution's project_id
-  if api_key_project_id != execution_project_id {
+  // Verify that the authenticated project_id matches the execution's project_id
+  if authenticated_project_id != Uuid::nil() && authenticated_project_id != execution_project_id {
     return Err((
       StatusCode::FORBIDDEN,
       axum::Json(ErrorResponse {
-        error: "API key project does not match execution project".to_string(),
+        error: "Project does not match execution project".to_string(),
         error_type: "FORBIDDEN".to_string(),
       }),
     ));
   }
 
-  // Set project_id for RLS
-  state
-    .db
-    .set_project_id(&api_key_project_id, false)
-    .await
-    .map_err(|e| {
-      tracing::error!("Failed to set project_id: {}", e);
-      (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        axum::Json(ErrorResponse {
-          error: "Failed to set project_id".to_string(),
-          error_type: "INTERNAL_ERROR".to_string(),
-        }),
-      )
-    })?;
-
-  Ok((execution_id_uuid, api_key_project_id))
+  Ok((execution_id_uuid, execution_project_id))
 }
 
 // Helper function to authenticate API v1 requests

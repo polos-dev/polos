@@ -3,6 +3,7 @@ use axum::{
   http::{HeaderMap, StatusCode},
   Json,
 };
+use axum_extra::extract::CookieJar;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -527,6 +528,7 @@ pub async fn get_execution(
 pub async fn complete_execution(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<CompleteExecutionRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
@@ -535,9 +537,10 @@ pub async fn complete_execution(
     execution_id
   );
 
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id_uuid, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   tracing::info!(
     "[complete_execution API] Parsed execution_id: {}",
@@ -635,14 +638,16 @@ pub async fn complete_execution(
 pub async fn fail_execution(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<FailExecutionRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
   tracing::info!("Failing execution: {}", execution_id);
 
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id_uuid, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let execution = state
     .db
@@ -744,13 +749,15 @@ pub struct CancelExecutionResponse {
 pub async fn cancel_execution(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
 ) -> Result<Json<CancelExecutionResponse>, (StatusCode, Json<ErrorResponse>)> {
   tracing::info!("Cancelling execution: {}", execution_id);
 
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id_uuid, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   // Cancel execution in database (recursively cancels all children)
   let executions_to_cancel = state
@@ -887,14 +894,16 @@ pub struct ConfirmCancellationRequest {
 pub async fn confirm_cancellation(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<ConfirmCancellationRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
   tracing::info!("Confirming cancellation for execution: {}", execution_id);
 
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id_uuid, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let worker_id = Uuid::parse_str(&req.worker_id).map_err(|_| {
     (
@@ -1049,12 +1058,14 @@ pub async fn resume_execution(
 pub async fn store_step_output(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<StoreStepOutputRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let source_execution_id = req
     .source_execution_id
@@ -1089,11 +1100,13 @@ pub async fn store_step_output(
 pub async fn get_step_output(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path((execution_id, step_key)): Path<(String, String)>,
 ) -> Result<Json<GetStepOutputResponse>, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let step_data = state
     .db
@@ -1142,11 +1155,13 @@ pub async fn get_step_output(
 pub async fn get_all_step_outputs(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
 ) -> Result<Json<GetAllStepOutputsResponse>, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let steps = state
     .db
@@ -1182,12 +1197,14 @@ pub async fn get_all_step_outputs(
 pub async fn set_waiting(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<SetWaitingRequest>,
 ) -> Result<Json<SetWaitingResponse>, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   let wait_until = req.wait_until.and_then(|s| {
     DateTime::parse_from_rfc3339(&s)
@@ -1241,12 +1258,14 @@ pub async fn set_waiting(
 pub async fn update_execution_otel_span_id(
   State(state): State<Arc<AppState>>,
   headers: HeaderMap,
+  cookie_jar: CookieJar,
   Path(execution_id): Path<String>,
   Json(req): Json<UpdateExecutionOtelSpanIdRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-  // Authenticate API key and validate execution project
+  // Validate execution project (middleware already authenticated)
   let (execution_id, _project_id) =
-    authenticate_and_validate_execution_project(&state, &headers, &execution_id).await?;
+    authenticate_and_validate_execution_project(&state, &headers, &cookie_jar, &execution_id)
+      .await?;
 
   state
     .db

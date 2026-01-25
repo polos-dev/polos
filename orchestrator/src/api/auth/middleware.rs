@@ -28,15 +28,16 @@ pub async fn authenticate_api_v1_middleware(
     return Ok(next.run(request).await);
   }
 
-  // Only authenticate /api/v1 routes
-  if !path.starts_with("/api/v1/") {
-    return Ok(next.run(request).await);
-  }
-
+  // For /internal routes, X-Project-ID is not required when using API keys
+  // (API keys already contain project_id)
+  // For JWT tokens, X-Project-ID is still required
   let is_projects_endpoint =
     path.starts_with("/api/v1/projects") || path.starts_with("/api/v1/api-keys/project/");
   let is_events_stream = path == "/api/v1/events/stream";
-  let optional_project_id_header = is_projects_endpoint || is_events_stream;
+  let is_internal = path.starts_with("/internal/");
+
+  // For /internal routes, X-Project-ID is optional (API keys don't need it)
+  let optional_project_id_header = is_projects_endpoint || is_events_stream || is_internal;
 
   // In local mode, skip authentication but still require X-Project-ID header
   if state.local_mode {

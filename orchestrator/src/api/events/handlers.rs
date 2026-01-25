@@ -334,8 +334,6 @@ pub async fn stream_events(
     let mut execution_completed = false;
 
     loop {
-      tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
       let events = match state_clone
         .db
         .get_events(
@@ -350,6 +348,8 @@ pub async fn stream_events(
         Ok(events) => events,
         Err(_) => {
           let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+          // Wait before retrying on error
+          tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
           continue;
         }
       };
@@ -370,29 +370,41 @@ pub async fn stream_events(
                   "completed" => {
                     execution_completed = true;
                     let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+                    // Wait before checking again
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                     continue;
                   }
                   "running" => {
                     let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+                    // Wait before checking again
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                     continue;
                   }
                   _ => {
                     let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+                    // Wait before checking again
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                     continue;
                   }
                 }
               }
               Err(_) => {
                 let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+                // Wait before retrying on error
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                 continue;
               }
             }
           } else {
             let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+            // Wait before checking again
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             continue;
           }
         } else {
           let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
+            // Wait before checking again when no events found
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
           continue;
         }
       }

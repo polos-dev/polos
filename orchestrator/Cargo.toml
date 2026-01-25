@@ -1,0 +1,43 @@
+[package]
+name = "polos-orchestrator"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "polos_orchestrator"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full", "tracing"] }
+axum = { version = "0.7", features = ["multipart"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.9"
+tower-http = { version = "0.5", features = ["cors", "trace", "fs", "limit"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+console-subscriber = "0.4"
+anyhow = "1.0"
+bollard = "0.17"
+reqwest = { version = "0.12.24", features = ["json"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures = "0.3"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+cron = "0.12"
+jsonwebtoken = "9.3"
+bcrypt = "0.15"
+axum-extra = { version = "0.9", features = ["cookie"] }
+time = "0.3"
+rand = "0.8"
+dotenv = "0.15"
+
+[dev-dependencies]
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "macros"] }
+tokio-test = "0.4"
+mockall = "0.12"
+dotenv = "0.15"

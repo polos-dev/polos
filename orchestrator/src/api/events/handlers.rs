@@ -403,8 +403,8 @@ pub async fn stream_events(
           }
         } else {
           let _ = tx.send(Ok(SseEvent::default().data("keepalive")));
-            // Wait before checking again when no events found
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+          // Wait before checking again when no events found
+          tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
           continue;
         }
       }

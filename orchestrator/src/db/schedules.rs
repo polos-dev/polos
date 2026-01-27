@@ -143,7 +143,7 @@ impl Database {
             SELECT 1 FROM workflow_executions ex
             WHERE ex.workflow_id = s.workflow_id
               AND ex.deployment_id = dw.deployment_id
-              AND ex.status = ANY(ARRAY['queued', 'running', 'waiting'])
+              AND ex.status = ANY(ARRAY['running', 'waiting'])
             LIMIT 1
         )
         ORDER BY s.next_run_at ASC

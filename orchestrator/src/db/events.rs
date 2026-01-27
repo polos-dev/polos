@@ -220,7 +220,8 @@ impl Database {
                 FROM events e
                 WHERE e.topic = w.wait_topic
                   AND e.status = 'valid'
-                  AND e.created_at > w.wait_created_at
+                  AND e.project_id = w.project_id
+                  AND e.created_at >= w.wait_created_at
                 ORDER BY e.sequence_id DESC
                 LIMIT 1
             ) e ON true

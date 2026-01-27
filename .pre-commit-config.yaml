@@ -1,0 +1,37 @@
+# Pre-commit hooks configuration
+# Install with: pre-commit install
+# Run manually with: pre-commit run --all-files
+
+repos:
+  # Ruff for Python formatting and linting (worker/python)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      # Ruff formatter
+      - id: ruff-format
+        name: ruff format
+        types: [python]
+        files: ^sdk/python/
+      # Ruff linter with auto-fix
+      - id: ruff
+        name: ruff check (auto-fix)
+        args: [--fix]
+        types: [python]
+        files: ^sdk/python/
+
+  # Rust formatting and linting
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: rustfmt
+        entry: bash -c 'cd orchestrator && cargo fmt -- --check'
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: clippy
+        name: clippy
+        entry: bash -c 'cd orchestrator && cargo clippy -- -D warnings'
+        language: system
+        pass_filenames: false
+        always_run: true

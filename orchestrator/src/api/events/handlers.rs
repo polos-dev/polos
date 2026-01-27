@@ -442,6 +442,8 @@ pub struct RegisterEventTriggerRequest {
   pub event_topic: String,
   pub batch_size: i32,
   pub batch_timeout_seconds: Option<i32>,
+  #[serde(default)]
+  pub queue_name: Option<String>,
 }
 
 pub async fn register_event_trigger(
@@ -482,6 +484,7 @@ pub async fn register_event_trigger(
       req.batch_size,
       req.batch_timeout_seconds,
       &project_id,
+      req.queue_name.as_deref(),
     )
     .await
     .map_err(|e| {

@@ -147,6 +147,7 @@ impl Database {
     }
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub async fn create_or_update_event_trigger(
     &self,
     workflow_id: &str,
@@ -155,15 +156,20 @@ impl Database {
     batch_size: i32,
     batch_timeout_seconds: Option<i32>,
     project_id: &Uuid,
+    queue_name: Option<&str>,
   ) -> anyhow::Result<()> {
+    // Default queue_name to workflow_id if not provided
+    let effective_queue_name = queue_name.unwrap_or(workflow_id);
+
     sqlx::query(
-      "INSERT INTO event_triggers (workflow_id, deployment_id, event_topic, batch_size, batch_timeout_seconds, status, created_at, processed_at, project_id)
-       VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), $6)
+      "INSERT INTO event_triggers (workflow_id, deployment_id, event_topic, batch_size, batch_timeout_seconds, status, created_at, processed_at, project_id, queue_name)
+       VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), $6, $7)
        ON CONFLICT (workflow_id, deployment_id, event_topic, project_id) DO UPDATE SET
          batch_size = EXCLUDED.batch_size,
          batch_timeout_seconds = EXCLUDED.batch_timeout_seconds,
          status = 'active',
-         processed_at = NOW()"
+         processed_at = NOW(),
+         queue_name = COALESCE(EXCLUDED.queue_name, event_triggers.queue_name)"
     )
     .bind(workflow_id)
     .bind(deployment_id)
@@ -171,6 +177,7 @@ impl Database {
     .bind(batch_size)
     .bind(batch_timeout_seconds)
     .bind(project_id)
+    .bind(effective_queue_name)
     .execute(&self.pool)
     .await?;
 
@@ -185,8 +192,19 @@ impl Database {
   /// Returns Some(1) if a trigger was processed and execution created, Some(0) if processed but skipped, None if no triggers found
   pub async fn process_one_event_trigger(&self) -> anyhow::Result<Option<usize>> {
     const EVENT_TRIGGER_QUERY: &str = r#"
-    WITH selected_trigger AS (
-        -- Select trigger that has events and no in-flight executions
+    WITH running_counts AS (
+        -- Count running executions per queue
+        SELECT 
+            queue_name,
+            deployment_id,
+            COALESCE(concurrency_key, '') as concurrency_key,
+            COUNT(*) as running_count
+        FROM workflow_executions
+        WHERE status IN ('claimed', 'running')
+        GROUP BY queue_name, deployment_id, COALESCE(concurrency_key, '')
+    ),
+    selected_trigger AS (
+        -- Select trigger that has events and queue has capacity
         SELECT 
             t.id,
             t.workflow_id,
@@ -195,8 +213,16 @@ impl Database {
             t.batch_size,
             t.batch_timeout_seconds,
             t.last_sequence_id,
-            t.project_id
+            t.project_id,
+            t.queue_name
         FROM event_triggers t
+        INNER JOIN queues q
+            ON q.name = COALESCE(t.queue_name, t.workflow_id)
+            AND q.deployment_id = t.deployment_id
+        LEFT JOIN running_counts rc
+            ON rc.queue_name = COALESCE(t.queue_name, t.workflow_id)
+            AND rc.deployment_id = t.deployment_id
+            AND rc.concurrency_key = ''
         WHERE t.status = 'active'
         -- Must have unconsumed events
         AND EXISTS (
@@ -206,13 +232,10 @@ impl Database {
               AND (t.last_sequence_id IS NULL OR e.sequence_id > t.last_sequence_id)
             LIMIT 1
         )
-        -- Must NOT have in-flight executions
-        AND NOT EXISTS (
-            SELECT 1 FROM workflow_executions ex
-            WHERE ex.workflow_id = t.workflow_id
-              AND ex.deployment_id = t.deployment_id
-              AND ex.status IN ('queued', 'running', 'waiting')
-            LIMIT 1
+        -- Must have capacity in queue (check concurrency limit)
+        AND (
+            q.concurrency_limit IS NULL
+            OR COALESCE(rc.running_count, 0) < q.concurrency_limit
         )
         ORDER BY t.processed_at ASC
         LIMIT 1
@@ -290,7 +313,7 @@ impl Database {
                         )
                     ) FROM events_to_process e2 ORDER BY e2.sequence_id ASC LIMIT 1)
             END,
-            t.workflow_id, -- queue_name
+            COALESCE(t.queue_name, t.workflow_id),
             0, -- retry_count
             t.project_id,
             NOW(),
@@ -303,7 +326,7 @@ impl Database {
         CROSS JOIN batch_check bc
         WHERE bc.should_process = true
         GROUP BY t.workflow_id, t.deployment_id, t.batch_size, 
-                 t.batch_timeout_seconds, t.project_id
+                 t.batch_timeout_seconds, t.project_id, t.queue_name
         RETURNING 1
     ),
     updated_trigger AS (

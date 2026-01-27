@@ -1,0 +1,120 @@
+"""Batch workflow triggering utilities."""
+
+from typing import Any
+
+from ..agents.agent import AgentRunConfig
+from ..core.workflow import _execution_context, get_workflow
+from ..types.types import BatchWorkflowInput
+from ..utils.serializer import serialize
+from .client import ExecutionHandle, _submit_workflows
+
+
+async def invoke(
+    workflows: list[BatchWorkflowInput],
+    session_id: str | None = None,
+    user_id: str | None = None,
+) -> list[ExecutionHandle]:
+    """Invoke multiple different workflows in a single batch and return handles immediately.
+
+    This function cannot be called from within a workflow or agent.
+    Use step.batch_invoke() to call workflows from within workflows.
+
+    Args:
+        workflows: List of BatchWorkflowInput objects with 'id' (workflow_id string)
+            and 'payload' (dict or Pydantic model)
+
+    Returns:
+        List of ExecutionHandle objects for the submitted workflows
+
+    Example:
+        handles = await invoke([
+            BatchWorkflowInput(id="workflow-1", payload={"foo": "bar"}),
+            BatchWorkflowInput(id="workflow-2", payload={"baz": 42}),
+        ])
+    """
+    # Check if we're in an execution context - fail if we are
+    if _execution_context.get() is not None:
+        raise RuntimeError(
+            "workflow.run() cannot be called from within a workflow or agent. "
+            "Use step.invoke_and_wait() to call workflows from within workflows."
+        )
+
+    if not workflows:
+        return []
+
+    # Build workflow requests for batch submission
+    workflow_requests = []
+    for workflow_input in workflows:
+        workflow_id = workflow_input.id
+        payload = serialize(workflow_input.payload)
+
+        workflow_obj = get_workflow(workflow_id)
+        if not workflow_obj:
+            raise ValueError(f"Workflow '{workflow_id}' not found")
+
+        workflow_req = {
+            "workflow_id": workflow_id,
+            "payload": payload,
+            "initial_state": serialize(workflow_input.initial_state),
+            "run_timeout_seconds": workflow_input.run_timeout_seconds,
+        }
+
+        # Per-workflow properties (queue_name, concurrency_key, etc.)
+        if workflow_obj.queue_name is not None:
+            workflow_req["queue_name"] = workflow_obj.queue_name
+
+        if workflow_obj.queue_concurrency_limit is not None:
+            workflow_req["queue_concurrency_limit"] = workflow_obj.queue_concurrency_limit
+
+        workflow_requests.append(workflow_req)
+
+    # Submit all workflows in a single batch using the batch endpoint
+    handles = await _submit_workflows(
+        workflows=workflow_requests,
+        deployment_id=None,  # Use latest active deployment
+        parent_execution_id=None,
+        root_execution_id=None,
+        step_key=None,  # Not invoked from a step, so no step_key
+        session_id=session_id,
+        user_id=user_id,
+        wait_for_subworkflow=False,  # Fire-and-forget
+    )
+
+    return handles
+
+
+async def agent_invoke(
+    agents: list[AgentRunConfig],
+) -> list[ExecutionHandle]:
+    """
+    Invoke multiple agents in parallel and return execution handles.
+
+    This helper is intended for use with Agent.with_input(), which returns
+    AgentRunConfig instances.
+
+    Example:
+        handles = await agent_invoke([
+            grammar_agent.with_input("Check this"),
+            tone_agent.with_input("Check this too"),
+        ])
+    """
+    workflows: list[BatchWorkflowInput] = []
+    for config in agents:
+        payload: dict[str, Any] = {
+            "input": config.input,
+            "streaming": config.streaming,
+            "session_id": config.session_id,
+            "conversation_id": config.conversation_id,
+            "user_id": config.user_id,
+            **config.kwargs,
+        }
+        workflows.append(
+            BatchWorkflowInput(
+                id=config.agent.id,
+                payload=payload,
+                initial_state=config.initial_state,
+                run_timeout_seconds=config.run_timeout_seconds,
+            )
+        )
+
+    return await invoke(workflows)

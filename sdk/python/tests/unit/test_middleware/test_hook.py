@@ -28,8 +28,6 @@ class TestHookContext:
         """Test HookContext initialization."""
         ctx = HookContext(workflow_id="test-workflow")
         assert ctx.workflow_id == "test-workflow"
-        assert ctx.agent_workflow_id is None
-        assert ctx.agent_run_id is None
         assert ctx.session_id is None
         assert ctx.user_id is None
         assert ctx.agent_config is None
@@ -46,8 +44,6 @@ class TestHookContext:
         steps = [Step(step=1, content="test")]
         ctx = HookContext(
             workflow_id="test-workflow",
-            agent_workflow_id="test-agent",
-            agent_run_id="test-run",
             session_id="test-session",
             user_id="test-user",
             agent_config=agent_config,
@@ -57,8 +53,6 @@ class TestHookContext:
             current_output={"result": "output"},
         )
         assert ctx.workflow_id == "test-workflow"
-        assert ctx.agent_workflow_id == "test-agent"
-        assert ctx.agent_run_id == "test-run"
         assert ctx.session_id == "test-session"
         assert ctx.user_id == "test-user"
         assert ctx.agent_config == agent_config
@@ -106,7 +100,6 @@ class TestHookResult:
         """Test HookResult with default values."""
         result = HookResult()
         assert result.action == HookAction.CONTINUE
-        assert result.modified_agent_config is None
         assert result.modified_payload is None
         assert result.modified_output is None
         assert result.error_message is None

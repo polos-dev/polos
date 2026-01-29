@@ -157,8 +157,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
         if agent and agent.on_agent_step_start:
             hook_context = HookContext(
                 workflow_id=ctx.agent_id,
-                agent_workflow_id=ctx.agent_id,
-                agent_run_id=agent_run_id,
                 session_id=ctx.session_id,
                 user_id=ctx.user_id,
                 agent_config=agent_config,
@@ -173,8 +171,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             )
 
             # Apply modifications
-            if hook_result.modified_agent_config:
-                agent_config.update(hook_result.modified_agent_config)
             if hook_result.modified_payload and "messages" in hook_result.modified_payload:
                 conversation_messages = hook_result.modified_payload["messages"]
 
@@ -284,8 +280,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             if agent and agent.on_tool_start:
                 hook_context = HookContext(
                     workflow_id=ctx.agent_id,
-                    agent_workflow_id=ctx.agent_id,
-                    agent_run_id=agent_run_id,
                     session_id=ctx.session_id,
                     user_id=ctx.user_id,
                     agent_config=agent_config,
@@ -298,8 +292,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                 )
 
                 # Apply modifications
-                if hook_result.modified_agent_config:
-                    agent_config.update(hook_result.modified_agent_config)
                 if hook_result.modified_payload:
                     tool_args.update(hook_result.modified_payload)
 
@@ -353,8 +345,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                 if agent and agent.on_tool_end:
                     hook_context = HookContext(
                         workflow_id=ctx.agent_id,
-                        agent_workflow_id=ctx.agent_id,
-                        agent_run_id=agent_run_id,
                         session_id=ctx.session_id,
                         user_id=ctx.user_id,
                         agent_config=agent_config,
@@ -368,8 +358,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                     )
 
                     # Apply modifications
-                    if hook_result.modified_agent_config:
-                        agent_config.update(hook_result.modified_agent_config)
                     if hook_result.modified_output is not None:
                         tool_result = hook_result.modified_output
 
@@ -442,8 +430,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
         if agent and agent.on_agent_step_end:
             hook_context = HookContext(
                 workflow_id=ctx.agent_id,
-                agent_workflow_id=ctx.agent_id,
-                agent_run_id=agent_run_id,
                 session_id=ctx.session_id,
                 user_id=ctx.user_id,
                 agent_config=agent_config,
@@ -456,11 +442,9 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             )
 
             # Apply modifications
-            if hook_result.modified_agent_config:
-                agent_config.update(hook_result.modified_agent_config)
             if hook_result.modified_output:
                 new_result = hook_result.modified_output
-                steps[-1].update(new_result)
+                steps[-1] = new_result
 
             # Check hook action
             if hook_result.action == HookAction.FAIL:

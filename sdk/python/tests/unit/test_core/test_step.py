@@ -243,7 +243,7 @@ class TestPublishStepEvent:
             assert event.event_type == event_type
             assert event.data["step_key"] == step_key
             assert event.data["step_type"] == event_name  # Note: it's "step_type" not "event_name"
-            assert "input_params" in event.data
+            assert "data" in event.data
 
     @pytest.mark.asyncio
     async def test_publish_step_event_topic(self, mock_workflow_context):

@@ -188,7 +188,7 @@ class Step:
                 data={
                     "step_key": step_key,
                     "step_type": step_type,
-                    "input_params": safe_serialize(input_params) if input_params else {},
+                    "data": safe_serialize(input_params) if input_params else {},
                     "_metadata": {
                         "execution_id": self.ctx.execution_id,
                         "workflow_id": self.ctx.workflow_id,

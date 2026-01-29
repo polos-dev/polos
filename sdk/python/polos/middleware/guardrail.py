@@ -26,8 +26,8 @@ class GuardrailContext(BaseModel):
     tool_calls: list[ToolCall] | None = None  # LLM tool calls
 
     # Execution context (for guardrail to make decisions)
-    agent_workflow_id: str = ""
-    agent_run_id: str = ""
+    agent_workflow_id: str | None = ""
+    agent_run_id: str | None = ""
     session_id: str | None = None
     user_id: str | None = None
     llm_config: AgentConfig = AgentConfig(name="", provider="", model="")

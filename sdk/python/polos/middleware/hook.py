@@ -32,19 +32,17 @@ class HookContext(BaseModel):
 
     # Immutable identifiers
     workflow_id: str
-    agent_workflow_id: str | None = None  # Available for agents
-    agent_run_id: str | None = None  # Available for agents
     session_id: str | None = None
     user_id: str | None = None
-    agent_config: AgentConfig | None = None
+    agent_config: AgentConfig | None = None  # Not available to agent's on_start and on_end hooks
 
     # Current state
     steps: list[Step] = []  # All previous steps
 
     # For workflow/tool hooks
     current_tool: str | None = None
-    current_payload: dict[str, Any] | None = None
-    current_output: dict[str, Any] | None = None
+    current_payload: dict[str, Any] | BaseModel | None = None
+    current_output: dict[str, Any] | BaseModel | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert hook context to dictionary for serialization."""
@@ -72,7 +70,6 @@ class HookResult(BaseModel):
     action: HookAction = HookAction.CONTINUE
 
     # Optional modifications
-    modified_agent_config: AgentConfig | None = None
     modified_payload: dict[str, Any] | None = None
     modified_output: Any | None = None
 
@@ -84,7 +81,7 @@ class HookResult(BaseModel):
         """Continue with optional modifications.
 
         Args:
-            **modifications: Can include modified_agent_config, modified_payload, modified_output
+            **modifications: Can include modified_payload, modified_output
 
         Returns:
             HookResult with CONTINUE action and modifications

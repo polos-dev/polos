@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from ..runtime.client import _config, _get_headers
+from ..utils.client_context import get_client_or_raise
 
 
 async def _set_waiting(
@@ -20,8 +20,9 @@ async def _set_waiting(
     expires_at: datetime | None = None,
 ) -> None:
     """Internal method to set execution to waiting state."""
-    api_url = _config["api_url"]
-    headers = _get_headers()
+    polos_client = get_client_or_raise()
+    api_url = polos_client.api_url
+    headers = polos_client._get_headers()
 
     async with httpx.AsyncClient() as client:
         response = await client.post(

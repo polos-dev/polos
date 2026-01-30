@@ -18,10 +18,7 @@ from ..features.tracing import (
     get_tracer,
 )
 from ..features.wait import WaitException
-from ..runtime.client import (
-    ExecutionHandle,
-    _submit_workflow,
-)
+from ..runtime.client import ExecutionHandle, PolosClient
 from ..runtime.queue import Queue
 from ..utils.serializer import safe_serialize, serialize
 from .context import AgentContext, WorkflowContext
@@ -637,6 +634,7 @@ class Workflow:
 
     async def invoke(
         self,
+        client: PolosClient,
         payload: BaseModel | dict[str, Any] | None = None,
         queue: str | None = None,
         concurrency_key: str | None = None,
@@ -653,6 +651,7 @@ class Workflow:
         Use step.invoke() to call workflows from within workflows.
 
         Args:
+            client: PolosClient instance
             payload: Workflow payload
             queue: Optional queue name (overrides workflow-level queue)
             concurrency_key: Optional concurrency key for per-tenant queuing
@@ -673,6 +672,7 @@ class Workflow:
             )
 
         return await self._invoke(
+            client,
             payload,
             queue=queue,
             concurrency_key=concurrency_key,
@@ -684,6 +684,7 @@ class Workflow:
 
     async def _invoke(
         self,
+        client: PolosClient,
         payload: BaseModel | dict[str, Any] | None = None,
         queue: str | None = None,
         concurrency_key: str | None = None,
@@ -705,6 +706,7 @@ class Workflow:
         The workflow will be executed asynchronously and the handle will be returned immediately.
 
         Args:
+            client: PolosClient instance
             payload: Workflow payload
             queue: Optional queue name (overrides workflow-level queue)
             concurrency_key: Optional concurrency key for per-tenant queuing
@@ -741,7 +743,7 @@ class Workflow:
         # Invoke the workflow (it will be checkpointed when it executes)
         # For nested workflows called via step.invoke(), use workflow's own queue configuration
         queue_name = queue if queue else self.queue_name if self.queue_name is not None else self.id
-        handle = await _submit_workflow(
+        handle = await client._submit_workflow(
             self.id,
             payload,
             deployment_id=deployment_id,
@@ -763,6 +765,7 @@ class Workflow:
 
     async def run(
         self,
+        client: PolosClient,
         payload: BaseModel | dict[str, Any] | None = None,
         queue: str | None = None,
         concurrency_key: str | None = None,
@@ -779,6 +782,7 @@ class Workflow:
         Use step.invoke_and_wait() to call workflows from within workflows.
 
         Args:
+            client: PolosClient instance
             payload: Workflow payload (dict or Pydantic BaseModel)
             queue: Optional queue name (overrides workflow-level queue)
             concurrency_key: Optional concurrency key for per-tenant queuing
@@ -804,6 +808,7 @@ class Workflow:
 
         # Invoke workflow and get handle
         handle = await self.invoke(
+            client=client,
             payload=payload,
             queue=queue,
             concurrency_key=concurrency_key,
@@ -826,7 +831,7 @@ class Workflow:
                     timeout_seconds=timeout,
                 )
 
-            execution_info = await handle.get()
+            execution_info = await handle.get(client)
             status = execution_info.get("status")
 
             if status == "completed":
@@ -837,7 +842,7 @@ class Workflow:
                 raise RuntimeError(f"Workflow execution failed: {error}")
 
             # Wait before checking again
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
         return result
 

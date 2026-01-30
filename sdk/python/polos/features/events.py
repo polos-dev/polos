@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
-from ..runtime.client import _config, _get_headers
+from ..runtime.client import PolosClient
 from ..utils.worker_singleton import get_worker_client
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,7 @@ class Event:
 
 
 async def batch_publish(
+    client: PolosClient,
     topic: str,
     events: list[EventData],
     execution_id: str | None = None,
@@ -159,6 +160,7 @@ async def batch_publish(
     """Publish a batch of events for a single topic. Returns list of sequence_ids.
 
     Args:
+        client: PolosClient instance
         topic: Event topic (all events in the batch share this topic)
         events: List of EventData instances, each with:
             - event_type: str - Type of event
@@ -188,8 +190,8 @@ async def batch_publish(
         return []
 
     # Publish events to orchestrator
-    api_url = _config["api_url"]
-    headers = _get_headers()
+    api_url = client.api_url
+    headers = client._get_headers()
 
     # Add execution_id and attempt_number internally
     events_with_internal = []
@@ -231,6 +233,7 @@ async def batch_publish(
 
 
 async def publish(
+    client: PolosClient,
     topic: str,
     event_type: str | None = None,
     data: dict[str, Any] = None,
@@ -242,6 +245,7 @@ async def publish(
     This calls batch_publish() internally with a single event.
 
     Args:
+        client: PolosClient instance
         topic: Event topic
         event_type: Optional type of event
         data: Event payload
@@ -257,11 +261,15 @@ async def publish(
                 data=data or {},
             )
         ],
+        execution_id=execution_id,
+        root_execution_id=root_execution_id,
+        client=client,
     )
     return sequence_ids[0] if sequence_ids else None
 
 
 async def _stream(
+    client: PolosClient,
     topic: str | None = None,
     workflow_run_id: str | None = None,
     last_sequence_id: int | None = None,
@@ -275,11 +283,11 @@ async def _stream(
     from datetime import timezone
     from urllib.parse import urlencode
 
-    api_url = _config["api_url"]
+    api_url = client.api_url
 
     # Build query parameters
     params = {
-        "project_id": _config.get("project_id"),
+        "project_id": client.project_id,
     }
 
     # If workflow_run_id is provided, use it (API will construct topic from it)
@@ -306,13 +314,11 @@ async def _stream(
     # Build URL with query parameters
     url = f"{api_url}/api/v1/events/stream?{urlencode(params)}"
 
-    headers = {}
-    if _config["api_key"]:
-        headers["Authorization"] = f"Bearer {_config['api_key']}"
+    headers = client._get_headers()
 
     async with (
-        httpx.AsyncClient(timeout=httpx.Timeout(None), headers=headers) as client,
-        client.stream("GET", url) as response,
+        httpx.AsyncClient(timeout=httpx.Timeout(None), headers=headers) as http_client,
+        http_client.stream("GET", url) as response,
     ):
         response.raise_for_status()
 
@@ -345,6 +351,7 @@ async def _stream(
 
 
 def stream_topic(
+    client: PolosClient,
     topic: str = None,
     last_sequence_id: int | None = None,
     last_timestamp: datetime | None = None,
@@ -355,6 +362,7 @@ def stream_topic(
     Each event contains: id, sequence_id, topic, event_type, data, created_at.
 
     Args:
+        client: PolosClient instance
         topic: Event topic to stream.
         last_sequence_id: Optional sequence ID to start streaming after. If provided,
             streaming begins after this sequence ID.
@@ -372,10 +380,13 @@ def stream_topic(
             elif event.event_type == "result":
                 print(event.data.get("result"))
     """
-    return _stream(topic=topic, last_sequence_id=last_sequence_id, last_timestamp=last_timestamp)
+    return _stream(
+        client=client, topic=topic, last_sequence_id=last_sequence_id, last_timestamp=last_timestamp
+    )
 
 
 def stream_workflow(
+    client: PolosClient,
     workflow_run_id: str = None,
     last_sequence_id: int | None = None,
     last_timestamp: datetime | None = None,
@@ -389,6 +400,7 @@ def stream_workflow(
     matching execution_id, indicating the workflow has completed.
 
     Args:
+        client: PolosClient instance
         workflow_run_id: Workflow run ID. If provided, streams events for
             "workflow:{workflow_run_id}" topic.
         last_sequence_id: Optional sequence ID to start streaming after. If provided,
@@ -410,6 +422,7 @@ def stream_workflow(
 
     async def _stream_with_finish_check():
         async for event in _stream(
+            client=client,
             workflow_run_id=workflow_run_id,
             last_sequence_id=last_sequence_id,
             last_timestamp=last_timestamp,

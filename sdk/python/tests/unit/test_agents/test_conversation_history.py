@@ -8,6 +8,7 @@ from polos.agents.conversation_history import (
     add_conversation_history,
     get_conversation_history,
 )
+from polos.runtime.client import PolosClient
 
 
 class TestAddConversationHistory:
@@ -26,12 +27,16 @@ class TestAddConversationHistory:
         mock_response.raise_for_status = MagicMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             await add_conversation_history(
                 mock_workflow_context,
@@ -61,12 +66,16 @@ class TestAddConversationHistory:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=None),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
             patch("httpx.AsyncClient") as mock_client_class,
         ):
             mock_client = AsyncMock()
@@ -99,12 +108,16 @@ class TestAddConversationHistory:
         mock_response.raise_for_status = MagicMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             await add_conversation_history(
                 mock_workflow_context,
@@ -132,12 +145,16 @@ class TestAddConversationHistory:
         mock_response.raise_for_status = MagicMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             await add_conversation_history(
                 mock_workflow_context,
@@ -171,12 +188,16 @@ class TestGetConversationHistory:
         mock_response.json = MagicMock(return_value={"messages": mock_messages})
         mock_client.get = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             result = await get_conversation_history(conversation_id, agent_id)
 
@@ -199,12 +220,16 @@ class TestGetConversationHistory:
         mock_response.raise_for_status = MagicMock()
         mock_response.json = MagicMock(return_value={"messages": mock_messages})
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=None),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
             patch("httpx.AsyncClient") as mock_client_class,
         ):
             mock_client = AsyncMock()
@@ -232,12 +257,16 @@ class TestGetConversationHistory:
         mock_response.json = MagicMock(return_value={"messages": mock_messages})
         mock_client.get = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             await get_conversation_history(conversation_id, agent_id, deployment_id=deployment_id)
 
@@ -258,12 +287,16 @@ class TestGetConversationHistory:
         mock_response.json = MagicMock(return_value={"messages": mock_messages})
         mock_client.get = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             await get_conversation_history(conversation_id, agent_id, limit=limit)
 
@@ -282,12 +315,16 @@ class TestGetConversationHistory:
         mock_response.json = MagicMock(return_value={})  # No messages key
         mock_client.get = AsyncMock(return_value=mock_response)
 
+        mock_polos_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
         with (
             patch("polos.agents.conversation_history.get_worker_client", return_value=mock_client),
             patch(
-                "polos.agents.conversation_history._config", {"api_url": "http://localhost:8080"}
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=mock_polos_client,
             ),
-            patch("polos.agents.conversation_history._get_headers", return_value={}),
+            patch.object(mock_polos_client, "_get_headers", return_value={}),
         ):
             result = await get_conversation_history(conversation_id, agent_id)
 

@@ -13,7 +13,7 @@ from polos.agents.agent import (
     StreamResult,
     TextChunkIterator,
 )
-from polos.runtime.client import ExecutionHandle
+from polos.runtime.client import ExecutionHandle, PolosClient
 
 
 class TestAgentRunConfig:
@@ -73,7 +73,8 @@ class TestStreamResult:
             workflow_id="test-agent",
             root_execution_id=None,
         )
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert result.handle == handle
         assert result.agent_run_id == execution_id
         assert result.id == execution_id
@@ -86,7 +87,8 @@ class TestStreamResult:
             workflow_id="test-agent",
             root_execution_id=None,
         )
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert result.root_execution_id == execution_id
         assert handle.root_execution_id == execution_id
 
@@ -99,7 +101,8 @@ class TestStreamResult:
             workflow_id="test-agent",
             root_execution_id=root_execution_id,
         )
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert result.topic == f"workflow:{root_execution_id}"
 
     def test_stream_result_delegates_to_handle(self):
@@ -111,7 +114,8 @@ class TestStreamResult:
             session_id="test-session",
             user_id="test-user",
         )
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert result.workflow_id == "test-agent"
         assert result.session_id == "test-session"
         assert result.user_id == "test-user"
@@ -120,17 +124,19 @@ class TestStreamResult:
     async def test_stream_result_get(self):
         """Test StreamResult.get method."""
         handle = ExecutionHandle(id=str(uuid.uuid4()), workflow_id="test-agent")
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
         with patch.object(
             ExecutionHandle, "get", new_callable=AsyncMock, return_value={"status": "running"}
         ):
-            result = StreamResult(handle)
+            result = StreamResult(handle, client)
             status = await result.get()
             assert status == {"status": "running"}
 
     def test_stream_result_to_dict(self):
         """Test StreamResult.to_dict method."""
         handle = ExecutionHandle(id=str(uuid.uuid4()), workflow_id="test-agent")
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         data = result.to_dict()
         # to_dict() calls model_dump() on the ExecutionHandle
         assert data["id"] == handle.id
@@ -144,7 +150,8 @@ class TestStreamResult:
             workflow_id="test-agent",
             root_execution_id=execution_id,
         )
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         repr_str = repr(result)
         assert "StreamResult" in repr_str
         assert execution_id in repr_str
@@ -152,13 +159,15 @@ class TestStreamResult:
     def test_stream_result_text_chunks_property(self):
         """Test StreamResult.text_chunks property."""
         handle = ExecutionHandle(id=str(uuid.uuid4()), workflow_id="test-agent")
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert isinstance(result.text_chunks, TextChunkIterator)
 
     def test_stream_result_events_property(self):
         """Test StreamResult.events property."""
         handle = ExecutionHandle(id=str(uuid.uuid4()), workflow_id="test-agent")
-        result = StreamResult(handle)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        result = StreamResult(handle, client)
         assert isinstance(result.events, FullEventIterator)
 
 
@@ -169,7 +178,8 @@ class TestAgentStreamHandle:
         """Test AgentStreamHandle initialization."""
         agent_run_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
-        handle = AgentStreamHandle(agent_run_id, root_execution_id)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        handle = AgentStreamHandle(client, agent_run_id, root_execution_id)
         assert handle.agent_run_id == agent_run_id
         assert handle.topic == f"workflow:{root_execution_id}"
         assert handle.last_valid_event_id is None
@@ -178,7 +188,8 @@ class TestAgentStreamHandle:
     def test_agent_stream_handle_topic_fallback(self):
         """Test AgentStreamHandle topic falls back to agent_run_id."""
         agent_run_id = str(uuid.uuid4())
-        handle = AgentStreamHandle(agent_run_id, None)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        handle = AgentStreamHandle(client, agent_run_id, None)
         assert handle.topic == f"workflow:{agent_run_id}"
 
     @pytest.mark.asyncio
@@ -188,7 +199,8 @@ class TestAgentStreamHandle:
 
         agent_run_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
-        handle = AgentStreamHandle(agent_run_id, root_execution_id)
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
+        handle = AgentStreamHandle(client, agent_run_id, root_execution_id)
 
         # Mock stream_workflow - it returns StreamEvent objects
         mock_events = [
@@ -244,12 +256,14 @@ class TestTextChunkIterator:
 
         execution_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
         handle = StreamResult(
             ExecutionHandle(
                 id=execution_id,
                 workflow_id="test-agent",
                 root_execution_id=root_execution_id,
-            )
+            ),
+            client,
         )
 
         # Mock events - TextChunkIterator uses AgentStreamHandle internally
@@ -303,12 +317,14 @@ class TestFullEventIterator:
 
         execution_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
         handle = StreamResult(
             ExecutionHandle(
                 id=execution_id,
                 workflow_id="test-agent",
                 root_execution_id=root_execution_id,
-            )
+            ),
+            client,
         )
 
         # Mock events - FullEventIterator uses AgentStreamHandle internally
@@ -367,12 +383,14 @@ class TestStreamResultMethods:
 
         execution_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
         handle = StreamResult(
             ExecutionHandle(
                 id=execution_id,
                 workflow_id="test-agent",
                 root_execution_id=root_execution_id,
-            )
+            ),
+            client,
         )
 
         mock_events = [
@@ -418,12 +436,14 @@ class TestStreamResultMethods:
 
         execution_id = str(uuid.uuid4())
         root_execution_id = str(uuid.uuid4())
+        client = PolosClient(api_url="http://localhost:8080", api_key="test", project_id="test")
         handle = StreamResult(
             ExecutionHandle(
                 id=execution_id,
                 workflow_id="test-agent",
                 root_execution_id=root_execution_id,
-            )
+            ),
+            client,
         )
 
         result_data = {

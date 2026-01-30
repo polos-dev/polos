@@ -7,7 +7,7 @@ import pytest
 
 from polos import WorkflowContext, workflow
 from polos.core.workflow import _execution_context
-from polos.runtime.client import ExecutionHandle
+from polos.runtime.client import ExecutionHandle, PolosClient
 
 
 class TestWorkflowExecution:
@@ -31,13 +31,21 @@ class TestWorkflowExecution:
             root_execution_id=root_execution_id,
         )
 
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+        )
         with (
-            patch("polos.runtime.client._submit_workflow", return_value=mock_handle),
-            patch.object(ExecutionHandle, "get", new_callable=AsyncMock) as mock_get,
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
             ),
+            patch.object(
+                mock_client, "_submit_workflow", new_callable=AsyncMock, return_value=mock_handle
+            ),
+            patch.object(ExecutionHandle, "get", new_callable=AsyncMock) as mock_get,
         ):
             # Mock execution completion
             mock_get.return_value = {
@@ -87,16 +95,21 @@ class TestWorkflowExecution:
             return {"result": result}
 
         # Mock step output storage
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+        )
         with (
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock) as mock_store,
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
             ),
-            patch(
-                "polos.features.events._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+            patch.object(
+                mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
             patch("polos.features.tracing.get_tracer") as mock_tracer,
             patch("polos.features.events.batch_publish", new_callable=AsyncMock, return_value=[]),
@@ -236,19 +249,24 @@ class TestWorkflowExecution:
             """Workflow with hooks."""
             return {"result": "done"}
 
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+        )
         with (
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
             patch(
                 "polos.middleware.hook_executor.execute_hooks", new_callable=AsyncMock
             ) as mock_execute,
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
             ),
-            patch(
-                "polos.features.events._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+            patch.object(
+                mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
             patch("polos.features.events.batch_publish", new_callable=AsyncMock, return_value=[]),
             patch("polos.core.step.batch_publish", new_callable=AsyncMock, return_value=[]),
@@ -295,16 +313,21 @@ class TestWorkflowExecution:
             """Workflow that raises an error."""
             raise ValueError("Test error")
 
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+        )
         with (
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
             ),
-            patch(
-                "polos.features.events._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+            patch.object(
+                mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
         ):
             _execution_context.set(

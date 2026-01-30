@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 import httpx
 
-from ..runtime.client import _config, _get_headers
+from ..utils.client_context import get_client_or_raise
 from ..utils.worker_singleton import get_worker_client
 
 
@@ -33,8 +33,9 @@ async def add_conversation_history(
     # Pass content as-is - httpx will serialize it to JSON
     content_json = content
 
-    api_url = _config["api_url"]
-    headers = _get_headers()
+    polos_client = get_client_or_raise()
+    api_url = polos_client.api_url
+    headers = polos_client._get_headers()
 
     request_json = {
         "agent_id": agent_id,
@@ -83,8 +84,9 @@ async def get_conversation_history(
     Returns:
         List of conversation messages (oldest first)
     """
-    api_url = _config["api_url"]
-    headers = _get_headers()
+    polos_client = get_client_or_raise()
+    api_url = polos_client.api_url
+    headers = polos_client._get_headers()
 
     params = {
         "agent_id": agent_id,

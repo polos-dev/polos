@@ -5,7 +5,7 @@ from datetime import datetime
 import httpx
 from pydantic import BaseModel
 
-from ..runtime.client import _config, _get_headers
+from ..runtime.client import PolosClient
 from ..utils.worker_singleton import get_worker_client
 
 
@@ -30,6 +30,7 @@ class SchedulePayload(BaseModel):
 
 
 async def create(
+    client: PolosClient,
     workflow: str,
     cron: str,
     timezone: str = "UTC",
@@ -41,6 +42,7 @@ async def create(
     If key is None, multiple schedules can exist for the same workflow.
 
     Args:
+        client: PolosClient instance
         workflow: Workflow ID to schedule
         cron: Cron expression (e.g., "0 8 * * *" for 8 AM daily)
         timezone: Timezone for the schedule (default: "UTC")
@@ -65,8 +67,8 @@ async def create(
             cron="0 3 * * *"
         )
     """
-    api_url = _config["api_url"]
-    headers = _get_headers()
+    api_url = client.api_url
+    headers = client._get_headers()
 
     payload = {
         "workflow_id": workflow,

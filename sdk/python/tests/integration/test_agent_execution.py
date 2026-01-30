@@ -9,6 +9,7 @@ from polos import Agent, AgentContext, WorkflowContext
 from polos.core.step import Step
 from polos.core.workflow import _execution_context
 from polos.llm.providers.base import LLMResponse
+from polos.runtime.client import PolosClient
 from polos.types.types import AgentResult
 
 
@@ -44,16 +45,44 @@ class TestAgentExecution:
             patch("polos.llm.generate.get_provider", return_value=mock_provider),
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
+            patch(
+                "polos.core.step.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.features.wait.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
             patch("polos.features.events.publish", new_callable=AsyncMock),
             patch("polos.features.events.batch_publish", new_callable=AsyncMock, return_value=[]),
             patch("polos.core.step.batch_publish", new_callable=AsyncMock, return_value=[]),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.runtime.client.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
-                "polos.agents.conversation_history._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.features.tracing.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.llm.stream.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
                 "polos.agents.stream.get_conversation_history",
@@ -201,14 +230,42 @@ class TestAgentExecution:
             patch("polos.llm.generate.get_provider", return_value=mock_provider),
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
-            patch("polos.features.events.publish", new_callable=AsyncMock),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.core.step.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
-                "polos.agents.conversation_history._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.features.wait.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch("polos.features.events.publish", new_callable=AsyncMock),
+            patch(
+                "polos.runtime.client.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.features.tracing.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.llm.stream.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
                 "polos.agents.stream.get_conversation_history",
@@ -317,16 +374,44 @@ class TestAgentExecution:
             patch("polos.llm.generate.get_provider", return_value=mock_provider),
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
+            patch(
+                "polos.core.step.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.features.wait.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
             patch("polos.features.events.publish", new_callable=AsyncMock),
             patch("polos.features.events.batch_publish", new_callable=AsyncMock, return_value=[]),
             patch("polos.core.step.batch_publish", new_callable=AsyncMock, return_value=[]),
             patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.runtime.client.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
-                "polos.agents.conversation_history._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+                "polos.agents.conversation_history.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.features.tracing.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
+            ),
+            patch(
+                "polos.llm.stream.get_client_or_raise",
+                return_value=PolosClient(
+                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+                ),
             ),
             patch(
                 "polos.agents.stream.get_conversation_history",

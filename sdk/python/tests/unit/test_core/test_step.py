@@ -224,13 +224,21 @@ class TestPublishStepEvent:
     @pytest.mark.asyncio
     async def test_publish_step_event(self, mock_workflow_context):
         """Test _publish_step_event publishes event correctly."""
+        from polos.runtime.client import PolosClient
+
         step = Step(mock_workflow_context)
         event_type = "step_start"
         step_key = "test-step"
         event_name = "run"
         data = {"key": "value"}
 
-        with patch("polos.core.step.batch_publish", new_callable=AsyncMock) as mock_publish:
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
+        with (
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.core.step.batch_publish", new_callable=AsyncMock) as mock_publish,
+        ):
             await step._publish_step_event(event_type, step_key, event_name, data)
             # Give the async task a moment to execute
             await asyncio.sleep(0.01)
@@ -248,12 +256,20 @@ class TestPublishStepEvent:
     @pytest.mark.asyncio
     async def test_publish_step_event_topic(self, mock_workflow_context):
         """Test _publish_step_event uses correct topic."""
+        from polos.runtime.client import PolosClient
+
         step = Step(mock_workflow_context)
         root_execution_id = (
             mock_workflow_context.root_execution_id or mock_workflow_context.execution_id
         )
 
-        with patch("polos.core.step.batch_publish", new_callable=AsyncMock) as mock_publish:
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test", project_id="test"
+        )
+        with (
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.core.step.batch_publish", new_callable=AsyncMock) as mock_publish,
+        ):
             await step._publish_step_event("step_start", "test-step", "run", {})
             call_kwargs = mock_publish.call_args[1]
             assert call_kwargs["topic"] == f"workflow:{root_execution_id}"

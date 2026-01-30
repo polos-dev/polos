@@ -20,8 +20,9 @@ from pydantic import BaseModel
 from ..features.events import EventData, EventPayload, batch_publish
 from ..features.tracing import extract_traceparent, get_current_span, get_tracer
 from ..features.wait import WaitException, _get_wait_time, _set_waiting
-from ..runtime.client import ExecutionHandle, _submit_workflows, get_step_output, store_step_output
+from ..runtime.client import ExecutionHandle, get_step_output, store_step_output
 from ..types.types import BatchStepResult, BatchWorkflowInput
+from ..utils.client_context import get_client_or_raise
 from ..utils.retry import retry_with_backoff
 from ..utils.serializer import deserialize, safe_serialize, serialize
 from ..utils.tracing import (
@@ -198,8 +199,10 @@ class Step:
             )
         ]
         # Fire-and-forget: spawn task without awaiting to reduce latency
+        client = get_client_or_raise()
         asyncio.create_task(
             batch_publish(
+                client=client,
                 topic=f"workflow:{self.ctx.root_execution_id or self.ctx.execution_id}",
                 events=events,
                 execution_id=self.ctx.execution_id,
@@ -610,7 +613,9 @@ class Step:
 
         events = [EventData(data=data, event_type=event_type)]
         # Publish event
+        client = get_client_or_raise()
         await batch_publish(
+            client=client,
             topic=topic,
             events=events,
             execution_id=self.ctx.execution_id,
@@ -665,7 +670,9 @@ class Step:
         serialized_data = serialize(data)
         topic = f"{step_key}/{self.ctx.root_execution_id or self.ctx.execution_id}"
         # Publish suspend event
+        client = get_client_or_raise()
         await batch_publish(
+            client=client,
             topic=topic,
             events=[EventData(data=serialized_data, event_type="suspend")],
             execution_id=self.ctx.execution_id,
@@ -774,7 +781,9 @@ class Step:
                 traceparent = extract_traceparent(current_span)
 
         # Invoke workflow
+        client = get_client_or_raise()
         handle = await workflow_instance._invoke(
+            client,
             payload,
             initial_state=initial_state,
             queue=queue,
@@ -951,7 +960,8 @@ class Step:
             workflow_requests.append(workflow_req)
 
         # Submit all workflows in a single batch using the batch endpoint
-        handles = await _submit_workflows(
+        client = get_client_or_raise()
+        handles = await client._submit_workflows(
             workflows=workflow_requests,
             deployment_id=self.ctx.deployment_id,
             parent_execution_id=self.ctx.execution_id,
@@ -1051,7 +1061,8 @@ class Step:
 
         # Submit all workflows in a single batch using the batch endpoint
         # with wait_for_subworkflow=True
-        await _submit_workflows(
+        client = get_client_or_raise()
+        await client._submit_workflows(
             workflows=workflow_requests,
             deployment_id=self.ctx.deployment_id,
             parent_execution_id=self.ctx.execution_id,

@@ -7,7 +7,6 @@ from collections.abc import Callable
 
 from ..core.context import WorkflowContext
 from ..core.workflow import _execution_context
-from ..types.types import AgentConfig
 from .hook import HookAction, HookContext, HookResult
 
 
@@ -62,7 +61,6 @@ async def execute_hooks(
         raise ValueError("Hooks must be executed within a workflow or agent")
 
     # Accumulated modifications
-    modified_agent_config = hook_context.agent_config
     modified_payload = hook_context.current_payload.copy() if hook_context.current_payload else {}
     modified_output = hook_context.current_output.copy() if hook_context.current_output else {}
 
@@ -82,16 +80,6 @@ async def execute_hooks(
             )
 
         # Apply modifications
-        if hook_result.modified_agent_config is not None:
-            if modified_agent_config is None:
-                modified_agent_config = hook_result.modified_agent_config
-            else:
-                # Merge modifications into existing config
-                config_dict = modified_agent_config.model_dump(mode="json")
-                mod_dict = hook_result.modified_agent_config.model_dump(mode="json")
-                config_dict.update(mod_dict)
-                modified_agent_config = AgentConfig.model_validate(config_dict)
-
         if hook_result.modified_payload is not None:
             modified_payload.update(hook_result.modified_payload)
 
@@ -99,7 +87,6 @@ async def execute_hooks(
             modified_output.update(hook_result.modified_output)
 
         # Update hook_context with accumulated modifications for next hook
-        hook_context.agent_config = modified_agent_config
         hook_context.current_payload = modified_payload
         hook_context.current_output = modified_output
 
@@ -112,7 +99,6 @@ async def execute_hooks(
 
     # All hooks completed with CONTINUE - return accumulated modifications
     return HookResult.continue_with(
-        modified_agent_config=modified_agent_config,
         modified_payload=modified_payload,
         modified_output=modified_output,
     )

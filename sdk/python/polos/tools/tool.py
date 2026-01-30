@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ..core.context import WorkflowContext
 from ..core.workflow import _WORKFLOW_REGISTRY, Workflow
+from ..runtime.client import PolosClient
 from ..runtime.queue import Queue
 
 if TYPE_CHECKING:
@@ -89,6 +90,7 @@ class Tool(Workflow):
 
     async def run(
         self,
+        client: PolosClient,
         payload: BaseModel | dict[str, Any] | None = None,
         queue: str | None = None,
         concurrency_key: str | None = None,
@@ -159,6 +161,7 @@ class Tool(Workflow):
 
         # Call parent run() method
         return await super().run(
+            client=client,
             payload=prepared_payload,
             queue=queue,
             concurrency_key=concurrency_key,

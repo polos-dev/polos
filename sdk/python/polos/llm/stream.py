@@ -6,6 +6,7 @@ from ..core.context import WorkflowContext
 from ..core.workflow import _execution_context
 from ..types.types import AgentConfig
 from ..utils.agent import convert_input_to_messages
+from ..utils.client_context import get_client_or_raise
 from .providers import get_provider
 
 
@@ -92,6 +93,7 @@ async def _stream_from_provider(
     response_tool_calls = None
     usage = None
     raw_output = None
+    polos_client = get_client_or_raise()
 
     # Publish start event
     # This is needed for invalidating events in the case of failures during
@@ -99,6 +101,7 @@ async def _stream_from_provider(
     # If the consumer seems stream_start event for the same agent_step,
     # discard previous events for that agent_step
     await publish_event(
+        client=polos_client,
         topic=topic,
         event_type="stream_start",
         data={"step": agent_step},
@@ -152,6 +155,7 @@ async def _stream_from_provider(
         # Publish chunk as event (skip "done" events)
         if normalized_chunk["type"] != "done" and event_type:
             await publish_event(
+                client=polos_client,
                 topic=topic,
                 event_type=event_type,
                 data={

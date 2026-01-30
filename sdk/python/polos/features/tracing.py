@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from ..runtime.client import _config, _get_headers
+from ..utils.client_context import get_client_or_raise
 
 try:
     from opentelemetry import context, trace
@@ -346,8 +346,9 @@ if OTELEMETRY_AVAILABLE:
                 We must create a new client in this event loop.
             """
             try:
-                api_url = _config["api_url"]
-                headers = _get_headers()
+                polos_client = get_client_or_raise()
+                api_url = polos_client.api_url
+                headers = polos_client._get_headers()
 
                 # Create a new client in this event loop (cannot reuse worker's client
                 # as it's bound to a different event loop)

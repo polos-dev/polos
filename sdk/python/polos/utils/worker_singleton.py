@@ -28,3 +28,13 @@ def set_current_worker(worker: Any | None) -> None:
     """
     global _current_worker
     _current_worker = worker
+
+
+def get_current_worker() -> Any | None:
+    """Get the current worker instance if available.
+
+    Returns:
+        The current Worker instance, or None if no worker is running
+    """
+    global _current_worker
+    return _current_worker

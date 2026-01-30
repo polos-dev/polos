@@ -7,6 +7,7 @@ import pytest
 
 from polos import WorkflowContext, tool
 from polos.core.workflow import _execution_context
+from polos.runtime.client import PolosClient
 
 
 class TestToolExecution:
@@ -167,16 +168,18 @@ class TestToolExecution:
                 raise ValueError("Value must be positive")
             return input.value * 2
 
+        mock_client = PolosClient(
+            api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
+        )
         with (
             patch("polos.core.step.get_step_output", new_callable=AsyncMock, return_value=None),
             patch("polos.core.step.store_step_output", new_callable=AsyncMock),
-            patch(
-                "polos.runtime.client._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
-            ),
-            patch(
-                "polos.features.events._get_headers",
-                return_value={"Authorization": "Bearer test-key"},
+            patch("polos.core.step.get_client_or_raise", return_value=mock_client),
+            patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
+            patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
+            patch.object(
+                mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
         ):
             _execution_context.set(

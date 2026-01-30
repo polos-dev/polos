@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from ..core.context import AgentContext
 from ..core.workflow import _WORKFLOW_REGISTRY, Workflow, _execution_context
-from ..runtime.client import ExecutionHandle
+from ..runtime.client import ExecutionHandle, PolosClient
 from ..runtime.queue import Queue
 from ..types.types import AgentConfig, AgentResult
 from ..utils.output_schema import convert_output_schema
@@ -51,13 +51,14 @@ class StreamResult:
     agent_run_id is the same as execution_id.
     """
 
-    def __init__(self, execution_handle: ExecutionHandle):
+    def __init__(self, execution_handle: ExecutionHandle, client: PolosClient):
         """Initialize StreamResult from an ExecutionHandle.
 
         Args:
             execution_handle: The ExecutionHandle from agent.invoke() when streaming is True
         """
         # Store reference to the ExecutionHandle
+        self.client = client
         self.handle = execution_handle
 
         # Ensure root_execution_id is set (use execution_id if root_execution_id is None)
@@ -113,7 +114,7 @@ class StreamResult:
 
     async def get(self) -> dict[str, Any]:
         """Get the current status of the execution."""
-        return await self.handle.get()
+        return await self.handle.get(self.client)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -168,7 +169,9 @@ class StreamResult:
         result_data = None
         from ..features.events import stream_workflow
 
-        async for event in stream_workflow(workflow_run_id=self.agent_run_id, last_sequence_id=0):
+        async for event in stream_workflow(
+            client=self.client, workflow_run_id=self.agent_run_id, last_sequence_id=0
+        ):
             if (
                 event.event_type == "agent_finish"
                 and event.data.get("_metadata", {}).get("execution_id") == self.agent_run_id
@@ -193,7 +196,14 @@ class StreamResult:
 class AgentStreamHandle:
     """Handle for streaming agent responses."""
 
-    def __init__(self, agent_run_id: str, root_execution_id: str, created_at: str | None = None):
+    def __init__(
+        self,
+        client: PolosClient,
+        agent_run_id: str,
+        root_execution_id: str,
+        created_at: str | None = None,
+    ):
+        self.client = client
         self.agent_run_id = agent_run_id
         self.topic = f"workflow:{root_execution_id or agent_run_id}"
         self.last_valid_event_id = None  # Track last valid event (skip invalid ones)
@@ -217,7 +227,7 @@ class AgentStreamHandle:
 
         # Use events.stream_workflow() with agent_run_id
         async for event in stream_workflow(
-            workflow_run_id=self.agent_run_id, last_timestamp=last_timestamp
+            client=self.client, workflow_run_id=self.agent_run_id, last_timestamp=last_timestamp
         ):
             event_type = event.event_type
             self.last_valid_event_id = event.id
@@ -250,7 +260,10 @@ class TextChunkIterator:
     async def __anext__(self):
         if self._handle_iter is None:
             handle = AgentStreamHandle(
-                self.result.id, self.result.root_execution_id, self.result.created_at
+                self.result.client,
+                self.result.id,
+                self.result.root_execution_id,
+                self.result.created_at,
             )
             self._handle_iter = handle.__aiter__()
 
@@ -277,7 +290,10 @@ class FullEventIterator:
     async def __anext__(self):
         if self._handle_iter is None:
             handle = AgentStreamHandle(
-                self.result.id, self.result.root_execution_id, self.result.created_at
+                self.result.client,
+                self.result.id,
+                self.result.root_execution_id,
+                self.result.created_at,
             )
             self._handle_iter = handle.__aiter__()
 
@@ -546,6 +562,7 @@ class Agent(Workflow):
     # Convenience methods for better DX
     async def run(
         self,
+        client: PolosClient,
         input: str | list[dict[str, Any]],
         initial_state: BaseModel | dict[str, Any] | None = None,
         session_id: str | None = None,
@@ -562,6 +579,7 @@ class Agent(Workflow):
         Use step.agent_run() or step.invoke_and_wait() to call agents from within workflows.
 
         Args:
+            client: PolosClient instance
             input: String or array of input items (multimodal)
             session_id: Optional session ID
             conversation_id: Optional conversation ID for conversation history
@@ -592,6 +610,7 @@ class Agent(Workflow):
 
         # Call parent run() method with agent payload
         return await super().run(
+            client=client,
             payload=agent_payload,
             initial_state=initial_state,
             session_id=session_id,
@@ -601,6 +620,7 @@ class Agent(Workflow):
 
     async def stream(
         self,
+        client: PolosClient,
         input: str | list[dict[str, Any]],
         initial_state: BaseModel | dict[str, Any] | None = None,
         session_id: str | None = None,
@@ -617,6 +637,7 @@ class Agent(Workflow):
         Use step.agent_run() or step.invoke_and_wait() to call agents from within workflows.
 
         Args:
+            client: PolosClient instance
             input: String or array of input items (multimodal)
             session_id: Optional session ID
             conversation_id: Optional conversation ID for conversation history
@@ -663,6 +684,7 @@ class Agent(Workflow):
 
         # Invoke agent task asynchronously (returns ExecutionHandle immediately)
         handle = await self.invoke(
+            client=client,
             payload={
                 "input": input,
                 "session_id": session_id,
@@ -675,7 +697,7 @@ class Agent(Workflow):
         )
 
         # Wrap ExecutionHandle in StreamResult
-        return StreamResult(handle)
+        return StreamResult(handle, client)
 
     def with_input(
         self,

@@ -32,7 +32,7 @@ from .features.schedules import SchedulePayload
 from .middleware.guardrail import GuardrailContext, GuardrailResult, guardrail
 from .middleware.hook import HookAction, HookContext, HookResult, hook
 from .runtime.batch import batch_agent_invoke, batch_invoke
-from .runtime.client import ExecutionHandle, configure, resume
+from .runtime.client import ExecutionHandle, PolosClient
 from .runtime.queue import Queue, queue
 from .runtime.worker import Worker
 from .tools.tool import Tool, tool
@@ -52,9 +52,8 @@ __all__ = [
     "Workflow",
     "get_workflow",
     "get_all_workflows",
-    "configure",
+    "PolosClient",
     "ExecutionHandle",
-    "resume",
     "Queue",
     "queue",
     "batch_invoke",

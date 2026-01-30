@@ -19,7 +19,7 @@ from ..features.wait import WaitException
 from ..tools.tool import Tool
 from ..utils.config import is_localhost_url
 from ..utils.worker_singleton import set_current_worker
-from .client import _config
+from .client import PolosClient
 
 # FastAPI imports for push mode
 try:
@@ -45,9 +45,9 @@ class Worker:
     4. Polls orchestrator for workflows and executes them
 
     Usage:
-        from polos import Worker, Agent, Tool, configure
+        from polos import Worker, Agent, Tool, PolosClient
 
-        configure(api_url="http://localhost:8080")
+        client = PolosClient(api_url="http://localhost:8080")
 
         # Define your workflows
         research_agent = Agent(...)
@@ -55,6 +55,7 @@ class Worker:
 
         # Create worker
         worker = Worker(
+            client=client,
             deployment_id=os.getenv("WORKER_DEPLOYMENT_ID"),
             agents=[research_agent, analysis_agent],
             tools=[search_web],
@@ -67,8 +68,8 @@ class Worker:
 
     def __init__(
         self,
+        client: PolosClient,
         deployment_id: str,
-        project_id: str | None = None,
         agents: list[Agent] | None = None,
         tools: list[Tool] | None = None,
         workflows: list[Workflow] | None = None,
@@ -80,9 +81,8 @@ class Worker:
         Initialize worker.
 
         Args:
+            client: PolosClient instance (required)
             deployment_id: Required deployment ID (unique identifier for the deployment)
-            project_id: Required project ID for multi-tenancy
-                (default: from POLOS_PROJECT_ID env var or _config)
             agents: List of Agent instances to register
             tools: List of Tool instances to register
             workflows: List of Workflow instances to register
@@ -97,32 +97,20 @@ class Worker:
                 POLOS_WORKER_SERVER_URL env var or default to "http://localhost:8000"
 
         Raises:
-            ValueError: If deployment_id, project_id, or api_key is not provided,
+            ValueError: If deployment_id is not provided,
                 or if mode="push" but FastAPI unavailable
         """
-        self.deployment_id = (
-            deployment_id or os.getenv("POLOS_DEPLOYMENT_ID") or _config.get("deployment_id")
-        )
+        self.polos_client = client
+        self.deployment_id = deployment_id or os.getenv("POLOS_DEPLOYMENT_ID")
         if not self.deployment_id:
             raise ValueError(
                 "deployment_id is required for Worker initialization. "
-                "Set it via parameter, POLOS_DEPLOYMENT_ID env var, "
-                "or configure(deployment_id='...')"
+                "Set it via parameter or POLOS_DEPLOYMENT_ID env var."
             )
 
-        # Get project_id from parameter, env var, or config
-        self.project_id = project_id or os.getenv("POLOS_PROJECT_ID") or _config.get("project_id")
-        if not self.project_id:
-            raise ValueError(
-                "project_id is required for Worker initialization. "
-                "Set it via parameter, POLOS_PROJECT_ID env var, "
-                "or configure(project_id='...')"
-            )
-
-        # Update global config with project_id so _get_headers() can use it
-        _config["project_id"] = self.project_id
-
-        self.api_url = os.getenv("POLOS_API_URL") or _config["api_url"]
+        # Use client's configuration
+        self.project_id = client.project_id
+        self.api_url = client.api_url
 
         # Check if local_mode can be enabled (only allowed for localhost addresses)
         local_mode_requested = os.getenv("POLOS_LOCAL_MODE", "False").lower() == "true"
@@ -135,11 +123,11 @@ class Worker:
                 self.api_url,
             )
 
-        self.api_key = os.getenv("POLOS_API_KEY") or _config.get("api_key")
+        self.api_key = client.api_key
         if not self.local_mode and not self.api_key:
             raise ValueError(
                 "api_key is required for Worker initialization. "
-                "Set it via configure(api_key='...') or POLOS_API_KEY environment variable. "
+                "Set it via PolosClient(api_key='...') or POLOS_API_KEY environment variable. "
                 "Or set POLOS_LOCAL_MODE=True for local development "
                 "(only works with localhost URLs)."
             )
@@ -269,6 +257,7 @@ class Worker:
         self.running = True
 
         # Register this worker instance so client.py can reuse its HTTP client
+        # and so features can access the client
         set_current_worker(self)
 
         # Setup signal handlers
@@ -1257,7 +1246,7 @@ class Worker:
     ):
         """Emit cancellation event for the workflow."""
         try:
-            from .events import publish
+            from ..features.events import publish
 
             # Topic format: workflow:{execution_id}
             topic = f"workflow:{context.get('root_execution_id') or execution_id}"
@@ -1275,6 +1264,7 @@ class Worker:
 
             # Publish event
             await publish(
+                self.polos_client,
                 topic=topic,
                 event_type=event_type,
                 data=event_data,
@@ -1372,9 +1362,4 @@ class Worker:
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers for API requests, including API key and project_id."""
-        headers = {"Content-Type": "application/json"}
-        # Include API key if available and not in local mode (required for internal APIs)
-        if not self.local_mode and self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        headers["X-Project-ID"] = self.project_id
-        return headers
+        return self.polos_client._get_headers()

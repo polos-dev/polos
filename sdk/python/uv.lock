@@ -656,7 +656,7 @@ wheels = [
 ]
 
 [[package]]
-name = "polos-worker"
+name = "polos-sdk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

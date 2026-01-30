@@ -7,6 +7,7 @@ import contextvars
 import json
 import logging
 import os
+import random as random_module
 import time
 import uuid as uuid_module
 from collections.abc import Callable
@@ -1304,6 +1305,31 @@ class Step:
         await self._save_step_output(step_key, timestamp)
 
         return timestamp
+
+    async def random(self, step_key: str) -> float:
+        """Get a random float between 0.0 and 1.0 that is persisted across workflow runs.
+
+        On the first execution, generates a new random number and saves it.
+        On subsequent executions (replay/resume), returns the same random number.
+
+        Args:
+            step_key: Step key identifier (must be unique per execution)
+
+        Returns:
+            Random float between 0.0 and 1.0 (persisted across runs)
+        """
+        # Check for existing step output
+        existing_step = await self._check_existing_step(step_key)
+        if existing_step:
+            return await self._handle_existing_step(existing_step)
+
+        # Generate new random number
+        random_value = random_module.random()
+
+        # Save the random number
+        await self._save_step_output(step_key, random_value)
+
+        return random_value
 
     @contextmanager
     def trace(self, name: str, attributes: dict[str, Any] | None = None):

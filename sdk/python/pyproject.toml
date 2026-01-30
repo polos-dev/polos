@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "polos-worker"
+name = "polos-sdk"
 version = "0.1.0"
-description = "Polos worker for Python - Durable Agent Execution"
+description = "Polos SDK for Python - Durable Agent Execution"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

@@ -5,34 +5,34 @@ use uuid::Uuid;
 use crate::db::{models::DeploymentWorkflow, Database};
 
 impl Database {
-  /// Get or create a queue by name and deployment_id (lazy creation)
-  pub async fn get_or_create_queue(
-    &self,
-    name: &str,
-    deployment_id: &str,
-    project_id: &Uuid,
-    concurrency_limit: Option<i32>,
-  ) -> anyhow::Result<()> {
-    // Check if queue exists
-    let queue = sqlx::query("SELECT name FROM queues WHERE name = $1 AND deployment_id = $2")
-      .bind(name)
-      .bind(deployment_id)
-      .fetch_optional(&self.pool)
-      .await?;
+    /// Get or create a queue by name and deployment_id (lazy creation)
+    pub async fn get_or_create_queue(
+        &self,
+        name: &str,
+        deployment_id: &str,
+        project_id: &Uuid,
+        concurrency_limit: Option<i32>,
+    ) -> anyhow::Result<()> {
+        // Check if queue exists
+        let queue = sqlx::query("SELECT name FROM queues WHERE name = $1 AND deployment_id = $2")
+            .bind(name)
+            .bind(deployment_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
-    if queue.is_some() {
-      return Ok(());
-    }
+        if queue.is_some() {
+            return Ok(());
+        }
 
-    // Queue doesn't exist, create it
-    let default_limit = concurrency_limit.unwrap_or_else(|| {
-      std::env::var("POLOS_DEFAULT_CONCURRENCY_LIMIT")
-        .ok()
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(999999) // Very large number for "unlimited"
-    });
+        // Queue doesn't exist, create it
+        let default_limit = concurrency_limit.unwrap_or_else(|| {
+            std::env::var("POLOS_DEFAULT_CONCURRENCY_LIMIT")
+                .ok()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(999999) // Very large number for "unlimited"
+        });
 
-    sqlx::query(
+        sqlx::query(
       "INSERT INTO queues (name, deployment_id, project_id, concurrency_limit) VALUES ($1, $2, $3, $4) 
        ON CONFLICT (name, deployment_id, project_id) DO UPDATE SET 
          concurrency_limit = EXCLUDED.concurrency_limit,
@@ -45,53 +45,54 @@ impl Database {
     .execute(&self.pool)
     .await?;
 
-    Ok(())
-  }
-
-  /// Batch register or update queues
-  pub async fn batch_register_queues(
-    &self,
-    deployment_id: &str,
-    queues: &[(String, Option<i32>)],
-    project_id: &Uuid,
-  ) -> anyhow::Result<()> {
-    if queues.is_empty() {
-      return Ok(());
+        Ok(())
     }
 
-    let default_limit = std::env::var("POLOS_DEFAULT_CONCURRENCY_LIMIT")
-      .ok()
-      .and_then(|s| s.parse::<i32>().ok())
-      .unwrap_or(999999); // Very large number for "unlimited"
+    /// Batch register or update queues
+    pub async fn batch_register_queues(
+        &self,
+        deployment_id: &str,
+        queues: &[(String, Option<i32>)],
+        project_id: &Uuid,
+    ) -> anyhow::Result<()> {
+        if queues.is_empty() {
+            return Ok(());
+        }
 
-    let mut query_builder =
-      QueryBuilder::new("INSERT INTO queues (name, deployment_id, concurrency_limit, project_id) ");
+        let default_limit = std::env::var("POLOS_DEFAULT_CONCURRENCY_LIMIT")
+            .ok()
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(999999); // Very large number for "unlimited"
 
-    query_builder.push_values(queues.iter(), |mut b, (name, limit)| {
-      let final_limit = limit.unwrap_or(default_limit);
-      b.push_bind(name);
-      b.push_bind(deployment_id);
-      b.push_bind(final_limit);
-      b.push_bind(project_id);
-    });
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO queues (name, deployment_id, concurrency_limit, project_id) ",
+        );
 
-    query_builder.push(
-      " ON CONFLICT (name, deployment_id, project_id) DO UPDATE SET 
+        query_builder.push_values(queues.iter(), |mut b, (name, limit)| {
+            let final_limit = limit.unwrap_or(default_limit);
+            b.push_bind(name);
+            b.push_bind(deployment_id);
+            b.push_bind(final_limit);
+            b.push_bind(project_id);
+        });
+
+        query_builder.push(
+            " ON CONFLICT (name, deployment_id, project_id) DO UPDATE SET 
         concurrency_limit = EXCLUDED.concurrency_limit,
         updated_at = NOW()",
-    );
+        );
 
-    let query = query_builder.build();
-    query.execute(&self.pool).await?;
+        let query = query_builder.build();
+        query.execute(&self.pool).await?;
 
-    Ok(())
-  }
+        Ok(())
+    }
 
-  pub async fn get_workflows_by_project(
-    &self,
-    project_id: &Uuid,
-  ) -> anyhow::Result<Vec<DeploymentWorkflow>> {
-    let rows = sqlx::query(
+    pub async fn get_workflows_by_project(
+        &self,
+        project_id: &Uuid,
+    ) -> anyhow::Result<Vec<DeploymentWorkflow>> {
+        let rows = sqlx::query(
       "SELECT workflow_id, deployment_id, workflow_type, trigger_on_event, scheduled, created_at
        FROM deployment_workflows
        WHERE project_id = $1 AND workflow_type = 'workflow'
@@ -101,27 +102,27 @@ impl Database {
     .fetch_all(&self.pool)
     .await?;
 
-    let workflows = rows
-      .into_iter()
-      .map(|row| DeploymentWorkflow {
-        workflow_id: row.get("workflow_id"),
-        deployment_id: row.get("deployment_id"),
-        workflow_type: row.get("workflow_type"),
-        trigger_on_event: row.get("trigger_on_event"),
-        scheduled: row.get("scheduled"),
-        created_at: row.get("created_at"),
-      })
-      .collect();
+        let workflows = rows
+            .into_iter()
+            .map(|row| DeploymentWorkflow {
+                workflow_id: row.get("workflow_id"),
+                deployment_id: row.get("deployment_id"),
+                workflow_type: row.get("workflow_type"),
+                trigger_on_event: row.get("trigger_on_event"),
+                scheduled: row.get("scheduled"),
+                created_at: row.get("created_at"),
+            })
+            .collect();
 
-    Ok(workflows)
-  }
+        Ok(workflows)
+    }
 
-  pub async fn get_workflow_by_id(
-    &self,
-    project_id: &Uuid,
-    workflow_id: &str,
-  ) -> anyhow::Result<Option<DeploymentWorkflow>> {
-    let row = sqlx::query(
+    pub async fn get_workflow_by_id(
+        &self,
+        project_id: &Uuid,
+        workflow_id: &str,
+    ) -> anyhow::Result<Option<DeploymentWorkflow>> {
+        let row = sqlx::query(
       "SELECT workflow_id, deployment_id, workflow_type, trigger_on_event, scheduled, created_at
        FROM deployment_workflows
        WHERE project_id = $1 AND workflow_id = $2 AND workflow_type = 'workflow'
@@ -133,35 +134,35 @@ impl Database {
     .fetch_optional(&self.pool)
     .await?;
 
-    if let Some(row) = row {
-      Ok(Some(DeploymentWorkflow {
-        workflow_id: row.get("workflow_id"),
-        deployment_id: row.get("deployment_id"),
-        workflow_type: row.get("workflow_type"),
-        trigger_on_event: row.get("trigger_on_event"),
-        scheduled: row.get("scheduled"),
-        created_at: row.get("created_at"),
-      }))
-    } else {
-      Ok(None)
+        if let Some(row) = row {
+            Ok(Some(DeploymentWorkflow {
+                workflow_id: row.get("workflow_id"),
+                deployment_id: row.get("deployment_id"),
+                workflow_type: row.get("workflow_type"),
+                trigger_on_event: row.get("trigger_on_event"),
+                scheduled: row.get("scheduled"),
+                created_at: row.get("created_at"),
+            }))
+        } else {
+            Ok(None)
+        }
     }
-  }
 
-  #[allow(clippy::too_many_arguments)]
-  pub async fn create_or_update_event_trigger(
-    &self,
-    workflow_id: &str,
-    deployment_id: &str,
-    event_topic: &str,
-    batch_size: i32,
-    batch_timeout_seconds: Option<i32>,
-    project_id: &Uuid,
-    queue_name: Option<&str>,
-  ) -> anyhow::Result<()> {
-    // Default queue_name to workflow_id if not provided
-    let effective_queue_name = queue_name.unwrap_or(workflow_id);
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_or_update_event_trigger(
+        &self,
+        workflow_id: &str,
+        deployment_id: &str,
+        event_topic: &str,
+        batch_size: i32,
+        batch_timeout_seconds: Option<i32>,
+        project_id: &Uuid,
+        queue_name: Option<&str>,
+    ) -> anyhow::Result<()> {
+        // Default queue_name to workflow_id if not provided
+        let effective_queue_name = queue_name.unwrap_or(workflow_id);
 
-    sqlx::query(
+        sqlx::query(
       "INSERT INTO event_triggers (workflow_id, deployment_id, event_topic, batch_size, batch_timeout_seconds, status, created_at, processed_at, project_id, queue_name)
        VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), $6, $7)
        ON CONFLICT (workflow_id, deployment_id, event_topic, project_id) DO UPDATE SET
@@ -181,17 +182,17 @@ impl Database {
     .execute(&self.pool)
     .await?;
 
-    Ok(())
-  }
+        Ok(())
+    }
 
-  // Process event triggers - called by background workflow
-  // Does everything in a single transaction to ensure FOR UPDATE SKIP LOCKED works correctly
-  /// Process one event trigger at a time using SELECT FOR UPDATE SKIP LOCKED
-  /// This allows multiple orchestrators to work in parallel
-  /// Uses a single SQL query with CTEs for efficiency and atomicity
-  /// Returns Some(1) if a trigger was processed and execution created, Some(0) if processed but skipped, None if no triggers found
-  pub async fn process_one_event_trigger(&self) -> anyhow::Result<Option<usize>> {
-    const EVENT_TRIGGER_QUERY: &str = r#"
+    // Process event triggers - called by background workflow
+    // Does everything in a single transaction to ensure FOR UPDATE SKIP LOCKED works correctly
+    /// Process one event trigger at a time using SELECT FOR UPDATE SKIP LOCKED
+    /// This allows multiple orchestrators to work in parallel
+    /// Uses a single SQL query with CTEs for efficiency and atomicity
+    /// Returns Some(1) if a trigger was processed and execution created, Some(0) if processed but skipped, None if no triggers found
+    pub async fn process_one_event_trigger(&self) -> anyhow::Result<Option<usize>> {
+        const EVENT_TRIGGER_QUERY: &str = r#"
     WITH running_counts AS (
         -- Count running executions per queue
         SELECT 
@@ -352,19 +353,19 @@ impl Database {
     SELECT COALESCE((SELECT COUNT(*) FROM inserted_execution), 0)::bigint
     "#;
 
-    let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin().await?;
 
-    // Set admin access for background workflow (operates across all projects)
-    sqlx::query("SELECT set_config('app.is_admin', 'true', true)")
-      .execute(&mut *tx)
-      .await?;
+        // Set admin access for background workflow (operates across all projects)
+        sqlx::query("SELECT set_config('app.is_admin', 'true', true)")
+            .execute(&mut *tx)
+            .await?;
 
-    let result = sqlx::query_scalar::<_, i64>(EVENT_TRIGGER_QUERY)
-      .fetch_optional(&mut *tx)
-      .await?;
+        let result = sqlx::query_scalar::<_, i64>(EVENT_TRIGGER_QUERY)
+            .fetch_optional(&mut *tx)
+            .await?;
 
-    tx.commit().await?;
+        tx.commit().await?;
 
-    Ok(result.map(|count| count as usize))
-  }
+        Ok(result.map(|count| count as usize))
+    }
 }

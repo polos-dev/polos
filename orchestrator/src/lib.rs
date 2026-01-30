@@ -6,6 +6,6 @@ pub mod db;
 pub use db::Database;
 
 pub struct AppState {
-  pub db: Database,
-  pub local_mode: bool,
+    pub db: Database,
+    pub local_mode: bool,
 }

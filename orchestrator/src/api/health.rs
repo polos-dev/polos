@@ -3,11 +3,11 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct HealthResponse {
-  status: String,
+    status: String,
 }
 
 pub async fn health() -> Json<HealthResponse> {
-  Json(HealthResponse {
-    status: "healthy".to_string(),
-  })
+    Json(HealthResponse {
+        status: "healthy".to_string(),
+    })
 }

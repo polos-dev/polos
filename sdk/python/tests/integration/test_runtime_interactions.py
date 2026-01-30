@@ -237,3 +237,56 @@ class TestRuntimeClient:
             mock_http_client.post.assert_called_once()
             call_args = mock_http_client.post.call_args
             assert f"/api/v1/executions/{execution_id}/cancel" in call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_full_flow_invoke_get_cancel(self):
+        """Test full flow: invoke -> get_execution -> cancel_execution."""
+        execution_id = str(uuid.uuid4())
+        workflow_id = "test-workflow"
+
+        mock_response_submit = MagicMock()
+        mock_response_submit.json = MagicMock(return_value={"execution_id": execution_id})
+        mock_response_submit.raise_for_status = MagicMock()
+
+        mock_response_get = MagicMock()
+        mock_response_get.json = MagicMock(return_value={"id": execution_id, "status": "running"})
+        mock_response_get.raise_for_status = MagicMock(return_value=None)
+
+        mock_response_cancel = MagicMock()
+        mock_response_cancel.status_code = 200
+        mock_response_cancel.raise_for_status = MagicMock()
+
+        client = PolosClient(
+            api_url="http://localhost:8080",
+            api_key="test-key",
+            project_id="test-project",
+        )
+
+        mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(side_effect=[mock_response_submit, mock_response_cancel])
+        mock_http_client.get = AsyncMock(return_value=mock_response_get)
+        mock_http_client.aclose = AsyncMock()
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch("polos.runtime.client.get_worker_client", return_value=None),
+            patch.object(
+                client,
+                "_get_headers",
+                return_value={"Authorization": "Bearer test-key"},
+            ),
+            patch("httpx.AsyncClient", return_value=mock_http_client),
+        ):
+            # Invoke
+            handle = await client.invoke(workflow_id=workflow_id, payload={"test": "data"})
+            assert handle.id == execution_id
+
+            # Get execution
+            execution = await client.get_execution(execution_id)
+            assert execution["id"] == execution_id
+            assert execution["status"] == "running"
+
+            # Cancel
+            cancelled = await client.cancel_execution(execution_id)
+            assert cancelled is True

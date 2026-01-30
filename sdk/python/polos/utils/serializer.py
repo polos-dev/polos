@@ -27,7 +27,7 @@ def is_json_serializable(obj: Any) -> bool:
 def serialize(obj: Any) -> Any:
     """Serialize an object to a JSON-serializable object.
 
-    If the input is a Pydantic BaseModel, uses model_dump() to serialize it to a dict.
+    If the input is a Pydantic BaseModel, uses model_dump(mode="json") to serialize it to a dict.
     Otherwise, checks if it's JSON serializable via json.dumps and raises TypeError if not.
 
     Args:
@@ -41,7 +41,7 @@ def serialize(obj: Any) -> Any:
     """
     # Handle Pydantic models
     if isinstance(obj, BaseModel):
-        return obj.model_dump()
+        return obj.model_dump(mode="json")
 
     # Check if it's JSON serializable
     if not is_json_serializable(obj):

@@ -51,6 +51,7 @@ pub async fn create_schedule(
   ProjectId(project_id): ProjectId,
   Json(req): Json<CreateScheduleRequest>,
 ) -> Result<Json<CreateScheduleResponse>, StatusCode> {
+  tracing::info!("Creating schedule for workflow: {}", req.workflow_id);
   let project_exists = state
     .db
     .validate_project_id(&project_id)
@@ -64,6 +65,7 @@ pub async fn create_schedule(
     return Err(StatusCode::NOT_FOUND);
   }
 
+  tracing::info!("Setting project_id: {}", project_id);
   state
     .db
     .set_project_id(&project_id, false)
@@ -73,6 +75,7 @@ pub async fn create_schedule(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+  tracing::info!("Checking if workflow is schedulable: {}", req.workflow_id);
   let is_schedulable = state
     .db
     .is_workflow_schedulable(&req.workflow_id)
@@ -82,10 +85,12 @@ pub async fn create_schedule(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+  tracing::info!("Is schedulable: {}", is_schedulable);
   if !is_schedulable {
     return Err(StatusCode::BAD_REQUEST);
   }
 
+  tracing::info!("Creating or updating schedule: {}", req.workflow_id);
   let schedule_id = state
     .db
     .create_or_update_schedule(
@@ -101,6 +106,7 @@ pub async fn create_schedule(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+  tracing::info!("Schedule created: {}", schedule_id);
   Ok(Json(CreateScheduleResponse {
     schedule_id: schedule_id.to_string(),
   }))

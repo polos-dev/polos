@@ -183,7 +183,7 @@ class Workflow:
 
         Rules:
         - If payload is None, return None
-        - If payload is a Pydantic BaseModel instance, convert to dict via model_dump()
+        - If payload is a Pydantic BaseModel instance, convert to dict via model_dump(mode="json")
         - If payload is a dict, ensure it is JSON serializable via json.dumps()
         - Otherwise, raise TypeError
         """
@@ -192,7 +192,7 @@ class Workflow:
 
         # Pydantic model → dict
         if isinstance(payload, BaseModel):
-            return payload.model_dump()
+            return payload.model_dump(mode="json")
 
         # Require dict[str, Any] for non-Pydantic payloads
         if isinstance(payload, dict):
@@ -453,7 +453,7 @@ class Workflow:
             # Store initial state in span if provided
             if ctx.state is not None and self.state_schema:
                 try:
-                    initial_state_dict = ctx.state.model_dump()
+                    initial_state_dict = ctx.state.model_dump(mode="json")
                     workflow_span.set_attribute(
                         f"{workflow_type}.initial_state", json.dumps(initial_state_dict)
                     )
@@ -557,7 +557,7 @@ class Workflow:
                 # Store final state in span if workflow has state_schema
                 if ctx.state is not None and self.state_schema:
                     try:
-                        final_state = ctx.state.model_dump()
+                        final_state = ctx.state.model_dump(mode="json")
                         workflow_span.set_attribute(
                             f"{workflow_type}.final_state", json.dumps(final_state)
                         )
@@ -614,7 +614,7 @@ class Workflow:
                 final_state = None
                 if ctx.state is not None and self.state_schema:
                     try:
-                        final_state = ctx.state.model_dump()
+                        final_state = ctx.state.model_dump(mode="json")
                         workflow_span.set_attribute(
                             f"{workflow_type}.final_state", json.dumps(final_state)
                         )

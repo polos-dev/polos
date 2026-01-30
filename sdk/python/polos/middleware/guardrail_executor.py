@@ -205,7 +205,7 @@ LLM Response to evaluate:
 
     # Prepare agent config for guardrail evaluation
     # Use the agent's model, provider, etc., but override output_schema
-    config_dict = agent_config.model_dump()
+    config_dict = agent_config.model_dump(mode="json")
     config_dict["output_schema"] = guardrail_output_schema
     config_dict["output_schema_name"] = "GuardrailEvaluationResult"
     guardrail_agent_config = AgentConfig.model_validate(config_dict)
@@ -215,7 +215,7 @@ LLM Response to evaluate:
         ctx,
         {
             "agent_run_id": guardrail_context.agent_run_id,
-            "agent_config": guardrail_agent_config.model_dump(),
+            "agent_config": guardrail_agent_config.model_dump(mode="json"),
             "input": evaluation_prompt,
             "agent_step": 0,  # Guardrail evaluation doesn't count as agent step
             "guardrails": None,  # Don't recurse guardrails on guardrail evaluation

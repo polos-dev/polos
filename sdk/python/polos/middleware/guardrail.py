@@ -35,7 +35,7 @@ class GuardrailContext(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for serialization."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, data: Any) -> "GuardrailContext":
@@ -64,7 +64,7 @@ class GuardrailResult(HookResult):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict, including guardrail-specific fields."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GuardrailResult":

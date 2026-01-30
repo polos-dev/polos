@@ -5,7 +5,8 @@ from datetime import datetime
 import httpx
 from pydantic import BaseModel
 
-from ..runtime.client import _config
+from ..runtime.client import _config, _get_headers
+from ..utils.worker_singleton import get_worker_client
 
 
 class SchedulePayload(BaseModel):
@@ -65,10 +66,7 @@ async def create(
         )
     """
     api_url = _config["api_url"]
-    headers = {"Content-Type": "application/json"}
-
-    if _config["api_key"]:
-        headers["Authorization"] = f"Bearer {_config['api_key']}"
+    headers = _get_headers()
 
     payload = {
         "workflow_id": workflow,
@@ -77,8 +75,10 @@ async def create(
         "key": key,
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
+    # Try to reuse worker's HTTP client if available
+    worker_client = get_worker_client()
+    if worker_client is not None:
+        response = await worker_client.post(
             f"{api_url}/api/v1/schedules",
             json=payload,
             headers=headers,
@@ -86,6 +86,16 @@ async def create(
         response.raise_for_status()
         result = response.json()
         return result["schedule_id"]
+    else:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{api_url}/api/v1/schedules",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["schedule_id"]
 
 
 # Module-level instance for convenience

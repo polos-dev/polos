@@ -135,12 +135,12 @@ class Tool(Workflow):
                         f"got {type(payload).__name__}"
                     )
                 # Convert to dict for invoke
-                prepared_payload = payload.model_dump()
+                prepared_payload = payload.model_dump(mode="json")
             elif isinstance(payload, dict):
                 # Validate dict against Pydantic model
                 try:
                     validated_model = self._input_schema_class.model_validate(payload)
-                    prepared_payload = validated_model.model_dump()
+                    prepared_payload = validated_model.model_dump(mode="json")
                 except Exception as e:
                     raise ValueError(f"Invalid payload for tool '{self.id}': {e}") from e
             else:
@@ -556,7 +556,9 @@ def _wrap_function_for_tool(
                         input_instance = payload
                     elif isinstance(payload, BaseModel):
                         # Different Pydantic model - convert to dict and validate
-                        input_instance = input_schema_class.model_validate(payload.model_dump())
+                        input_instance = input_schema_class.model_validate(
+                            payload.model_dump(mode="json")
+                        )
                     else:
                         raise ValueError(
                             f"Payload must be a dict or Pydantic BaseModel "

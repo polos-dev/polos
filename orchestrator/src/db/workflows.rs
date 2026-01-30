@@ -296,6 +296,7 @@ impl Database {
                     jsonb_build_object('events', jsonb_agg(
                         jsonb_build_object(
                             'id', e.id::text,
+                            'sequence_id', e.sequence_id,
                             'topic', e.topic,
                             'event_type', e.event_type,
                             'data', e.data,
@@ -303,14 +304,13 @@ impl Database {
                         ) ORDER BY e.sequence_id
                     ))
                 ELSE
-                    (SELECT jsonb_build_object('event', 
-                        jsonb_build_object(
-                            'id', e2.id::text,
-                            'topic', e2.topic,
-                            'event_type', e2.event_type,
-                            'data', e2.data,
-                            'created_at', to_jsonb(e2.created_at)
-                        )
+                    (SELECT jsonb_build_object(
+                        'id', e2.id::text,
+                        'sequence_id', e2.sequence_id,
+                        'topic', e2.topic,
+                        'event_type', e2.event_type,
+                        'data', e2.data,
+                        'created_at', to_jsonb(e2.created_at)
                     ) FROM events_to_process e2 ORDER BY e2.sequence_id ASC LIMIT 1)
             END,
             COALESCE(t.queue_name, t.workflow_id),

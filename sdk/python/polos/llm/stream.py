@@ -115,7 +115,7 @@ async def _stream_from_provider(
         temperature=agent_config.temperature,
         max_tokens=agent_config.max_output_tokens,
         top_p=agent_config.top_p,
-        agent_config=agent_config.model_dump(),
+        agent_config=agent_config.model_dump(mode="json"),
         tool_results=tool_results,
         output_schema=agent_config.output_schema,
         output_schema_name=agent_config.output_schema_name,

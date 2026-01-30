@@ -87,8 +87,8 @@ async def execute_hooks(
                 modified_agent_config = hook_result.modified_agent_config
             else:
                 # Merge modifications into existing config
-                config_dict = modified_agent_config.model_dump()
-                mod_dict = hook_result.modified_agent_config.model_dump()
+                config_dict = modified_agent_config.model_dump(mode="json")
+                mod_dict = hook_result.modified_agent_config.model_dump(mode="json")
                 config_dict.update(mod_dict)
                 modified_agent_config = AgentConfig.model_validate(config_dict)
 

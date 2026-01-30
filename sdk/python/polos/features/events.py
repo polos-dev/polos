@@ -18,13 +18,83 @@ logger = logging.getLogger(__name__)
 class EventData(BaseModel):
     """Event data structure for publishing events.
 
+    Users can define TypedDict for type hints:
+        from typing import TypedDict
+
+        class ApprovalData(TypedDict):
+            approved: bool
+            reason: str | None
+
+        event = EventData(
+            event_type="email.approval_received",
+            data={"approved": True, "reason": "Looks good"}  # TypedDict provides type hints
+        )
+
     Attributes:
-        event_type: Optional type of event
-        data: Event payload
+        event_type: Type of event
+        data: Event payload (dict)
     """
 
     event_type: str | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any]
+
+
+class EventPayload(BaseModel):
+    """Event payload received when waiting for events in workflows.
+
+    This is returned by ctx.step.wait_for_event() when an event is received
+    and by event-triggered workflows.
+
+    Attributes:
+        id: Event ID (UUID string)
+        sequence_id: Global sequence ID for ordering
+        topic: Event topic
+        event_type: Type of event
+        data: Event payload (dict)
+        created_at: Optional timestamp when event was created
+    """
+
+    id: str
+    sequence_id: int
+    topic: str
+    event_type: str | None = None
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class EventItem(BaseModel):
+    """Single event item in a batch of events.
+
+    Used in BatchEventPayload for event-triggered workflows with batching.
+
+    Attributes:
+        id: Event ID (UUID string)
+        sequence_id: Global sequence ID for ordering
+        topic: Event topic
+        event_type: Type of event
+        data: Event payload (dict)
+        created_at: Timestamp when event was created
+    """
+
+    id: str
+    sequence_id: int
+    topic: str
+    event_type: str | None = None
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class BatchEventPayload(BaseModel):
+    """Batch event payload for event-triggered workflows with batching.
+
+    This is the payload structure when a workflow is triggered by events
+    with batch_size > 1 or batch_timeout_seconds set.
+
+    Attributes:
+        events: List of events in the batch
+    """
+
+    events: list[EventItem] = Field(default_factory=list)
 
 
 class StreamEvent(BaseModel):
@@ -55,8 +125,8 @@ class Event:
         id: str,
         sequence_id: int,
         topic: str,
-        event_type: str,
-        data: dict[str, Any],
+        event_type: str | None = None,
+        data: dict[str, Any] | None = None,
         status: str = "valid",
         execution_id: str | None = None,
         attempt_number: int = 0,
@@ -90,14 +160,29 @@ async def batch_publish(
 
     Args:
         topic: Event topic (all events in the batch share this topic)
-        events: List of EventData dicts, each with:
-            - event_type: Optional[str] - Type of event
-            - data: Dict[str, Any] - Event payload
+        events: List of EventData instances, each with:
+            - event_type: str - Type of event
+            - data: dict[str, Any] - Event payload (can use TypedDict for type hints)
         execution_id: Optional execution ID
         root_execution_id: Optional root execution ID
 
     Returns:
         List of sequence IDs
+
+    Example:
+        from typing import TypedDict
+
+        class ApprovalData(TypedDict):
+            approved: bool
+            reason: str | None
+
+        events = [
+            EventData(
+                event_type="email.approval_received",
+                data={"approved": True, "reason": "Looks good"}
+            )
+        ]
+        sequence_ids = await batch_publish("approvals", events)
     """
     if not events:
         return []
@@ -109,7 +194,7 @@ async def batch_publish(
     # Add execution_id and attempt_number internally
     events_with_internal = []
     for e in events:
-        events_with_internal.append(e.model_dump(exclude_none=True))
+        events_with_internal.append(e.model_dump(exclude_none=True, mode="json"))
 
     payload = {
         "topic": topic,

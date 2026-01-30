@@ -17,7 +17,7 @@ from typing import Any
 from opentelemetry.trace import Status, StatusCode
 from pydantic import BaseModel
 
-from ..features.events import EventData, batch_publish
+from ..features.events import EventData, EventPayload, batch_publish
 from ..features.tracing import extract_traceparent, get_current_span, get_tracer
 from ..features.wait import WaitException, _get_wait_time, _set_waiting
 from ..runtime.client import ExecutionHandle, _submit_workflows, get_step_output, store_step_output
@@ -116,8 +116,8 @@ class Step:
             result: Result to save
             source_execution_id: Optional source execution ID
 
-        If result is a Pydantic BaseModel, converts it to dict using model_dump()
-        to ensure only valid Pydantic models are stored. model_dump() automatically
+        If result is a Pydantic BaseModel, converts it to dict using model_dump(mode="json")
+        to ensure only valid Pydantic models are stored. model_dump(mode="json") automatically
         handles nested Pydantic models within the model.
 
         Also extracts and stores the full module path of Pydantic classes for
@@ -128,7 +128,7 @@ class Step:
         """
         output_schema_name = None
         if isinstance(result, BaseModel):
-            outputs = result.model_dump()
+            outputs = result.model_dump(mode="json")
             # Extract full module path for Pydantic class
             # (e.g., "polos.llm.providers.base.LLMResponse")
             output_schema_name = f"{result.__class__.__module__}.{result.__class__.__name__}"
@@ -535,7 +535,7 @@ class Step:
 
     async def wait_for_event(
         self, step_key: str, topic: str, timeout: int | None = None
-    ) -> dict[str, Any]:
+    ) -> EventPayload:
         """Wait for an event on a topic.
 
         Args:
@@ -544,12 +544,17 @@ class Step:
             timeout: Optional timeout in seconds. If provided, wait will expire after this duration.
 
         Returns:
-            Event data
+            EventPayload: Event payload with sequence_id, topic, event_type, data, and created_at
         """
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
-            return await self._handle_existing_step(existing_step)
+            result = await self._handle_existing_step(existing_step)
+            # Convert dict to EventPayload
+            if isinstance(result, dict):
+                return EventPayload.model_validate(result)
+            # If not event data, return as-is (shouldn't happen for wait_for_event)
+            return result
 
         # Calculate expires_at if timeout is provided
         expires_at = None

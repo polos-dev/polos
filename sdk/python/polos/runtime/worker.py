@@ -900,13 +900,14 @@ class Worker:
                     self.execution_tasks.pop(execution_id, None)
 
             # Prepare result for reporting:
-            # - If it's a Pydantic model, convert to dict via model_dump() and store schema name
+            # - If it's a Pydantic model, convert to dict via model_dump(mode="json") and
+            #   store schema name
             # - Otherwise, ensure it's JSON-serializable via json.dumps()
             prepared_result = result
             output_schema_name = None
             try:
                 if isinstance(result, BaseModel):
-                    prepared_result = result.model_dump()
+                    prepared_result = result.model_dump(mode="json")
                     # Store full module path for Pydantic model reconstruction
                     output_schema_name = (
                         f"{result.__class__.__module__}.{result.__class__.__name__}"

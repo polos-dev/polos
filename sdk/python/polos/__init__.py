@@ -27,10 +27,11 @@ from .core.workflow import (
     workflow,
 )
 from .features import events, schedules
+from .features.events import BatchEventPayload, EventPayload
 from .features.schedules import SchedulePayload
 from .middleware.guardrail import GuardrailContext, GuardrailResult, guardrail
 from .middleware.hook import HookAction, HookContext, HookResult, hook
-from .runtime import batch
+from .runtime.batch import batch_agent_invoke, batch_invoke
 from .runtime.client import ExecutionHandle, configure, resume
 from .runtime.queue import Queue, queue
 from .runtime.worker import Worker
@@ -56,7 +57,8 @@ __all__ = [
     "resume",
     "Queue",
     "queue",
-    "batch",
+    "batch_invoke",
+    "batch_agent_invoke",
     "Agent",
     "AgentStreamHandle",
     "StreamResult",
@@ -86,6 +88,8 @@ __all__ = [
     "events",
     "schedules",
     "SchedulePayload",
+    "EventPayload",
+    "BatchEventPayload",
     "BatchStepResult",
     "Step",
     "Usage",

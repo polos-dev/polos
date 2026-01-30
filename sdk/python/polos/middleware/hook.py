@@ -46,7 +46,7 @@ class HookContext(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert hook context to dictionary for serialization."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, data: Any) -> "HookContext":
@@ -102,7 +102,7 @@ class HookResult(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert hook result to dictionary for serialization."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "HookResult":

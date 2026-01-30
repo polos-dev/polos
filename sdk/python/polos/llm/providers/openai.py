@@ -254,7 +254,7 @@ class OpenAIProvider(LLMProvider):
             if not response:
                 raise RuntimeError("OpenAI API returned no response")
 
-            response_dict = response.model_dump(exclude_none=True)
+            response_dict = response.model_dump(exclude_none=True, mode="json")
 
             # Check for errors
             if response_dict.get("error"):
@@ -452,7 +452,7 @@ class OpenAIProvider(LLMProvider):
                 if not choice.message:
                     raise RuntimeError("OpenAI API returned no message")
 
-                processed_messages.append(choice.message.model_dump(exclude_none=True))
+                processed_messages.append(choice.message.model_dump(exclude_none=True, mode="json"))
                 content = choice.message.content or ""
                 response_stop_reason = choice.finish_reason
 
@@ -568,7 +568,7 @@ class OpenAIProvider(LLMProvider):
             }
 
             async for event in stream:
-                event = event.model_dump(exclude_none=True)
+                event = event.model_dump(exclude_none=True, mode="json")
 
                 event_type = event.get("type")
 
@@ -647,7 +647,7 @@ class OpenAIProvider(LLMProvider):
                     response = event.get("response")
                     if response:
                         response_dict = (
-                            response.model_dump(exclude_none=True)
+                            response.model_dump(exclude_none=True, mode="json")
                             if hasattr(response, "model_dump")
                             else response
                         )
@@ -865,7 +865,7 @@ class OpenAIProvider(LLMProvider):
                         for tool_call_delta in delta.tool_calls:
                             # Tool calls come in parts - need to accumulate
                             idx = tool_call_delta.index
-                            delta_dict = tool_call_delta.model_dump(exclude_none=True)
+                            delta_dict = tool_call_delta.model_dump(exclude_none=True, mode="json")
 
                             if idx is None or len(tool_calls) <= idx:
                                 # New tool call

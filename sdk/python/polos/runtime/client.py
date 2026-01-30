@@ -85,7 +85,7 @@ class ExecutionHandle(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the execution handle to a dictionary."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     async def get(self) -> dict[str, Any]:
         """Get the current status of the execution."""
@@ -137,7 +137,7 @@ class ExecutionHandle(BaseModel):
     # Pydantic will generate __repr__ automatically, but we can customize it if needed
     def __repr__(self) -> str:
         # Use model_dump to get the dictionary representation.
-        fields = self.model_dump(exclude_none=True)
+        fields = self.model_dump(exclude_none=True, mode="json")
         field_str = ", ".join(f"{k}={v!r}" for k, v in fields.items())
         return f"ExecutionHandle({field_str})"
 

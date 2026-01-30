@@ -9,7 +9,7 @@ from ..utils.serializer import serialize
 from .client import ExecutionHandle, _submit_workflows
 
 
-async def invoke(
+async def batch_invoke(
     workflows: list[BatchWorkflowInput],
     session_id: str | None = None,
     user_id: str | None = None,
@@ -83,7 +83,7 @@ async def invoke(
     return handles
 
 
-async def agent_invoke(
+async def batch_agent_invoke(
     agents: list[AgentRunConfig],
 ) -> list[ExecutionHandle]:
     """
@@ -117,4 +117,4 @@ async def agent_invoke(
             )
         )
 
-    return await invoke(workflows)
+    return await batch_invoke(workflows)

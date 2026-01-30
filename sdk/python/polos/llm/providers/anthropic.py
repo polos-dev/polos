@@ -161,7 +161,7 @@ class AnthropicProvider(LLMProvider):
             raw_output = []
             for content_block in response.content:
                 raw_output.append(
-                    content_block.model_dump(exclude_none=True)
+                    content_block.model_dump(exclude_none=True, mode="json")
                     if hasattr(content_block, "model_dump")
                     else json.dumps(content_block)
                 )
@@ -178,7 +178,7 @@ class AnthropicProvider(LLMProvider):
                     input_data = content_block.input
                     if hasattr(input_data, "model_dump"):
                         # Pydantic model, convert to dict then JSON
-                        arguments = json.dumps(input_data.model_dump())
+                        arguments = json.dumps(input_data.model_dump(mode="json"))
                     elif isinstance(input_data, dict):
                         # Already a dict, convert to JSON string
                         arguments = json.dumps(input_data)
@@ -369,7 +369,11 @@ class AnthropicProvider(LLMProvider):
                 # Event types: message_start, content_block_start, content_block_delta,
                 # content_block_stop, message_delta, message_stop
                 event_type = event.type
-                event = event.model_dump() if hasattr(event, "model_dump") else json.dumps(event)
+                event = (
+                    event.model_dump(mode="json")
+                    if hasattr(event, "model_dump")
+                    else json.dumps(event)
+                )
 
                 if event_type == "content_block_start":
                     # Content block starting - could be text or tool_use

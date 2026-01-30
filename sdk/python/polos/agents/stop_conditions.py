@@ -31,7 +31,7 @@ class StopConditionContext(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert stop condition context to dictionary for serialization."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, data: Any) -> "StopConditionContext":

@@ -88,18 +88,6 @@ export const ProjectLayout: React.FC = () => {
     <div className="min-h-screen bg-white">
       {/* Header - appears on all pages */}
       <Header
-        user={{
-          id: user.id,
-          first_name: user.first_name ?? '',
-          last_name: user.last_name ?? '',
-          display_name: user.display_name ?? '',
-          email: user.email,
-          created_at: String(user.created_at ?? ''),
-          updated_at: String(user.updated_at ?? ''),
-        }}
-        onUpgrade={handleUpgrade}
-        onLogout={handleLogout}
-        onProfile={handleProfile}
         projects={projects.map((project) => ({
           id: project.id,
           name: project.name,

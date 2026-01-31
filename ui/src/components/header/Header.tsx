@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { type User } from '../../types/models';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -25,29 +24,21 @@ import { Plus, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
-  user: User;
   projects: { id: string; name: string }[];
   selectedProjectId: string;
   onProjectChange: (projectId: string) => void;
   isLoadingProjects?: boolean;
   onCreateProject?: (projectId: string) => void;
-  onUpgrade?: () => void;
-  onLogout?: () => void;
-  onProfile?: () => void;
   logoSrc?: string;
   className?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  user,
   projects = [],
   selectedProjectId,
   onProjectChange,
   isLoadingProjects = false,
   onCreateProject,
-  onUpgrade,
-  onLogout,
-  onProfile,
   logoSrc = '/polos-logo-horizontal.png',
   className,
 }) => {

@@ -10,8 +10,24 @@ import {
 } from '@/types/models';
 import { type CreateProjectRequest } from '@/types/api';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+// Get API base URL - check window variable first (runtime injection), then build-time env var
+// This function is called at runtime for each API call, not at module load time
+function getApiBaseUrl(): string {
+  // Check window variable (injected by polos-server at runtime)
+  // This is checked first because it's set at runtime and takes precedence
+  const windowUrl = (window as any).VITE_API_BASE_URL;
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+
+  if (windowUrl) {
+    return windowUrl;
+  }
+  // Fall back to build-time env var
+  if (envUrl) {
+    return envUrl;
+  }
+  // Default fallback
+  return 'http://localhost:8080';
+}
 
 // Helper function to get headers with optional X-Project-ID
 function getHeaders(projectId?: string | null): HeadersInit {
@@ -29,7 +45,7 @@ export async function postJSON<T>(
   body: unknown,
   projectId?: string | null
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -50,7 +66,7 @@ export async function putJSON<T>(
   body: unknown,
   projectId?: string | null
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'PUT',
     credentials: 'include',
     headers: {
@@ -70,7 +86,7 @@ export async function getJSON<T>(
   path: string,
   projectId?: string | null
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     credentials: 'include',
     headers: getHeaders(projectId),
   });
@@ -81,7 +97,7 @@ export async function getJSON<T>(
 export const api = {
   // Project functions
   async getProjects(): Promise<{ projects: Project[] }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/projects`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/projects`, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
@@ -105,7 +121,7 @@ export const api = {
   },
 
   async createProject(projectData: CreateProjectRequest): Promise<Project> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/projects`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/projects`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -126,7 +142,7 @@ export const api = {
 
   async getProject(projectId: string): Promise<Project> {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/projects/${projectId}`,
+      `${getApiBaseUrl()}/api/v1/projects/${projectId}`,
       {
         credentials: 'include',
         headers: { Accept: 'application/json' },
@@ -152,7 +168,7 @@ export const api = {
   // Project API Key functions
   async getProjectApiKeys(projectId: string) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/api-keys/project/${projectId}`,
+      `${getApiBaseUrl()}/api/v1/api-keys/project/${projectId}`,
       {
         credentials: 'include',
         headers: {
@@ -165,7 +181,7 @@ export const api = {
   },
 
   async createProjectApiKey(data: { projectId: string; name: string }) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/api-keys`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -180,7 +196,7 @@ export const api = {
 
   async deleteProjectApiKey(data: { projectId: string; keyId: string }) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/api-keys/${data.keyId}`,
+      `${getApiBaseUrl()}/api/v1/api-keys/${data.keyId}`,
       {
         method: 'DELETE',
         credentials: 'include',
@@ -196,7 +212,7 @@ export const api = {
   // Project member functions
   async getProjectMembers(projectId: string) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/projects/${projectId}/members`,
+      `${getApiBaseUrl()}/api/v1/projects/${projectId}/members`,
       {
         credentials: 'include',
       }
@@ -211,7 +227,7 @@ export const api = {
     role: ProjectRole;
   }) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/projects/${data.projectId}/members`,
+      `${getApiBaseUrl()}/api/v1/projects/${data.projectId}/members`,
       {
         method: 'POST',
         credentials: 'include',
@@ -232,7 +248,7 @@ export const api = {
     role: string;
   }) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/projects/${data.projectId}/members/${data.userId}`,
+      `${getApiBaseUrl()}/api/v1/projects/${data.projectId}/members/${data.userId}`,
       {
         method: 'PUT',
         credentials: 'include',
@@ -249,7 +265,7 @@ export const api = {
 
   async removeProjectMember(data: { projectId: string; userId: string }) {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/projects/${data.projectId}/members/${data.userId}`,
+      `${getApiBaseUrl()}/api/v1/projects/${data.projectId}/members/${data.userId}`,
       {
         method: 'DELETE',
         credentials: 'include',
@@ -264,7 +280,7 @@ export const api = {
 
   // Agent functions
   async getAgents(projectId: string): Promise<Agent[]> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/agents`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/agents`, {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
@@ -283,13 +299,16 @@ export const api = {
   },
 
   async getAgent(projectId: string, agentId: string): Promise<Agent> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}`, {
-      credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        'X-Project-ID': projectId,
-      },
-    });
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/v1/agents/${agentId}`,
+      {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'X-Project-ID': projectId,
+        },
+      }
+    );
     if (!response.ok) {
       const errorData = await response
         .json()
@@ -303,7 +322,7 @@ export const api = {
 
   // Workflow functions
   async getWorkflows(projectId: string): Promise<Workflow[]> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/workflows`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/workflows`, {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
@@ -323,7 +342,7 @@ export const api = {
 
   async getWorkflow(projectId: string, workflowId: string): Promise<Workflow> {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/workflows/${workflowId}`,
+      `${getApiBaseUrl()}/api/v1/workflows/${workflowId}`,
       {
         credentials: 'include',
         headers: {
@@ -349,7 +368,7 @@ export const api = {
     payload: Record<string, any>
   ): Promise<any> {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/workflows/${workflowId}/run`,
+      `${getApiBaseUrl()}/api/v1/workflows/${workflowId}/run`,
       {
         method: 'POST',
         credentials: 'include',
@@ -395,7 +414,7 @@ export const api = {
     const topicParam = encodeURIComponent(topic);
     // Set last_sequence_id=0 to fetch all events from the beginning
     // Note: EventSource doesn't support custom headers, so we pass project_id as a query parameter
-    const url = `${API_BASE_URL}/api/v1/events/stream?topic=${topicParam}&last_sequence_id=0&project_id=${encodeURIComponent(projectId)}`;
+    const url = `${getApiBaseUrl()}/api/v1/events/stream?topic=${topicParam}&last_sequence_id=0&project_id=${encodeURIComponent(projectId)}`;
 
     const eventSource = new EventSource(url, {
       withCredentials: true,
@@ -436,7 +455,7 @@ export const api = {
 
   // Tool functions
   async getTools(projectId: string): Promise<Tool[]> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tools`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/tools`, {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
@@ -456,7 +475,7 @@ export const api = {
 
   async getTool(projectId: string, toolId: string): Promise<Tool> {
     // Use the tool_definition endpoint which gets the latest deployment
-    const response = await fetch(`${API_BASE_URL}/api/v1/tools/${toolId}`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/tools/${toolId}`, {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
@@ -498,7 +517,7 @@ export const api = {
       params.append('end_time', endTime);
     }
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/workflows/runs?${params.toString()}`,
+      `${getApiBaseUrl()}/api/v1/workflows/runs?${params.toString()}`,
       {
         credentials: 'include',
         headers: {
@@ -525,7 +544,7 @@ export const api = {
   ): Promise<any> {
     // Tools are workflows, so use the submit_workflow endpoint and return execution metadata.
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/workflows/${toolId}/run`,
+      `${getApiBaseUrl()}/api/v1/workflows/${toolId}/run`,
       {
         method: 'POST',
         credentials: 'include',
@@ -573,7 +592,7 @@ export const api = {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/conversation/${encodeURIComponent(conversationId)}/get?${params.toString()}`,
+      `${getApiBaseUrl()}/api/v1/conversation/${encodeURIComponent(conversationId)}/get?${params.toString()}`,
       {
         credentials: 'include',
         headers: {

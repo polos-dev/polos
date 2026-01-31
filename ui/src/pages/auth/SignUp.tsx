@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { SHOW_SSO, OAUTH_PROVIDERS } from '@/config/authUI';
+import { SHOW_SSO } from '@/config/authUI';
 import { getProviderLogo } from '@/components/logos/ProviderLogo';
 
 export default function SignUp() {

@@ -7,7 +7,7 @@ use axum::{
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod api;
 mod crypto;
@@ -47,9 +47,12 @@ async fn main() -> anyhow::Result<()> {
 
         tracing::info!("Tokio console enabled (connect with: tokio-console)");
     } else {
-        // In production: only use fmt subscriber
+        // In production: use fmt subscriber with stdout and env filter
         tracing_subscriber::fmt()
-            .with_writer(std::io::stderr)
+            .with_env_filter(
+                EnvFilter::from_default_env()
+                    .add_directive(tracing::Level::INFO.into()),
+            )
             .init();
     }
 
@@ -764,14 +767,7 @@ async fn main() -> anyhow::Result<()> {
         ))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB
         .layer({
-            let cors_origin = std::env::var("CORS_ORIGIN")
-                .unwrap_or_else(|_| "http://localhost:5173".to_string());
-            let origin_value: axum::http::HeaderValue = cors_origin
-                .parse()
-                .unwrap_or_else(|_| "http://localhost:5173".parse().unwrap());
-
-            CorsLayer::new()
-                .allow_origin(tower_http::cors::AllowOrigin::exact(origin_value))
+            let cors_layer = CorsLayer::new()
                 .allow_methods([
                     axum::http::Method::GET,
                     axum::http::Method::POST,
@@ -788,7 +784,15 @@ async fn main() -> anyhow::Result<()> {
                     axum::http::header::HeaderName::from_static("is-admin"),
                 ])
                 .allow_credentials(true)
-                .expose_headers([axum::http::header::CONTENT_TYPE])
+                .expose_headers([axum::http::header::CONTENT_TYPE]);
+
+            // Use the exact origin from CORS_ORIGIN env var
+            let cors_origin = std::env::var("CORS_ORIGIN")
+                .unwrap_or_else(|_| "http://localhost:5173".to_string());
+            let origin_value: axum::http::HeaderValue = cors_origin
+                .parse()
+                .unwrap_or_else(|_| "http://localhost:5173".parse().unwrap());
+            cors_layer.allow_origin(tower_http::cors::AllowOrigin::exact(origin_value))
         })
         .with_state(state);
 

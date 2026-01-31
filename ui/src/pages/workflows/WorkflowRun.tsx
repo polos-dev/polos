@@ -4,15 +4,13 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useProject } from '@/context/ProjectContext';
 import { Copy, Check, ChevronLeft } from 'lucide-react';
-import type { Workflow, WorkflowRunSummary } from '@/types/models';
+import type { WorkflowRunSummary } from '@/types/models';
 import { useExecutionStatus } from '@/hooks/useExecutionStatus';
 
 export const WorkflowRunPage: React.FC = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
-  const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const navigate = useNavigate();
   const { selectedProjectId } = useProject();
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedInput, setCopiedInput] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
@@ -30,36 +28,9 @@ export const WorkflowRunPage: React.FC = () => {
     error: executionError,
   } = useExecutionStatus(executionId, selectedProjectId || null);
 
-  useEffect(() => {
-    const fetchWorkflow = async () => {
-      if (!selectedProjectId || !workflowId) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        const foundWorkflow = await api.getWorkflow(
-          selectedProjectId,
-          workflowId
-        );
-        setWorkflow(foundWorkflow);
-      } catch (err) {
-        console.error('Failed to fetch workflow:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load workflow'
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchWorkflow();
-  }, [selectedProjectId, workflowId]);
-
   const fetchWorkflowRuns = useCallback(async () => {
     if (!selectedProjectId) {
+      setIsLoadingRuns(false);
       return;
     }
 
@@ -165,7 +136,7 @@ export const WorkflowRunPage: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoadingRuns) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">

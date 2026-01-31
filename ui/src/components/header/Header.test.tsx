@@ -15,7 +15,7 @@ describe('Header', () => {
     render(<Header {...defaultProps} />);
     const logo = screen.getByAltText('Polos');
     expect(logo).toBeInTheDocument();
-    expect(logo).toHaveAttribute('src', '/polos-logo.png');
+    expect(logo).toHaveAttribute('src', '/polos-logo-horizontal.png');
   });
 
   it('displays selected project name', () => {

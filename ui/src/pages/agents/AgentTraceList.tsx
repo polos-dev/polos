@@ -3,13 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  AlertTriangle,
-  Bot,
-  Database,
-  FilterIcon,
-  RefreshCw,
-} from 'lucide-react';
+import { AlertTriangle, Database, FilterIcon, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { WorkflowRunSummary } from '@/types/models';
 import { api } from '@/lib/api';

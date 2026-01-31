@@ -6,8 +6,21 @@ interface ExecutionStatusState {
   error: string | null;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+// Get API base URL - check window variable first (runtime injection), then build-time env var
+function getApiBaseUrl(): string {
+  // Check window variable (injected by polos-server at runtime)
+  if ((window as any).VITE_API_BASE_URL) {
+    return (window as any).VITE_API_BASE_URL;
+  }
+  // Fall back to build-time env var
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  // Default fallback
+  return 'http://localhost:8080';
+}
+
+// Don't cache API_BASE_URL - evaluate it at runtime for each call
 
 const EXECUTION_POLL_INTERVAL_MS = 1000;
 const EXECUTION_MAX_ATTEMPTS = 60;
@@ -40,7 +53,7 @@ export function useExecutionStatus(
       ) {
         try {
           const res = await fetch(
-            `${API_BASE_URL}/api/v1/executions/${executionId}`,
+            `${getApiBaseUrl()}/api/v1/executions/${executionId}`,
             {
               credentials: 'include',
               headers: {

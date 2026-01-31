@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: polos-server-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary_name: polos-server-linux-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary_name: polos-server-darwin-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_name: polos-server-darwin-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install UI dependencies
+        run: |
+          cd ui
+          npm ci
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm run build
+        env:
+          VITE_POLOS_LOCAL_MODE: 'true'
+
+      - name: Build orchestrator
+        run: |
+          cd orchestrator
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Build polos-server
+        run: |
+          cd server
+          cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_DIR: ../target
+
+      - name: Strip binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
+            strip target/${{ matrix.target }}/release/polos-server
+          elif [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos-server
+          fi
+
+      - name: Strip binary (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          strip target/${{ matrix.target }}/release/polos-server
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: target/${{ matrix.target }}/release/polos-server
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Make binaries executable
+        run: |
+          chmod +x artifacts/*/polos-server*
+
+      - name: Rename binaries
+        run: |
+          mv artifacts/polos-server-linux-x86_64/polos-server artifacts/polos-server-linux-x86_64
+          mv artifacts/polos-server-linux-arm64/polos-server artifacts/polos-server-linux-arm64
+          mv artifacts/polos-server-darwin-x86_64/polos-server artifacts/polos-server-darwin-x86_64
+          mv artifacts/polos-server-darwin-arm64/polos-server artifacts/polos-server-darwin-arm64
+
+      - name: Create checksums
+        run: |
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            sha256sum polos-server* > checksums.txt
+            cd ..
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/polos-server-linux-x86_64/*
+            artifacts/polos-server-linux-arm64/*
+            artifacts/polos-server-darwin-x86_64/*
+            artifacts/polos-server-darwin-arm64/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

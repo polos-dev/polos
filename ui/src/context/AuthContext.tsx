@@ -37,8 +37,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const LOCAL_MODE_DUMMY_USER: UserInfo = {
   id: '00000000-0000-0000-0000-000000000000',
   email: 'user@local',
-  display_name: 'user',
-  first_name: 'user',
+  display_name: 'User',
+  first_name: 'User',
   last_name: '',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
@@ -121,24 +121,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsSyncing(true);
 
+      // Get API base URL - check window variable first (runtime injection), then build-time env var
+      const apiBaseUrl =
+        (window as any).VITE_API_BASE_URL ||
+        import.meta.env.VITE_API_BASE_URL ||
+        'http://localhost:8080';
+
       // Send the OAuth token to your backend for validation/syncing
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/oauth-signin`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            provider: 'supabase',
-            user_id: session.user.id,
-            email: session.user.email,
-            first_name: session.user.user_metadata?.first_name,
-            last_name: session.user.user_metadata?.last_name,
-          }),
-        }
-      );
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/oauth-signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          provider: 'supabase',
+          user_id: session.user.id,
+          email: session.user.email,
+          first_name: session.user.user_metadata?.first_name,
+          last_name: session.user.user_metadata?.last_name,
+        }),
+      });
 
       if (response.ok) {
         const userData = await response.json();

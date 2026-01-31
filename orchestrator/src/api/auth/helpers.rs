@@ -124,6 +124,20 @@ pub async fn get_current_user(
     jar: &CookieJar,
     headers: &HeaderMap,
 ) -> Result<db::User, StatusCode> {
+    // In local mode, return the default user (user@local)
+    if state.local_mode {
+        let user = state
+            .db
+            .get_user_by_email("user@local")
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or_else(|| {
+                tracing::error!("Local mode enabled but user@local not found in database");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        return Ok(user);
+    }
+
     // Get token from cookie first
     let cookie_name = get_cookie_name();
     let mut token = jar.get(&cookie_name).map(|c| c.value().to_string());

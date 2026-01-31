@@ -17,11 +17,13 @@ export const AccountSettingsPage: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    setIsLoading(true);
     if (user) {
       setFirstName(user.first_name || '');
       setLastName(user.last_name || '');
       setDisplayName(user.display_name || '');
     }
+    setIsLoading(false);
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {

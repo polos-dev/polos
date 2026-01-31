@@ -1,0 +1,38 @@
+[package]
+name = "polos-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "polos-server"
+path = "src/main.rs"
+
+[build-dependencies]
+include_dir = "0.7"
+
+[features]
+default = []
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+clap = { version = "4.4", features = ["derive"] }
+anyhow = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono"] }
+uuid = { version = "1.6", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+dirs = "5.0"
+include_dir = "0.7"
+url = "2.5"

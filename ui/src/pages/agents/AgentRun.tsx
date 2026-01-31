@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useProject } from '@/context/ProjectContext';
-import { ChevronLeft, ChevronRight, Wrench } from 'lucide-react';
+import { ChevronLeft, Wrench } from 'lucide-react';
 import type { Agent, WorkflowRunSummary } from '@/types/models';
 import { useExecutionStatus } from '@/hooks/useExecutionStatus';
 import ReactMarkdown from 'react-markdown';

@@ -1,0 +1,6 @@
+# Clippy configuration for polos-server
+# This file allows configuring clippy lints
+# Most configuration is done via attributes in code or Cargo.toml
+
+# Allow some lints that are too strict for our use case
+# Add specific allow/deny rules here if needed

@@ -67,14 +67,34 @@ jobs:
         env:
           VITE_POLOS_LOCAL_MODE: 'true'
 
+      - name: Clean build cache
+        run: |
+          cd orchestrator
+          cargo clean --target ${{ matrix.target }}
+
       - name: Build orchestrator
         run: |
           cd orchestrator
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
           cargo build --release --target ${{ matrix.target }}
+
+      - name: Clean server build cache
+        run: |
+          cd server
+          cargo clean --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_DIR: ../target
 
       - name: Build polos-server
         run: |
           cd server
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
           cargo build --release --target ${{ matrix.target }}
         env:
           CARGO_TARGET_DIR: ../target

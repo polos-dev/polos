@@ -51,7 +51,7 @@ jobs:
       - name: Install UI dependencies
         run: |
           cd ui
-          npm install
+          npm ci --include=optional
 
       - name: Build UI
         run: |

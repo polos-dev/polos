@@ -1,13 +1,37 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "polos-sdk"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Polos SDK for Python - Durable Agent Execution"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Polos Team"},
+]
+keywords = [
+    "ai",
+    "agents",
+    "llm",
+    "workflow",
+    "orchestration",
+    "durable-execution",
+    "async",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "httpx>=0.24.0",
     "pydantic>=2.0.0",
@@ -19,6 +43,12 @@ dependencies = [
     "anyio>=4.0.0",
     "python-dotenv>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/polos-dev/polos"
+Repository = "https://github.com/polos-dev/polos"
+Documentation = "https://docs.polos.dev"
+Issues = "https://github.com/polos-dev/polos/issues"
 
 [project.optional-dependencies]
 anthropic = [
@@ -47,6 +77,10 @@ dev = [
     "ruff>=0.1.0",
     "pre-commit>=3.0.0",
 ]
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "python-sdk-v(?P<version>.*)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["polos"]

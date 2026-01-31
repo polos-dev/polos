@@ -1,3 +1,6 @@
+# Version is managed by hatch-vcs from git tags
+__version__ = "0.1.0"  # This will be replaced by hatch-vcs during build
+
 # Core imports
 from .agents.agent import (
     Agent,

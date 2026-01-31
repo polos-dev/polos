@@ -159,17 +159,28 @@ jobs:
           for dir in */; do
             cd "$dir"
             sha256sum polos-server* > checksums.txt
+            echo "Created checksums.txt in $dir"
+            ls -la
             cd ..
           done
+
+      - name: Verify files exist
+        run: |
+          echo "Verifying files before release:"
+          find artifacts -type f -name "polos-server*" -o -name "checksums.txt" | sort
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/polos-server-linux-x86_64/*
-            artifacts/polos-server-linux-arm64/*
-            artifacts/polos-server-darwin-x86_64/*
-            artifacts/polos-server-darwin-arm64/*
+            artifacts/polos-server-linux-x86_64/polos-server-linux-x86_64
+            artifacts/polos-server-linux-x86_64/checksums.txt
+            artifacts/polos-server-linux-arm64/polos-server-linux-arm64
+            artifacts/polos-server-linux-arm64/checksums.txt
+            artifacts/polos-server-darwin-x86_64/polos-server-darwin-x86_64
+            artifacts/polos-server-darwin-x86_64/checksums.txt
+            artifacts/polos-server-darwin-arm64/polos-server-darwin-arm64
+            artifacts/polos-server-darwin-arm64/checksums.txt
           generate_release_notes: true
           draft: false
           prerelease: false

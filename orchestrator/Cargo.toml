@@ -35,6 +35,7 @@ axum-extra = { version = "0.9", features = ["cookie"] }
 time = "0.3"
 rand = "0.8"
 dotenv = "0.15"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "macros"] }

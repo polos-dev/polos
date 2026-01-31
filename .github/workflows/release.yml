@@ -148,10 +148,10 @@ jobs:
 
       - name: Rename binaries
         run: |
-          mv artifacts/polos-server-linux-x86_64/polos-server artifacts/polos-server-linux-x86_64
-          mv artifacts/polos-server-linux-arm64/polos-server artifacts/polos-server-linux-arm64
-          mv artifacts/polos-server-darwin-x86_64/polos-server artifacts/polos-server-darwin-x86_64
-          mv artifacts/polos-server-darwin-arm64/polos-server artifacts/polos-server-darwin-arm64
+          cd artifacts/polos-server-linux-x86_64 && mv polos-server polos-server-linux-x86_64
+          cd ../polos-server-linux-arm64 && mv polos-server polos-server-linux-arm64
+          cd ../polos-server-darwin-x86_64 && mv polos-server polos-server-darwin-x86_64
+          cd ../polos-server-darwin-arm64 && mv polos-server polos-server-darwin-arm64
 
       - name: Create checksums
         run: |

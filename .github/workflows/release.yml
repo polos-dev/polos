@@ -40,7 +40,12 @@ jobs:
         run: |
           if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
             sudo apt-get update
-            sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+            sudo apt-get install -y \
+              gcc-aarch64-linux-gnu \
+              libc6-dev-arm64-cross \
+              libssl-dev:arm64 \
+              pkg-config-aarch64-linux-gnu \
+              libssl-dev
           fi
 
       - name: Setup Node.js
@@ -64,11 +69,21 @@ jobs:
       - name: Build orchestrator
         run: |
           cd orchestrator
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG=pkg-config-aarch64-linux-gnu
+            export OPENSSL_DIR=/usr/lib/aarch64-linux-gnu
+          fi
           cargo build --release --target ${{ matrix.target }}
 
       - name: Build polos-server
         run: |
           cd server
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG=pkg-config-aarch64-linux-gnu
+            export OPENSSL_DIR=/usr/lib/aarch64-linux-gnu
+          fi
           cargo build --release --target ${{ matrix.target }}
         env:
           CARGO_TARGET_DIR: ../target

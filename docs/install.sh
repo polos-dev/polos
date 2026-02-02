@@ -95,6 +95,52 @@ detect_platform() {
     echo "$platform"
 }
 
+# Add directory to PATH in shell config
+add_to_path() {
+    local dir="$1"
+    local shell_config=""
+    local path_line="export PATH=\"${dir}:\$PATH\""
+
+    # Determine shell config file
+    case "$SHELL" in
+        */zsh)
+            shell_config="$HOME/.zshrc"
+            ;;
+        */bash)
+            if [ -f "$HOME/.bash_profile" ]; then
+                shell_config="$HOME/.bash_profile"
+            else
+                shell_config="$HOME/.bashrc"
+            fi
+            ;;
+        *)
+            # Default to .profile for other shells
+            shell_config="$HOME/.profile"
+            ;;
+    esac
+
+    # Check if already in config
+    if [ -f "$shell_config" ] && grep -q "$dir" "$shell_config" 2>/dev/null; then
+        echo "PATH already configured in $shell_config"
+        echo ""
+        echo "Run this to use polos-server now:"
+        echo "  source $shell_config && polos-server start"
+        return
+    fi
+
+    # Add to config
+    echo "" >> "$shell_config"
+    echo "# Added by Polos installer" >> "$shell_config"
+    echo "$path_line" >> "$shell_config"
+
+    echo "Added ${dir} to PATH in $shell_config"
+    echo ""
+    echo "Run this to use polos-server now:"
+    echo "  source $shell_config && polos-server start"
+    echo ""
+    echo "Or open a new terminal and run: polos-server start"
+}
+
 # Verify checksum
 verify_checksum() {
     local file="$1"
@@ -229,13 +275,8 @@ main() {
     if command -v polos-server >/dev/null 2>&1; then
         echo "You can now run: polos-server start"
     else
-        echo "Note: ${INSTALL_DIR} may not be in your PATH."
-        echo "Add it to your PATH or run: ${INSTALL_DIR}/polos-server start"
-        echo ""
-        if [ "$INSTALL_DIR" = "$HOME/.local/bin" ]; then
-            echo "To add ~/.local/bin to your PATH, add this to your shell config:"
-            echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-        fi
+        # Add to PATH by updating shell config
+        add_to_path "$INSTALL_DIR"
     fi
     echo ""
 }

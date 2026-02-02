@@ -80,8 +80,11 @@ dev = [
 
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "python-sdk-v(?P<version>.*)"
+raw-options = { root = "../..", tag_regex = "^python-sdk-v(?P<version>.*)$" }
+
+[tool.setuptools_scm]
 root = "../.."
+tag_regex = "^python-sdk-v(?P<version>.*)$"
 
 [tool.hatch.build.targets.wheel]
 packages = ["polos"]

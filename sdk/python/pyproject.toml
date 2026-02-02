@@ -81,6 +81,7 @@ dev = [
 [tool.hatch.version]
 source = "vcs"
 tag-pattern = "python-sdk-v(?P<version>.*)"
+root = "../.."
 
 [tool.hatch.build.targets.wheel]
 packages = ["polos"]
@@ -123,8 +124,8 @@ unfixable = []
 [tool.ruff.lint.isort]
 known-first-party = ["polos"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",

@@ -127,14 +127,25 @@ fn main() {
         );
     };
 
-    // Copy orchestrator binary to OUT_DIR
-    let orchestrator_out = Path::new(&out_dir).join("polos-orchestrator");
-    fs::copy(&orchestrator_binary, &orchestrator_out).expect("Failed to copy orchestrator binary");
-
-    println!(
-        "cargo:rustc-env=ORCHESTRATOR_BINARY_PATH={}",
-        orchestrator_out.display()
-    );
+    // Embed orchestrator binary directly into the binary using include_bytes
+    // This ensures the binary works on any machine
+    let orchestrator_rs = Path::new(&out_dir).join("orchestrator_binary.rs");
+    let mut orchestrator_file = fs::File::create(&orchestrator_rs)
+        .expect("Failed to create orchestrator_binary.rs");
+    
+    // Get absolute path for include_bytes!
+    let abs_path = fs::canonicalize(&orchestrator_binary)
+        .unwrap_or_else(|_| orchestrator_binary.clone());
+    let path_str = abs_path.to_string_lossy().replace('\\', "/");
+    
+    writeln!(
+        orchestrator_file,
+        "pub const ORCHESTRATOR_BINARY: &[u8] = include_bytes!(r#\"{}\"#);",
+        path_str
+    )
+    .expect("Failed to write orchestrator_binary.rs");
+    
+    println!("cargo:rerun-if-changed={}", orchestrator_binary.display());
 
     // Check if UI dist directory exists
     let ui_dist = workspace_root.join("ui").join("dist");

@@ -55,7 +55,10 @@ pub async fn start(config: &ServerConfig) -> Result<OrchestratorHandle> {
 
     // Start orchestrator process
     let mut cmd = std::process::Command::new(&binary_path);
-    cmd.envs(&env_vars);
+    // Set environment variables (this adds to existing env, doesn't replace)
+    for (key, value) in &env_vars {
+        cmd.env(key, value);
+    }
     // Forward stdout and stderr to parent process so we can see orchestrator logs
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());

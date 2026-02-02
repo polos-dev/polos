@@ -2,10 +2,12 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
+// Include the embedded orchestrator binary
+include!(concat!(env!("OUT_DIR"), "/orchestrator_binary.rs"));
+
 pub fn get_embedded_orchestrator_binary() -> Result<Vec<u8>> {
-    let binary_path = env!("ORCHESTRATOR_BINARY_PATH");
-    fs::read(binary_path)
-        .with_context(|| format!("Failed to read orchestrator binary from: {}", binary_path))
+    // Return the embedded binary as a Vec<u8>
+    Ok(ORCHESTRATOR_BINARY.to_vec())
 }
 
 pub fn get_ui_dist_path() -> Option<PathBuf> {

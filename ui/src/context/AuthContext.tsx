@@ -62,6 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+
       try {
         // First check for Supabase session
         const {
@@ -95,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for Supabase auth changes (only if not in local mode)
     let subscription: any = null;
-    if (!isLocalMode()) {
+    if (!isLocalMode() && supabase) {
       const {
         data: { subscription: sub },
       } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -116,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sync OAuth user with backend
   async function syncOAuthUser(session: Session) {
     // If we're already syncing, don't start another sync
-    if (isSyncing) return;
+    if (isSyncing || !supabase) return;
 
     try {
       setIsSyncing(true);
@@ -171,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // OAuth sign in with Supabase
   async function signInWithProvider(provider: 'google' | 'github') {
+    if (!supabase) return;
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -204,6 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (!supabase) return;
     try {
       await postJSON('/api/v1/auth/signout', {});
 

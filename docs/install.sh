@@ -57,18 +57,21 @@ download_file() {
     fi
 }
 
-# Get latest release version from GitHub
+# Get latest server release version from GitHub
+# Filters to only consider server releases (tags like v0.1.0, not python-sdk-v*)
 get_latest_version() {
-    local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-    
+    local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
+
     if [ "$HAS_JQ" = true ]; then
-        download_file "$api_url" | jq -r '.tag_name' | sed 's/^v//'
+        # Get all releases and find the first one with a server tag (v* but not python-sdk-v*)
+        download_file "$api_url" | jq -r '[.[] | select(.tag_name | test("^v[0-9]"))][0].tag_name' | sed 's/^v//'
     else
         # Fallback: extract version from tag_name in JSON
+        # Look for tags that start with "v followed by a digit (server releases)
         local response
         response=$(download_file "$api_url")
-        # Simple extraction using grep/sed (fragile but works for basic cases)
-        echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/'
+        # Find tag_name entries that match v0.x.x pattern (not python-sdk-v*)
+        echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9][^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/'
     fi
 }
 

@@ -27,10 +27,14 @@ export const ProjectLayout: React.FC = () => {
       // Validate that the selected project ID exists in the fetched projects
       // If it doesn't exist (e.g., from old localStorage), clear it
       if (selectedProjectId && userProjects.length > 0) {
-        const projectExists = userProjects.some(p => p.id === selectedProjectId);
+        const projectExists = userProjects.some(
+          (p) => p.id === selectedProjectId
+        );
         if (!projectExists) {
           // Old project ID doesn't exist, clear it and use first project
-          console.warn(`Project ID ${selectedProjectId} not found in projects, clearing selection`);
+          console.warn(
+            `Project ID ${selectedProjectId} not found in projects, clearing selection`
+          );
           setSelectedProjectId(userProjects[0].id);
         }
       } else if (userProjects.length > 0 && !selectedProjectId) {

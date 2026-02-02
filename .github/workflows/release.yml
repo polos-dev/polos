@@ -15,16 +15,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary_name: polos-server-linux-x86_64
+            platform: linux-x86_64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            binary_name: polos-server-linux-arm64
+            platform: linux-arm64
           - os: macos-latest
             target: x86_64-apple-darwin
-            binary_name: polos-server-darwin-x86_64
+            platform: darwin-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            binary_name: polos-server-darwin-arm64
+            platform: darwin-arm64
 
     steps:
       - name: Checkout code
@@ -67,11 +67,6 @@ jobs:
         env:
           VITE_POLOS_LOCAL_MODE: 'true'
 
-      - name: Clean build cache
-        run: |
-          cd orchestrator
-          cargo clean --target ${{ matrix.target }}
-
       - name: Build orchestrator
         run: |
           cd orchestrator
@@ -80,13 +75,6 @@ jobs:
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           fi
           cargo build --release --target ${{ matrix.target }}
-
-      - name: Clean server build cache
-        run: |
-          cd server
-          cargo clean --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_DIR: ../target
 
       - name: Build polos-server
         run: |
@@ -99,25 +87,43 @@ jobs:
         env:
           CARGO_TARGET_DIR: ../target
 
-      - name: Strip binary (Linux)
+      - name: Strip binaries (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
             strip target/${{ matrix.target }}/release/polos-server
+            strip target/${{ matrix.target }}/release/polos-orchestrator
           elif [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
             aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos-server
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos-orchestrator
           fi
 
-      - name: Strip binary (macOS)
+      - name: Strip binaries (macOS)
         if: matrix.os == 'macos-latest'
         run: |
           strip target/${{ matrix.target }}/release/polos-server
+          strip target/${{ matrix.target }}/release/polos-orchestrator
+
+      - name: Create distribution tarball
+        run: |
+          mkdir -p dist/bin dist/ui
+          cp target/${{ matrix.target }}/release/polos-server dist/bin/
+          cp target/${{ matrix.target }}/release/polos-orchestrator dist/bin/
+          cp -r ui/dist/* dist/ui/
+          chmod +x dist/bin/polos-server dist/bin/polos-orchestrator
+          tar -czvf polos-${{ matrix.platform }}.tar.gz -C dist .
+
+      - name: Create checksum
+        run: |
+          sha256sum polos-${{ matrix.platform }}.tar.gz > checksums-polos-${{ matrix.platform }}.tar.gz.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.binary_name }}
-          path: target/${{ matrix.target }}/release/polos-server
+          name: polos-${{ matrix.platform }}
+          path: |
+            polos-${{ matrix.platform }}.tar.gz
+            checksums-polos-${{ matrix.platform }}.tar.gz.txt
           if-no-files-found: error
 
   release:
@@ -142,48 +148,23 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Make binaries executable
+      - name: List artifacts
         run: |
-          chmod +x artifacts/*/polos-server*
-
-      - name: Rename binaries
-        run: |
-          cd artifacts/polos-server-linux-x86_64 && mv polos-server polos-server-linux-x86_64
-          cd ../polos-server-linux-arm64 && mv polos-server polos-server-linux-arm64
-          cd ../polos-server-darwin-x86_64 && mv polos-server polos-server-darwin-x86_64
-          cd ../polos-server-darwin-arm64 && mv polos-server polos-server-darwin-arm64
-
-      - name: Create checksums
-        run: |
-          cd artifacts
-          for dir in */; do
-            cd "$dir"
-            # Get platform name from directory (remove trailing slash)
-            platform=$(basename "$dir")
-            # Create checksums file with platform name to avoid conflicts
-            sha256sum polos-server* > "checksums-${platform}.txt"
-            echo "Created checksums-${platform}.txt in $dir"
-            ls -la
-            cd ..
-          done
-
-      - name: Verify files exist
-        run: |
-          echo "Verifying files before release:"
-          find artifacts -type f \( -name "polos-server*" -o -name "checksums-*.txt" \) | sort
+          echo "Downloaded artifacts:"
+          find artifacts -type f | sort
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/polos-server-linux-x86_64/polos-server-linux-x86_64
-            artifacts/polos-server-linux-x86_64/checksums-polos-server-linux-x86_64.txt
-            artifacts/polos-server-linux-arm64/polos-server-linux-arm64
-            artifacts/polos-server-linux-arm64/checksums-polos-server-linux-arm64.txt
-            artifacts/polos-server-darwin-x86_64/polos-server-darwin-x86_64
-            artifacts/polos-server-darwin-x86_64/checksums-polos-server-darwin-x86_64.txt
-            artifacts/polos-server-darwin-arm64/polos-server-darwin-arm64
-            artifacts/polos-server-darwin-arm64/checksums-polos-server-darwin-arm64.txt
+            artifacts/polos-linux-x86_64/polos-linux-x86_64.tar.gz
+            artifacts/polos-linux-x86_64/checksums-polos-linux-x86_64.tar.gz.txt
+            artifacts/polos-linux-arm64/polos-linux-arm64.tar.gz
+            artifacts/polos-linux-arm64/checksums-polos-linux-arm64.tar.gz.txt
+            artifacts/polos-darwin-x86_64/polos-darwin-x86_64.tar.gz
+            artifacts/polos-darwin-x86_64/checksums-polos-darwin-x86_64.tar.gz.txt
+            artifacts/polos-darwin-arm64/polos-darwin-arm64.tar.gz
+            artifacts/polos-darwin-arm64/checksums-polos-darwin-arm64.tar.gz.txt
           generate_release_notes: true
           draft: false
           prerelease: false

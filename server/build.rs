@@ -2,203 +2,13 @@ use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-changed=../orchestrator/Cargo.toml");
-    println!("cargo:rerun-if-changed=../orchestrator/src");
     println!("cargo:rerun-if-changed=../orchestrator/migrations");
-    println!("cargo:rerun-if-changed=../ui/dist");
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let workspace_root = Path::new(&manifest_dir).parent().unwrap();
-
-    // Build orchestrator binary
-    let orchestrator_dir = workspace_root.join("orchestrator");
-    let orchestrator_target = env::var("TARGET").unwrap();
-    let binary_name = if cfg!(target_os = "windows") {
-        "polos-orchestrator.exe"
-    } else {
-        "polos-orchestrator"
-    };
-
-    // Check for orchestrator binary in multiple possible locations
-    // 1. Orchestrator's own target directory (when built separately, no target specified)
-    let orchestrator_binary_own = orchestrator_dir
-        .join("target")
-        .join("release")
-        .join(binary_name);
-
-    // 2. Orchestrator's own target directory with specific target (when built with --target)
-    let orchestrator_binary_own_targeted = orchestrator_dir
-        .join("target")
-        .join(&orchestrator_target)
-        .join("release")
-        .join(binary_name);
-
-    // 3. Workspace target directory (when built with CARGO_TARGET_DIR set)
-    let orchestrator_binary_workspace = workspace_root
-        .join("target")
-        .join(&orchestrator_target)
-        .join("release")
-        .join(binary_name);
-
-    // Find which binary exists (prefer orchestrator's own target)
-    let existing_binary = if orchestrator_binary_own_targeted.exists() {
-        Some(orchestrator_binary_own_targeted.clone())
-    } else if orchestrator_binary_own.exists() {
-        Some(orchestrator_binary_own.clone())
-    } else if orchestrator_binary_workspace.exists() {
-        Some(orchestrator_binary_workspace.clone())
-    } else {
-        None
-    };
-
-    // Check if binary already exists and is newer than source files
-    let needs_rebuild = if let Some(ref binary_path) = existing_binary {
-        // Check if Cargo.toml is newer than the binary
-        let binary_metadata = fs::metadata(binary_path).ok();
-        let binary_mtime = binary_metadata
-            .and_then(|m| m.modified().ok())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-
-        let cargo_toml = orchestrator_dir.join("Cargo.toml");
-        let cargo_toml_mtime = fs::metadata(&cargo_toml)
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-
-        cargo_toml_mtime > binary_mtime
-    } else {
-        true
-    };
-
-    // Determine where to place the binary (use workspace target for new builds)
-    let target_binary = workspace_root
-        .join("target")
-        .join(&orchestrator_target)
-        .join("release")
-        .join(binary_name);
-
-    if needs_rebuild {
-        println!("Building orchestrator for target: {}", orchestrator_target);
-
-        let build_output = Command::new("cargo")
-            .args(["build", "--release", "--bin", "polos-orchestrator"])
-            .current_dir(&orchestrator_dir)
-            .env("CARGO_TARGET_DIR", workspace_root.join("target"))
-            .output()
-            .expect("Failed to execute cargo build");
-
-        if !build_output.status.success() {
-            eprintln!("Orchestrator build failed. Stderr:");
-            eprintln!("{}", String::from_utf8_lossy(&build_output.stderr));
-            eprintln!("\nStdout:");
-            eprintln!("{}", String::from_utf8_lossy(&build_output.stdout));
-            panic!(
-                "Failed to build orchestrator.\n\
-                If you've already built it separately, ensure it exists at one of:\n\
-                  - {:?}\n\
-                  - {:?}\n\
-                Then rebuild the server.",
-                orchestrator_binary_own, orchestrator_binary_workspace
-            );
-        }
-    } else if let Some(ref binary_path) = existing_binary {
-        println!("Using existing orchestrator binary: {:?}", binary_path);
-    }
-
-    // Find the final binary location (could be in any of these locations)
-    let orchestrator_binary = if target_binary.exists() {
-        target_binary
-    } else if orchestrator_binary_own_targeted.exists() {
-        orchestrator_binary_own_targeted
-    } else if orchestrator_binary_own.exists() {
-        orchestrator_binary_own
-    } else if orchestrator_binary_workspace.exists() {
-        orchestrator_binary_workspace
-    } else {
-        panic!(
-            "Orchestrator binary not found. Expected locations:\n  - {:?}\n  - {:?}\n  - {:?}\n\nPlease build the orchestrator first:\n  cd orchestrator && cargo build --release",
-            orchestrator_binary_own_targeted,
-            orchestrator_binary_own,
-            orchestrator_binary_workspace
-        );
-    };
-
-    // Embed orchestrator binary directly into the binary using include_bytes
-    // This ensures the binary works on any machine
-    let orchestrator_rs = Path::new(&out_dir).join("orchestrator_binary.rs");
-    let mut orchestrator_file = fs::File::create(&orchestrator_rs)
-        .expect("Failed to create orchestrator_binary.rs");
-    
-    // Get absolute path for include_bytes!
-    let abs_path = fs::canonicalize(&orchestrator_binary)
-        .unwrap_or_else(|_| orchestrator_binary.clone());
-    let path_str = abs_path.to_string_lossy().replace('\\', "/");
-    
-    writeln!(
-        orchestrator_file,
-        "pub const ORCHESTRATOR_BINARY: &[u8] = include_bytes!(r#\"{}\"#);",
-        path_str
-    )
-    .expect("Failed to write orchestrator_binary.rs");
-    
-    println!("cargo:rerun-if-changed={}", orchestrator_binary.display());
-
-    // Check if UI dist directory exists
-    let ui_dist = workspace_root.join("ui").join("dist");
-    if !ui_dist.exists() {
-        println!("cargo:warning=UI dist directory not found. Building UI...");
-
-        // Try to build UI with VITE_POLOS_LOCAL_MODE=true for local development
-        let mut build_ui_cmd = Command::new("npm");
-        build_ui_cmd
-            .args(["run", "build"])
-            .current_dir(workspace_root.join("ui"))
-            .env("VITE_POLOS_LOCAL_MODE", "true");
-        let build_ui_status = build_ui_cmd.status();
-
-        if let Ok(status) = build_ui_status {
-            if !status.success() {
-                println!(
-                    "cargo:warning=Failed to build UI. Server will work but UI won't be available."
-                );
-            }
-        } else {
-            println!("cargo:warning=npm not found. UI won't be available.");
-        }
-    }
-
-    // Embed UI dist directory into the binary using include_dir!
-    // This ensures the UI works on any machine, not just the build machine
-    // UI dist MUST exist - fail the build if it doesn't
-    if !ui_dist.exists() {
-        panic!(
-            "UI dist directory not found: {:?}\n\
-            Please build the UI first:\n\
-            cd ui && npm run build",
-            ui_dist
-        );
-    }
-
-    let ui_dist_rs = Path::new(&out_dir).join("ui_dist.rs");
-    let mut ui_dist_file = fs::File::create(&ui_dist_rs)
-        .expect("Failed to create ui_dist.rs");
-    
-    // include_dir! requires a relative path from Cargo.toml (server/Cargo.toml)
-    // So we use "../ui/dist" which is relative to the server directory
-    let relative_path = "../ui/dist";
-    
-    writeln!(
-        ui_dist_file,
-        "pub static UI_DIST: include_dir::Dir = include_dir::include_dir!(\"{}\");",
-        relative_path
-    )
-    .expect("Failed to write ui_dist.rs");
-    
-    println!("cargo:rerun-if-changed={}", ui_dist.display());
 
     // Embed migrations directory into the binary
     let migrations_dir = workspace_root.join("orchestrator").join("migrations");
@@ -224,19 +34,14 @@ fn main() {
     writeln!(migrations_file).unwrap();
 
     // Generate include_str! for each migration
-    // We create constants with sanitized names (for valid Rust identifiers)
-    // but preserve the original filename for the HashMap key
     for (idx, entry) in entries.iter().enumerate() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        // Convert to absolute path and normalize separators for include_str!
         let abs_path = fs::canonicalize(&path).unwrap_or_else(|_| {
             panic!("Failed to canonicalize: {:?}", path);
         });
         let path_str = abs_path.to_string_lossy().replace('\\', "/");
 
-        // Create a safe constant name: MIGRATION_0, MIGRATION_1, etc.
-        // This avoids any issues with special characters in filenames
         let const_name = format!("MIGRATION_{}", idx);
 
         writeln!(migrations_file, "// Migration: {}", name).unwrap();
@@ -256,7 +61,6 @@ fn main() {
     .unwrap();
     writeln!(migrations_file, "    let mut migrations = HashMap::new();").unwrap();
 
-    // Map original filenames to their constants
     for (idx, entry) in entries.iter().enumerate() {
         let name = entry.file_name().to_string_lossy().to_string();
         let const_name = format!("MIGRATION_{}", idx);

@@ -19,8 +19,7 @@ pub struct UiHandle {
 }
 
 pub async fn start(config: &ServerConfig) -> Result<UiHandle> {
-    let ui_dist =
-        utils::get_ui_dist_path().context("UI dist directory not found. Make sure UI is built.")?;
+    let ui_dist = utils::get_ui_dist_path()?;
 
     if !ui_dist.exists() {
         anyhow::bail!("UI dist directory does not exist: {:?}", ui_dist);
@@ -38,21 +37,24 @@ pub async fn start(config: &ServerConfig) -> Result<UiHandle> {
     // 2. ServeDir for static assets (js, css, images, etc.)
     // 3. Fallback to index.html for SPA client-side routes
     let app = Router::new()
-        .route("/", get({
+        .route(
+            "/",
+            get({
+                let ui_dist = ui_dist.clone();
+                move || serve_index_html(orchestrator_port, ui_dist.clone())
+            }),
+        )
+        .route(
+            "/index.html",
+            get({
+                let ui_dist = ui_dist.clone();
+                move || serve_index_html(orchestrator_port, ui_dist.clone())
+            }),
+        )
+        .fallback_service(ServeDir::new(&ui_dist).fallback(get({
             let ui_dist = ui_dist.clone();
-            move || serve_index_html(orchestrator_port, ui_dist.clone())
-        }))
-        .route("/index.html", get({
-            let ui_dist = ui_dist.clone();
-            move || serve_index_html(orchestrator_port, ui_dist.clone())
-        }))
-        .fallback_service(
-            ServeDir::new(&ui_dist)
-                .fallback(get({
-                    let ui_dist = ui_dist.clone();
-                    move |uri: Uri| spa_fallback(uri, orchestrator_port, ui_dist.clone())
-                }))
-        );
+            move |uri: Uri| spa_fallback(uri, orchestrator_port, ui_dist.clone())
+        })));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], config.ui_port));
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -109,7 +111,11 @@ async fn serve_index_html(orchestrator_port: u16, ui_dist: PathBuf) -> Response 
         }
         Err(e) => {
             tracing::error!("Failed to read index.html from {:?}: {}", index_path, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read index.html").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to read index.html",
+            )
+                .into_response()
         }
     }
 }

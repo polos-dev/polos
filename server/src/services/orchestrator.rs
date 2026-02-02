@@ -10,8 +10,8 @@ pub struct OrchestratorHandle {
 }
 
 pub async fn start(config: &ServerConfig) -> Result<OrchestratorHandle> {
-    // Extract orchestrator binary
-    let binary_path = utils::extract_orchestrator_binary()?;
+    // Get orchestrator binary path from installed location
+    let binary_path = utils::get_orchestrator_path()?;
 
     // Set up environment variables
     let mut env_vars = std::collections::HashMap::new();

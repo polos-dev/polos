@@ -1,91 +1,36 @@
 use anyhow::{Context, Result};
-use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 
-// Include the embedded orchestrator binary
-include!(concat!(env!("OUT_DIR"), "/orchestrator_binary.rs"));
-
-pub fn get_embedded_orchestrator_binary() -> Result<Vec<u8>> {
-    // Return the embedded binary as a Vec<u8>
-    Ok(ORCHESTRATOR_BINARY.to_vec())
+/// Get the Polos home directory (~/.polos)
+pub fn get_polos_home() -> Result<PathBuf> {
+    let home = dirs::home_dir().context("Could not determine home directory")?;
+    Ok(home.join(".polos"))
 }
 
-// Include the embedded UI dist directory
-include!(concat!(env!("OUT_DIR"), "/ui_dist.rs"));
-
-pub fn get_ui_dist_path() -> Option<PathBuf> {
-    // Extract embedded UI dist to a temp directory at runtime
-    
-    let temp_dir = std::env::temp_dir();
-    let ui_dist_dir = temp_dir.join(format!("polos-ui-dist-{}", uuid::Uuid::new_v4()));
-    
-    // Create the directory
-    if let Err(e) = fs::create_dir_all(&ui_dist_dir) {
-        tracing::error!("Failed to create UI dist temp directory: {}", e);
-        return None;
+/// Get path to the orchestrator binary
+pub fn get_orchestrator_path() -> Result<PathBuf> {
+    let path = get_polos_home()?.join("bin").join("polos-orchestrator");
+    if !path.exists() {
+        anyhow::bail!(
+            "Orchestrator binary not found at {:?}.\n\
+            Please reinstall polos-server: curl -fsSL https://polos.dev/install.sh | bash",
+            path
+        );
     }
-    
-    // Extract all files from embedded UI_DIST
-    extract_dir(&UI_DIST, &ui_dist_dir).ok()?;
-    
-    Some(ui_dist_dir)
+    Ok(path)
 }
 
-// Recursively extract files from include_dir::Dir to filesystem
-// Note: file.path() returns the path relative to the ROOT directory, not the current subdirectory.
-// So we must always use the same target_path (the root extraction directory) when recursing.
-fn extract_dir(dir: &include_dir::Dir, target_path: &PathBuf) -> Result<()> {
-    for entry in dir.entries() {
-        match entry {
-            include_dir::DirEntry::File(file) => {
-                // file.path() is relative to root, e.g., "assets/index.js"
-                let file_path = target_path.join(file.path());
-                if let Some(parent) = file_path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                let mut file_handle = fs::File::create(&file_path)?;
-                file_handle.write_all(file.contents())?;
-                tracing::trace!("Extracted: {:?}", file_path);
-            }
-            include_dir::DirEntry::Dir(subdir) => {
-                // Recurse with the SAME target_path (not joined with subdir.path())
-                // because nested files already have the full relative path from root
-                extract_dir(subdir, target_path)?;
-            }
-        }
+/// Get path to the UI dist directory
+pub fn get_ui_dist_path() -> Result<PathBuf> {
+    let path = get_polos_home()?.join("ui");
+    if !path.exists() {
+        anyhow::bail!(
+            "UI dist directory not found at {:?}.\n\
+            Please reinstall polos-server: curl -fsSL https://polos.dev/install.sh | bash",
+            path
+        );
     }
-    Ok(())
-}
-
-pub fn extract_orchestrator_binary() -> Result<PathBuf> {
-    use std::io::Write;
-
-    let binary_data = get_embedded_orchestrator_binary()?;
-    let temp_dir = std::env::temp_dir();
-    let binary_name = if cfg!(target_os = "windows") {
-        "polos-orchestrator.exe"
-    } else {
-        "polos-orchestrator"
-    };
-
-    let binary_path = temp_dir
-        .join(format!("polos-orchestrator-{}", uuid::Uuid::new_v4()))
-        .with_file_name(binary_name);
-
-    let mut file = fs::File::create(&binary_path)?;
-    file.write_all(&binary_data)?;
-
-    // Make executable on Unix
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = file.metadata()?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&binary_path, perms)?;
-    }
-
-    Ok(binary_path)
+    Ok(path)
 }
 
 pub fn generate_api_key() -> String {

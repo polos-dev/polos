@@ -7,9 +7,6 @@ edition = "2021"
 name = "polos-server"
 path = "src/main.rs"
 
-[build-dependencies]
-include_dir = "0.7"
-
 [features]
 default = []
 
@@ -34,6 +31,5 @@ sha2 = "0.10"
 hex = "0.4"
 rand = "0.8"
 dirs = "5.0"
-include_dir = "0.7"
 url = "2.5"
 openssl = { version = "0.10", features = ["vendored"] }

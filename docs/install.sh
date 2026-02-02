@@ -16,7 +16,7 @@ fi
 
 GITHUB_REPO="polos-dev/polos"
 DOWNLOAD_DIR="${TMPDIR:-/tmp}/polos-install"
-INSTALL_DIR="${POLOS_INSTALL_DIR:-/usr/local/bin}"
+POLOS_HOME="${HOME}/.polos"
 
 # Check for required dependencies
 DOWNLOADER=""
@@ -39,7 +39,7 @@ fi
 download_file() {
     local url="$1"
     local output="$2"
-    
+
     if [ "$DOWNLOADER" = "curl" ]; then
         if [ -n "$output" ]; then
             curl -fsSL -o "$output" "$url"
@@ -58,19 +58,14 @@ download_file() {
 }
 
 # Get latest server release version from GitHub
-# Filters to only consider server releases (tags like v0.1.0, not python-sdk-v*)
 get_latest_version() {
     local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
 
     if [ "$HAS_JQ" = true ]; then
-        # Get all releases and find the first one with a server tag (v* but not python-sdk-v*)
         download_file "$api_url" | jq -r '[.[] | select(.tag_name | test("^v[0-9]"))][0].tag_name' | sed 's/^v//'
     else
-        # Fallback: extract version from tag_name in JSON
-        # Look for tags that start with "v followed by a digit (server releases)
         local response
         response=$(download_file "$api_url")
-        # Find tag_name entries that match v0.x.x pattern (not python-sdk-v*)
         echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9][^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/'
     fi
 }
@@ -78,19 +73,19 @@ get_latest_version() {
 # Detect platform
 detect_platform() {
     local os arch platform
-    
+
     case "$(uname -s)" in
         Darwin) os="darwin" ;;
         Linux) os="linux" ;;
         *) echo "Error: Unsupported operating system: $(uname -s)" >&2; exit 1 ;;
     esac
-    
+
     case "$(uname -m)" in
         x86_64|amd64) arch="x86_64" ;;
         arm64|aarch64) arch="arm64" ;;
         *) echo "Error: Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
     esac
-    
+
     platform="${os}-${arch}"
     echo "$platform"
 }
@@ -114,7 +109,6 @@ add_to_path() {
             fi
             ;;
         *)
-            # Default to .profile for other shells
             shell_config="$HOME/.profile"
             ;;
     esac
@@ -122,9 +116,6 @@ add_to_path() {
     # Check if already in config
     if [ -f "$shell_config" ] && grep -q "$dir" "$shell_config" 2>/dev/null; then
         echo "PATH already configured in $shell_config"
-        echo ""
-        echo "Run this to use polos-server now:"
-        echo "  source $shell_config && polos-server start"
         return
     fi
 
@@ -134,11 +125,6 @@ add_to_path() {
     echo "$path_line" >> "$shell_config"
 
     echo "Added ${dir} to PATH in $shell_config"
-    echo ""
-    echo "Run this to use polos-server now:"
-    echo "  source $shell_config && polos-server start"
-    echo ""
-    echo "Or open a new terminal and run: polos-server start"
 }
 
 # Verify checksum
@@ -146,13 +132,13 @@ verify_checksum() {
     local file="$1"
     local expected="$2"
     local actual
-    
+
     if [ "$(uname -s)" = "Darwin" ]; then
         actual=$(shasum -a 256 "$file" | cut -d' ' -f1)
     else
         actual=$(sha256sum "$file" | cut -d' ' -f1)
     fi
-    
+
     if [ "$actual" != "$expected" ]; then
         echo "Error: Checksum verification failed" >&2
         echo "  Expected: $expected" >&2
@@ -164,16 +150,16 @@ verify_checksum() {
 
 # Main installation
 main() {
-    local platform version binary_name checksum_file checksum_url binary_url
-    
+    local platform version tarball_name checksum_file
+
     platform=$(detect_platform)
-    binary_name="polos-server-${platform}"
-    checksum_file="checksums-polos-server-${platform}.txt"
-    
+    tarball_name="polos-${platform}.tar.gz"
+    checksum_file="checksums-${tarball_name}.txt"
+
     echo "🚀 Polos Server Installer"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Platform detected: $platform"
-    
+
     # Determine version
     if [ "$TARGET" = "latest" ] || [ "$TARGET" = "stable" ]; then
         echo "Fetching latest release version..."
@@ -185,45 +171,44 @@ main() {
         echo "Latest version: v${version}"
     else
         version="$TARGET"
-        # Remove 'v' prefix if present
         version="${version#v}"
         echo "Installing version: v${version}"
     fi
-    
-    # Create download directory
+
+    # Create directories
     mkdir -p "$DOWNLOAD_DIR"
-    
+    mkdir -p "$POLOS_HOME/bin"
+    mkdir -p "$POLOS_HOME/ui"
+
     # Construct URLs
     local base_url="https://github.com/${GITHUB_REPO}/releases/download/v${version}"
-    binary_url="${base_url}/${binary_name}"
-    checksum_url="${base_url}/${checksum_file}"
-    
+    local tarball_url="${base_url}/${tarball_name}"
+    local checksum_url="${base_url}/${checksum_file}"
+
     echo ""
-    echo "Downloading binary..."
-    local binary_path="${DOWNLOAD_DIR}/${binary_name}"
-    if ! download_file "$binary_url" "$binary_path"; then
-        echo "Error: Failed to download binary from:" >&2
-        echo "  $binary_url" >&2
+    echo "Downloading ${tarball_name}..."
+    local tarball_path="${DOWNLOAD_DIR}/${tarball_name}"
+    if ! download_file "$tarball_url" "$tarball_path"; then
+        echo "Error: Failed to download tarball from:" >&2
+        echo "  $tarball_url" >&2
         echo ""
         echo "This version may not be available for your platform." >&2
         echo "Available releases: https://github.com/${GITHUB_REPO}/releases" >&2
         exit 1
     fi
-    
+
     echo "Downloading checksum..."
     local checksum_path="${DOWNLOAD_DIR}/${checksum_file}"
     if ! download_file "$checksum_url" "$checksum_path"; then
         echo "Warning: Checksum file not found, skipping verification" >&2
-        echo "  URL: $checksum_url" >&2
     else
-        # Extract checksum from checksum file
         local expected_checksum
-        expected_checksum=$(grep "$binary_name" "$checksum_path" | cut -d' ' -f1)
-        
+        expected_checksum=$(grep "$tarball_name" "$checksum_path" | cut -d' ' -f1)
+
         if [ -n "$expected_checksum" ]; then
             echo "Verifying checksum..."
-            if ! verify_checksum "$binary_path" "$expected_checksum"; then
-                rm -f "$binary_path" "$checksum_path"
+            if ! verify_checksum "$tarball_path" "$expected_checksum"; then
+                rm -f "$tarball_path" "$checksum_path"
                 exit 1
             fi
             echo "✓ Checksum verified"
@@ -231,52 +216,40 @@ main() {
             echo "Warning: Could not extract checksum from checksum file" >&2
         fi
     fi
-    
-    # Make binary executable
-    chmod +x "$binary_path"
-    
-    # Determine install location
-    if [ ! -w "$INSTALL_DIR" ]; then
-        # Try user-local bin directory
-        if [ -d "$HOME/.local/bin" ]; then
-            INSTALL_DIR="$HOME/.local/bin"
-        elif [ -d "$HOME/bin" ]; then
-            INSTALL_DIR="$HOME/bin"
-        else
-            # Need sudo for system-wide installation
-            echo ""
-            echo "Installing to $INSTALL_DIR requires administrator privileges."
-            echo "Please enter your password when prompted."
-            SUDO_CMD="sudo"
-        fi
-    else
-        SUDO_CMD=""
-    fi
-    
-    # Install binary
+
+    # Extract tarball to ~/.polos
     echo ""
-    echo "Installing polos-server to ${INSTALL_DIR}..."
-    $SUDO_CMD mkdir -p "$INSTALL_DIR"
-    $SUDO_CMD cp "$binary_path" "${INSTALL_DIR}/polos-server"
-    $SUDO_CMD chmod +x "${INSTALL_DIR}/polos-server"
-    
+    echo "Installing to ${POLOS_HOME}..."
+    tar -xzf "$tarball_path" -C "$POLOS_HOME"
+
+    # Make binaries executable
+    chmod +x "$POLOS_HOME/bin/polos-server"
+    chmod +x "$POLOS_HOME/bin/polos-orchestrator"
+
     # Clean up
-    rm -f "$binary_path" "$checksum_path"
+    rm -f "$tarball_path" "$checksum_path"
     rmdir "$DOWNLOAD_DIR" 2>/dev/null || true
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "✅ Installation complete!"
     echo ""
-    echo "Polos Server has been installed to: ${INSTALL_DIR}/polos-server"
+    echo "Polos has been installed to: ${POLOS_HOME}"
+    echo "  - Server:       ${POLOS_HOME}/bin/polos-server"
+    echo "  - Orchestrator: ${POLOS_HOME}/bin/polos-orchestrator"
+    echo "  - UI:           ${POLOS_HOME}/ui/"
     echo ""
-    
+
     # Check if polos-server is in PATH
     if command -v polos-server >/dev/null 2>&1; then
         echo "You can now run: polos-server start"
     else
-        # Add to PATH by updating shell config
-        add_to_path "$INSTALL_DIR"
+        add_to_path "$POLOS_HOME/bin"
+        echo ""
+        echo "Run this to use polos-server now:"
+        echo "  source ~/.zshrc && polos-server start"
+        echo ""
+        echo "Or open a new terminal and run: polos-server start"
     fi
     echo ""
 }

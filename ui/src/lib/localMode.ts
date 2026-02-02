@@ -21,9 +21,5 @@ export function isLocalMode(): boolean {
     );
   }
 
-  if (localMode) {
-    console.info('Local mode enabled - authentication checks will be skipped');
-  }
-
   return localMode;
 }

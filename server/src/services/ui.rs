@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
 use axum::{
-    http::StatusCode,
+    http::{StatusCode, Uri},
     response::{Html, IntoResponse, Response},
+    routing::get,
     Router,
 };
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use tokio::sync::oneshot;
 use tower_http::services::ServeDir;
 
@@ -24,22 +26,32 @@ pub async fn start(config: &ServerConfig) -> Result<UiHandle> {
         anyhow::bail!("UI dist directory does not exist: {:?}", ui_dist);
     }
 
-    // Create router to serve static files
-    // We need to intercept index.html to inject the API base URL
+    tracing::info!("Serving UI from: {:?}", ui_dist);
+
+    // Log contents for debugging
+    log_directory_contents(&ui_dist);
+
     let orchestrator_port = config.orchestrator_port;
-    let ui_dist_for_static = ui_dist.clone();
+
+    // Build the router:
+    // 1. Explicit routes for / and /index.html to inject API base URL
+    // 2. ServeDir for static assets (js, css, images, etc.)
+    // 3. Fallback to index.html for SPA client-side routes
     let app = Router::new()
-        // Intercept root path to inject API base URL
-        .route(
-            "/",
-            axum::routing::get(move || handle_index_html(orchestrator_port)),
-        )
-        // Serve static files using ServeDir with a fallback
-        // The fallback will handle SPA routes and /index.html
+        .route("/", get({
+            let ui_dist = ui_dist.clone();
+            move || serve_index_html(orchestrator_port, ui_dist.clone())
+        }))
+        .route("/index.html", get({
+            let ui_dist = ui_dist.clone();
+            move || serve_index_html(orchestrator_port, ui_dist.clone())
+        }))
         .fallback_service(
-            ServeDir::new(&ui_dist_for_static).fallback(axum::routing::get(
-                move |uri: axum::http::Uri| handle_spa_fallback(uri, orchestrator_port),
-            )),
+            ServeDir::new(&ui_dist)
+                .fallback(get({
+                    let ui_dist = ui_dist.clone();
+                    move |uri: Uri| spa_fallback(uri, orchestrator_port, ui_dist.clone())
+                }))
         );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], config.ui_port));
@@ -65,91 +77,81 @@ pub async fn start(config: &ServerConfig) -> Result<UiHandle> {
     })
 }
 
-async fn handle_index_html(orchestrator_port: u16) -> Response {
-    // Handle index.html specifically to inject API base URL
-    let ui_dist = utils::get_ui_dist_path().unwrap_or_default();
-    let index_path = ui_dist.join("index.html");
-
-    if index_path.exists() {
-        match tokio::fs::read_to_string(&index_path).await {
-            Ok(mut html) => {
-                inject_api_base_url(&mut html, orchestrator_port);
-                Html(html).into_response()
+fn log_directory_contents(dir: &PathBuf) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                tracing::debug!("  [dir] {:?}", path.file_name());
+                // Also log assets directory contents
+                if path.file_name().map(|n| n == "assets").unwrap_or(false) {
+                    if let Ok(assets) = std::fs::read_dir(&path) {
+                        for asset in assets.flatten().take(5) {
+                            tracing::debug!("    {:?}", asset.file_name());
+                        }
+                    }
+                }
+            } else {
+                tracing::debug!("  {:?}", path.file_name());
             }
-            Err(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to read index.html",
-            )
-                .into_response(),
         }
-    } else {
-        (StatusCode::NOT_FOUND, "index.html not found").into_response()
     }
 }
 
+/// Serve index.html with injected API base URL
+async fn serve_index_html(orchestrator_port: u16, ui_dist: PathBuf) -> Response {
+    let index_path = ui_dist.join("index.html");
+
+    match tokio::fs::read_to_string(&index_path).await {
+        Ok(mut html) => {
+            inject_api_base_url(&mut html, orchestrator_port);
+            Html(html).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to read index.html from {:?}: {}", index_path, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read index.html").into_response()
+        }
+    }
+}
+
+/// SPA fallback: serve index.html for client-side routes, 404 for missing files
+async fn spa_fallback(uri: Uri, orchestrator_port: u16, ui_dist: PathBuf) -> Response {
+    let path = uri.path();
+
+    // If path looks like a file (has extension), it's a missing asset - return 404
+    // ServeDir already tried to serve it and failed
+    if path.contains('.') && !path.ends_with('/') {
+        tracing::warn!("Static file not found: {}", path);
+        return (StatusCode::NOT_FOUND, format!("File not found: {}", path)).into_response();
+    }
+
+    // Otherwise, it's a client-side route - serve index.html
+    tracing::debug!("SPA fallback for route: {}", path);
+    serve_index_html(orchestrator_port, ui_dist).await
+}
+
+/// Inject API base URL script into HTML
 fn inject_api_base_url(html: &mut String, orchestrator_port: u16) {
-    // Inject API base URL at runtime based on orchestrator port
     let api_base_url = format!("http://127.0.0.1:{}", orchestrator_port);
-    // Use a synchronous inline script that runs immediately (no async, no defer)
-    // This MUST run before any module scripts load
+
+    // Synchronous inline script that runs before any module scripts
     let script_tag = format!(
         r#"<script>window.VITE_API_BASE_URL='{}';console.log('[polos-server] Injected API base URL:', window.VITE_API_BASE_URL);</script>"#,
         api_base_url
     );
 
-    tracing::info!("Injecting API base URL into HTML: {}", api_base_url);
-
-    // Insert the script tag as early as possible - right after <head> tag
-    // This ensures it runs before any other scripts (including Vite's module scripts)
-    let inserted = if let Some(head_start) = html.find("<head>") {
-        if let Some(head_tag_end) = html[head_start..].find('>') {
-            let insert_pos = head_start + head_tag_end + 1;
-            html.insert_str(insert_pos, &script_tag);
-            true
-        } else {
-            false
-        }
-    } else if let Some(body_start) = html.find("<body>") {
-        // Fallback: insert at start of body if no head tag found
-        if let Some(body_tag_end) = html[body_start..].find('>') {
-            let insert_pos = body_start + body_tag_end + 1;
-            html.insert_str(insert_pos, &script_tag);
-            true
-        } else {
-            false
-        }
+    // Insert right after <head> tag
+    if let Some(head_pos) = html.find("<head>") {
+        let insert_pos = head_pos + "<head>".len();
+        html.insert_str(insert_pos, &script_tag);
+        tracing::debug!("Injected API base URL: {}", api_base_url);
+    } else if let Some(body_pos) = html.find("<body>") {
+        // Fallback: insert at start of body
+        let insert_pos = body_pos + "<body>".len();
+        html.insert_str(insert_pos, &script_tag);
+        tracing::debug!("Injected API base URL (in body): {}", api_base_url);
     } else {
-        false
-    };
-
-    if !inserted {
-        tracing::warn!(
-            "Failed to inject API base URL script - could not find <head> or <body> tag"
-        );
-    } else {
-        tracing::debug!("Successfully injected API base URL script");
-    }
-}
-
-async fn handle_spa_fallback(_uri: axum::http::Uri, orchestrator_port: u16) -> Response {
-    // For SPA routing, serve index.html for all non-file requests
-    let ui_dist = utils::get_ui_dist_path().unwrap_or_default();
-    let index_path = ui_dist.join("index.html");
-
-    if index_path.exists() {
-        match tokio::fs::read_to_string(&index_path).await {
-            Ok(mut html) => {
-                inject_api_base_url(&mut html, orchestrator_port);
-                Html(html).into_response()
-            }
-            Err(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to read index.html",
-            )
-                .into_response(),
-        }
-    } else {
-        (StatusCode::NOT_FOUND, "index.html not found").into_response()
+        tracing::warn!("Could not find <head> or <body> tag to inject API base URL");
     }
 }
 
@@ -159,8 +161,7 @@ pub async fn stop(handle: UiHandle) -> Result<()> {
         tracing::warn!("UI server shutdown channel already closed");
     }
 
-    // Wait for the server to shut down, with a timeout
-    // We need to get a reference to abort if timeout occurs
+    // Wait for the server to shut down
     let task_handle = handle.task_handle;
     let abort_handle = task_handle.abort_handle();
 
@@ -172,9 +173,8 @@ pub async fn stop(handle: UiHandle) -> Result<()> {
             tracing::warn!("UI server task returned error: {:?}", e);
         }
         Err(_) => {
-            tracing::warn!("UI server shutdown timed out after 5 seconds, aborting task");
+            tracing::warn!("UI server shutdown timed out, aborting");
             abort_handle.abort();
-            // Wait a bit more for the abort to take effect
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
     }

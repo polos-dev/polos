@@ -171,11 +171,34 @@ fn main() {
         }
     }
 
-    if ui_dist.exists() {
-        println!("cargo:rustc-env=UI_DIST_PATH={}", ui_dist.display());
-    } else {
-        println!("cargo:warning=UI dist directory not found. UI will not be available.");
+    // Embed UI dist directory into the binary using include_dir!
+    // This ensures the UI works on any machine, not just the build machine
+    // UI dist MUST exist - fail the build if it doesn't
+    if !ui_dist.exists() {
+        panic!(
+            "UI dist directory not found: {:?}\n\
+            Please build the UI first:\n\
+            cd ui && npm run build",
+            ui_dist
+        );
     }
+
+    let ui_dist_rs = Path::new(&out_dir).join("ui_dist.rs");
+    let mut ui_dist_file = fs::File::create(&ui_dist_rs)
+        .expect("Failed to create ui_dist.rs");
+    
+    // include_dir! requires a relative path from Cargo.toml (server/Cargo.toml)
+    // So we use "../ui/dist" which is relative to the server directory
+    let relative_path = "../ui/dist";
+    
+    writeln!(
+        ui_dist_file,
+        "pub static UI_DIST: include_dir::Dir = include_dir::include_dir!(\"{}\");",
+        relative_path
+    )
+    .expect("Failed to write ui_dist.rs");
+    
+    println!("cargo:rerun-if-changed={}", ui_dist.display());
 
     // Embed migrations directory into the binary
     let migrations_dir = workspace_root.join("orchestrator").join("migrations");

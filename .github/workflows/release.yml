@@ -75,6 +75,8 @@ jobs:
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           fi
           cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_DIR: ../target
 
       - name: Build polos-server
         run: |

@@ -201,10 +201,11 @@ impl Database {
 
         // Get one queued execution with SELECT FOR UPDATE SKIP LOCKED
         // This allows multiple orchestrators to work on different executions in parallel
-        // Uses CTE to efficiently check queue concurrency limits
+        // Uses CTEs to efficiently check queue concurrency limits AND worker availability
+        // Only selects executions that have at least one available worker for their deployment_id
         let execution_row = sqlx::query(
             "WITH running_counts AS (
-        SELECT 
+        SELECT
           queue_name,
           deployment_id,
           COALESCE(concurrency_key, '') as concurrency_key,
@@ -212,20 +213,32 @@ impl Database {
         FROM workflow_executions
         WHERE status IN ('claimed', 'running')
         GROUP BY queue_name, deployment_id, COALESCE(concurrency_key, '')
+      ),
+      available_deployments AS (
+        -- Get deployment_ids that have at least one available worker
+        SELECT DISTINCT current_deployment_id
+        FROM workers
+        WHERE mode = 'push'
+          AND status = 'online'
+          AND current_execution_count < max_concurrent_executions
+          AND push_failure_count < push_failure_threshold
+          AND last_heartbeat > NOW() - INTERVAL '60 seconds'
       )
-      SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error, 
-             e.created_at, e.started_at, e.completed_at, 
-             e.deployment_id, e.parent_execution_id, e.root_execution_id, 
-             e.retry_count, e.step_key, e.queue_name, e.concurrency_key, 
-             e.batch_id, e.session_id, e.user_id, e.output_schema_name, 
-             e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state, 
+      SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error,
+             e.created_at, e.started_at, e.completed_at,
+             e.deployment_id, e.parent_execution_id, e.root_execution_id,
+             e.retry_count, e.step_key, e.queue_name, e.concurrency_key,
+             e.batch_id, e.session_id, e.user_id, e.output_schema_name,
+             e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state,
              e.claimed_at, e.queued_at, e.run_timeout_seconds, q.concurrency_limit
       FROM workflow_executions e
-      INNER JOIN queues q 
-        ON q.name = e.queue_name 
+      INNER JOIN queues q
+        ON q.name = e.queue_name
         AND q.deployment_id = e.deployment_id
-      LEFT JOIN running_counts rc 
-        ON rc.queue_name = e.queue_name 
+      INNER JOIN available_deployments ad
+        ON ad.current_deployment_id = e.deployment_id
+      LEFT JOIN running_counts rc
+        ON rc.queue_name = e.queue_name
         AND rc.deployment_id = e.deployment_id
         AND rc.concurrency_key = COALESCE(e.concurrency_key, '')
       WHERE e.status = 'queued'
@@ -233,8 +246,8 @@ impl Database {
           q.concurrency_limit IS NULL
           OR COALESCE(rc.running_count, 0) < q.concurrency_limit
         )
-      ORDER BY COALESCE(e.queued_at, e.created_at) ASC 
-      LIMIT 1 
+      ORDER BY COALESCE(e.queued_at, e.created_at) ASC
+      LIMIT 1
       FOR UPDATE OF e SKIP LOCKED",
         )
         .fetch_optional(&mut *tx)

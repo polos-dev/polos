@@ -1,4 +1,5 @@
 // Event-related database operations
+use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, Row};
 use uuid::Uuid;
 
@@ -77,26 +78,30 @@ impl Database {
         let mut sequence_ids = Vec::new();
         let mut last_event_type: Option<String> = None;
         let mut last_data: Option<serde_json::Value> = None;
+        let mut last_event_id: Option<Uuid> = None;
+        let mut last_created_at: Option<DateTime<Utc>> = None;
 
         // Publish all events (all for the same topic)
         for (event_type, data, execution_id, attempt_number) in events {
             // Insert event and return sequence_id
             let row: PgRow = sqlx::query(
-        "INSERT INTO events (id, topic, event_type, data, status, execution_id, attempt_number, project_id)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
-         RETURNING sequence_id"
-      )
-      .bind(&topic)
-      .bind(event_type.as_deref())
-      .bind(data.clone())
-      .bind("valid")
-      .bind(execution_id.as_ref())
-      .bind(attempt_number)
-      .bind(project_id)
-      .fetch_one(&mut *tx)
-      .await?;
+                "INSERT INTO events (id, topic, event_type, data, status, execution_id, attempt_number, project_id)
+                VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+                RETURNING sequence_id, id, created_at"
+              )
+              .bind(&topic)
+              .bind(event_type.as_deref())
+              .bind(data.clone())
+              .bind("valid")
+              .bind(execution_id.as_ref())
+              .bind(attempt_number)
+              .bind(project_id)
+              .fetch_one(&mut *tx)
+              .await?;
 
             let seq_id: i64 = row.get("sequence_id");
+            last_event_id = Some(row.get("id"));
+            last_created_at = Some(row.get("created_at"));
             sequence_ids.push(seq_id);
             // Store last event data for resuming waiting executions
             last_event_type = event_type.clone();
@@ -106,18 +111,18 @@ impl Database {
         // Check for executions waiting on this topic
         // Use FOR UPDATE SKIP LOCKED to allow parallel processing across multiple orchestrator instances
         let waiting_rows = sqlx::query(
-      "SELECT ws.execution_id, COALESCE(ws.root_execution_id, ws.execution_id) as root_execution_id, ws.step_key
-       FROM wait_steps ws
-       INNER JOIN workflow_executions e ON ws.execution_id = e.id
-       WHERE e.status = 'waiting'
-       AND ws.wait_type = 'event'
-       AND ws.wait_topic = $1
-       AND ws.step_key IS NOT NULL
-       FOR UPDATE SKIP LOCKED"
-    )
-    .bind(&topic)
-    .fetch_all(&mut *tx)
-    .await?;
+            "SELECT ws.execution_id, COALESCE(ws.root_execution_id, ws.execution_id) as root_execution_id, ws.step_key
+            FROM wait_steps ws
+            INNER JOIN workflow_executions e ON ws.execution_id = e.id
+            WHERE e.status = 'waiting'
+            AND ws.wait_type = 'event'
+            AND ws.wait_topic = $1
+            AND ws.step_key IS NOT NULL
+            FOR UPDATE SKIP LOCKED"
+        )
+        .bind(&topic)
+        .fetch_all(&mut *tx)
+        .await?;
 
         // Resume each waiting execution (use last event data)
         for row in waiting_rows {
@@ -130,6 +135,8 @@ impl Database {
               "topic": topic,
               "event_type": last_event_type,
               "data": last_data,
+              "id": last_event_id,
+              "created_at": last_created_at,
             });
 
             // Get project_id from execution
@@ -240,7 +247,9 @@ impl Database {
                     'sequence_id', sequence_id,
                     'topic', wait_topic,
                     'event_type', event_type,
-                    'data', data
+                    'data', data,
+                    'id', event_id,
+                    'created_at', created_at
                 ),
                 NULL::jsonb, -- error
                 true, -- success

@@ -50,8 +50,7 @@ async fn main() -> anyhow::Result<()> {
         // In production: use fmt subscriber with stdout and env filter
         tracing_subscriber::fmt()
             .with_env_filter(
-                EnvFilter::from_default_env()
-                    .add_directive(tracing::Level::INFO.into()),
+                EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()),
             )
             .init();
     }

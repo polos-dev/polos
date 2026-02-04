@@ -700,13 +700,12 @@ export const AgentRunPage: React.FC = () => {
             </div>
             {conversationId && (
               <div className="border-t border-gray-200 p-4 bg-white">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Type your message..."
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    placeholder="Type your message... (Shift+Enter for new line)"
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={(e) => {
+                    onKeyDown={(e) => {
                       if (
                         e.key === 'Enter' &&
                         !e.shiftKey &&
@@ -717,8 +716,18 @@ export const AgentRunPage: React.FC = () => {
                         handleSendMessage();
                       }
                     }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[42px] max-h-[120px]"
                     disabled={isSending || !conversationId}
+                    rows={1}
+                    style={{
+                      height: 'auto',
+                      minHeight: '42px',
+                    }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                    }}
                   />
                   <Button
                     variant="default"

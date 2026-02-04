@@ -24,7 +24,7 @@ export const WorkflowsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('runs');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   useEffect(() => {
     const fetchWorkflows = async () => {
@@ -102,15 +102,6 @@ export const WorkflowsPage: React.FC = () => {
         {/* View Toggle */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-white">
           <Button
-            variant={viewMode === 'runs' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-6 gap-2"
-            onClick={() => setViewMode('runs')}
-          >
-            <Play className="h-4 w-4" />
-            Runs
-          </Button>
-          <Button
             variant={viewMode === 'list' ? 'default' : 'ghost'}
             size="sm"
             className="h-6 gap-2"
@@ -118,6 +109,15 @@ export const WorkflowsPage: React.FC = () => {
           >
             <List className="h-4 w-4" />
             List
+          </Button>
+          <Button
+            variant={viewMode === 'runs' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-6 gap-2"
+            onClick={() => setViewMode('runs')}
+          >
+            <Play className="h-4 w-4" />
+            Runs
           </Button>
         </div>
       </div>

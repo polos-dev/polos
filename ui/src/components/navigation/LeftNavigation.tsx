@@ -9,7 +9,6 @@ import {
   FileSearch,
   LogOut,
   Wrench,
-  Code,
   BookOpen,
   Github,
   MessageCircle,
@@ -212,20 +211,7 @@ export const LeftNavigation: React.FC<LeftNavigationProps> = ({
             'hover:bg-gray-50 hover:text-gray-900',
             'px-3'
           )}
-          hidden={true}
-          onClick={() => {}}
-        >
-          <Code className="h-5 w-5 shrink-0 mr-3" />
-          <span className="truncate">Polos APIs</span>
-        </Button>
-        <Button
-          variant="ghost"
-          className={cn(
-            'w-full justify-start h-10 font-medium transition-all duration-200 cursor-pointer text-sm text-gray-600',
-            'hover:bg-gray-50 hover:text-gray-900',
-            'px-3'
-          )}
-          onClick={() => {}}
+          onClick={() => window.open('https://docs.polos.dev', '_blank')}
         >
           <BookOpen className="h-5 w-5 shrink-0 mr-3" />
           <span className="truncate">Documentation</span>
@@ -237,10 +223,12 @@ export const LeftNavigation: React.FC<LeftNavigationProps> = ({
             'hover:bg-gray-50 hover:text-gray-900',
             'px-3'
           )}
-          onClick={() => {}}
+          onClick={() =>
+            window.open('https://github.com/polos-dev/polos', '_blank')
+          }
         >
           <Github className="h-5 w-5 shrink-0 mr-3" />
-          <span className="truncate">Github</span>
+          <span className="truncate">GitHub</span>
         </Button>
         <Button
           variant="ghost"
@@ -249,7 +237,7 @@ export const LeftNavigation: React.FC<LeftNavigationProps> = ({
             'hover:bg-gray-50 hover:text-gray-900',
             'px-3'
           )}
-          onClick={() => {}}
+          onClick={() => window.open('https://discord.gg/ZAxHKMPwFG', '_blank')}
         >
           <MessageCircle className="h-5 w-5 shrink-0 mr-3" />
           <span className="truncate">Discord</span>

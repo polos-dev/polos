@@ -657,7 +657,6 @@ wheels = [
 
 [[package]]
 name = "polos-sdk"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -733,7 +732,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "uvicorn", specifier = ">=0.24.0" },
 ]
-provides-extras = ["anthropic", "openai", "gemini", "groq", "fireworks", "together", "dev"]
+provides-extras = ["anthropic", "dev", "fireworks", "gemini", "groq", "openai", "together"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -1,0 +1,113 @@
+# Weather agent Example
+
+A simple example demonstrating the basics of Polos:
+- Creating agent with tool
+- Running a worker to execute the agent
+
+## Prerequisites
+
+1. **Polos Server** - The orchestrator that manages workflow execution
+2. **Python 3.10+**
+3. **Polos project ID** - Get this from the UI page http://localhost:5173/settings
+3. **OpenAI API Key** - For the weather agent
+
+## Setup
+
+### 1. Start the Polos Server
+
+Install and start the Polos server (orchestrator):
+
+```bash
+# Install polos-server
+curl -fsSL https://install.polos.dev/install.sh | bash
+
+# Start the server
+polos-server start
+```
+
+Example output:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎉 Polos server is running!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 Orchestrator API: http://127.0.0.1:8080
+🌐 UI:              http://127.0.0.1:5173
+🔑 Project ID:      8348be0b-bee2-4b28-bd7a-3d5a873c01ab
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+The server runs at `http://localhost:8080` by default.
+
+### 2. Install Dependencies
+
+```bash
+# Using uv (recommended)
+uv sync
+
+# Or using pip
+pip install -e .
+```
+
+### 3. Configure Environment
+
+Create a `.env` file:
+
+```bash
+# Required: Your project ID.
+# You can get this from the output printed by `polos-server start` or from the UI page at
+# http://localhost:5173/projects/settings (the ID will be below the project name 'default')
+POLOS_PROJECT_ID=my-project
+
+# Required: OpenAI API key for the agent
+OPENAI_API_KEY=sk-...
+
+# Optional: Orchestrator URL (defaults to http://localhost:8080)
+# POLOS_API_URL=http://localhost:8080
+```
+
+## Running the Example
+
+### Terminal 1: Start the Worker
+
+The worker executes workflows and agents:
+
+```bash
+python worker.py
+```
+
+You should see:
+```
+Starting worker...
+  Project ID: <my-project>
+  Agents: ['weather_agent']
+  Press Ctrl+C to stop
+```
+
+### Terminal 2: Run the Example
+
+In a separate terminal, run:
+
+```bash
+python main.py
+```
+
+You should see:
+```
+Invoking weather_agent...
+Result: 'The weather in New York is...'
+```
+
+## What's Happening?
+
+1. **main.py** invokes `weather_agent` with input "What's the weather like in New York?"
+2. **Polos Server** receives the workflow (agent) and queues it for execution
+3. **worker.py** picks up the agent request and executes it:
+   - Starts the weather agent to get weather information
+   - The agent uses the `get_weather` tool
+4. The result is returned through Polos Server to the caller
+
+## Files
+
+- `agents.py` - Defines the `weather_agent` agent
+- `tools.py` - Defines the `get_weather` tool with mock weather data
+- `worker.py` - Runs the worker that executes workflows
+- `main.py` - Invokes the workflow and displays results

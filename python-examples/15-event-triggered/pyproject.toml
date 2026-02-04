@@ -1,0 +1,14 @@
+[project]
+name = "polos-event-triggered"
+version = "0.1.0"
+description = "Event-triggered workflows example for Polos SDK"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

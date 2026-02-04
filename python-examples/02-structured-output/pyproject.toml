@@ -1,0 +1,14 @@
+[project]
+name = "polos-structured-output"
+version = "0.1.0"
+description = "Structured output example for Polos SDK"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[openai]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

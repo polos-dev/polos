@@ -1,0 +1,14 @@
+[project]
+name = "polos-agent-streaming"
+version = "0.1.0"
+description = "Agent streaming example for Polos SDK"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[anthropic]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

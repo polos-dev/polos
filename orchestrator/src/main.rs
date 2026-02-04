@@ -786,13 +786,36 @@ async fn main() -> anyhow::Result<()> {
                 .allow_credentials(true)
                 .expose_headers([axum::http::header::CONTENT_TYPE]);
 
-            // Use the exact origin from CORS_ORIGIN env var
-            let cors_origin = std::env::var("CORS_ORIGIN")
-                .unwrap_or_else(|_| "http://localhost:5173".to_string());
-            let origin_value: axum::http::HeaderValue = cors_origin
-                .parse()
-                .unwrap_or_else(|_| "http://localhost:5173".parse().unwrap());
-            cors_layer.allow_origin(tower_http::cors::AllowOrigin::exact(origin_value))
+            // In local mode, allow both localhost and 127.0.0.1 variants
+            let local_mode = std::env::var("POLOS_LOCAL_MODE")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false);
+
+            if local_mode {
+                // Extract port from CORS_ORIGIN or use default
+                let cors_origin = std::env::var("CORS_ORIGIN")
+                    .unwrap_or_else(|_| "http://localhost:5173".to_string());
+                let port = cors_origin
+                    .rsplit(':')
+                    .next()
+                    .and_then(|p| p.parse::<u16>().ok())
+                    .unwrap_or(5173);
+
+                // Allow both localhost and 127.0.0.1
+                let origins = [
+                    format!("http://localhost:{}", port).parse().unwrap(),
+                    format!("http://127.0.0.1:{}", port).parse().unwrap(),
+                ];
+                cors_layer.allow_origin(tower_http::cors::AllowOrigin::list(origins))
+            } else {
+                // Production: use exact origin from CORS_ORIGIN env var
+                let cors_origin = std::env::var("CORS_ORIGIN")
+                    .unwrap_or_else(|_| "http://localhost:5173".to_string());
+                let origin_value: axum::http::HeaderValue = cors_origin
+                    .parse()
+                    .unwrap_or_else(|_| "http://localhost:5173".parse().unwrap());
+                cors_layer.allow_origin(tower_http::cors::AllowOrigin::exact(origin_value))
+            }
         })
         .with_state(state);
 

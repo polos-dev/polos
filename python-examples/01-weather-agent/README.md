@@ -26,6 +26,8 @@ polos-server start
 ```
 
 Example output:
+
+```bash
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎉 Polos server is running!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -33,7 +35,7 @@ Example output:
 🌐 UI:              http://127.0.0.1:5173
 🔑 Project ID:      8348be0b-bee2-4b28-bd7a-3d5a873c01ab
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+```
 
 The server runs at `http://localhost:8080` by default.
 
@@ -59,6 +61,11 @@ POLOS_PROJECT_ID=my-project
 
 # Required: OpenAI API key for the agent
 OPENAI_API_KEY=sk-...
+
+# Optional: Your deployment ID
+# This is a way to signal versions to Polos.
+# As you make revisions to your agents, you can use deployment_id to run multiple versions of your agents if needed.
+POLOS_DEPLOYMENT_ID=v1
 
 # Optional: Orchestrator URL (defaults to http://localhost:8080)
 # POLOS_API_URL=http://localhost:8080

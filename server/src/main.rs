@@ -2,7 +2,6 @@ mod commands;
 mod config;
 mod init;
 mod migrations;
-mod services;
 mod utils;
 
 use anyhow::Result;
@@ -18,12 +17,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the Polos server (orchestrator + UI)
+    /// Start the Polos server (orchestrator + UI) in background
     Start,
     /// Stop the running Polos server
     Stop,
     /// Check the status of the Polos server
     Status,
+    /// Internal: serve UI only (used by start command)
+    #[command(hide = true)]
+    ServeUi {
+        /// Port to serve UI on
+        #[arg(long)]
+        port: u16,
+        /// Orchestrator port for API base URL injection
+        #[arg(long)]
+        orchestrator_port: u16,
+    },
 }
 
 #[tokio::main]
@@ -38,5 +47,9 @@ async fn main() -> Result<()> {
         Commands::Start => commands::start::run().await,
         Commands::Stop => commands::stop::run().await,
         Commands::Status => commands::status::run().await,
+        Commands::ServeUi {
+            port,
+            orchestrator_port,
+        } => commands::serve_ui::run(port, orchestrator_port).await,
     }
 }

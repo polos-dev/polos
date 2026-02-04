@@ -1,13 +1,35 @@
 use anyhow::{Context, Result};
-use tokio::signal;
-use tokio::sync::oneshot;
+use std::fs;
+use std::process::{Command, Stdio};
+use tokio::time::Duration;
 
 use crate::config::ServerConfig;
 use crate::init;
-use crate::services;
+use crate::utils;
 
 pub async fn run() -> Result<()> {
     println!("🚀 Starting Polos server...");
+
+    // Check if already running
+    let pids_dir = ServerConfig::pids_dir()?;
+    let orchestrator_pid_file = pids_dir.join("orchestrator.pid");
+    let ui_pid_file = pids_dir.join("ui.pid");
+
+    if orchestrator_pid_file.exists() || ui_pid_file.exists() {
+        // Check if processes are actually running
+        let orchestrator_running = check_pid_running(&orchestrator_pid_file);
+        let ui_running = check_pid_running(&ui_pid_file);
+
+        if orchestrator_running || ui_running {
+            println!("⚠️  Polos server appears to be already running.");
+            println!("   Run 'polos-server status' to check or 'polos-server stop' to stop it.");
+            return Ok(());
+        } else {
+            // Clean up stale PID files
+            let _ = fs::remove_file(&orchestrator_pid_file);
+            let _ = fs::remove_file(&ui_pid_file);
+        }
+    }
 
     // Check if initialized, if not, run initialization
     if !ServerConfig::is_initialized()? {
@@ -19,87 +41,157 @@ pub async fn run() -> Result<()> {
 
     let config = ServerConfig::load()?.context("Config file not found after initialization")?;
 
+    // Start orchestrator as background process
     println!("🔧 Starting orchestrator...");
-    // Start orchestrator
-    let orchestrator_handle = services::orchestrator::start(&config).await?;
-    println!("✅ Orchestrator started");
+    let orchestrator_pid = start_orchestrator(&config).await?;
+    println!("✅ Orchestrator started (PID: {})", orchestrator_pid);
 
+    // Start UI server as background process
     println!("🎨 Starting UI server...");
-    // Start UI server
-    let ui_handle = services::ui::start(&config).await?;
-    println!("✅ UI server started");
+    let ui_pid = start_ui_server(&config).await?;
+    println!("✅ UI server started (PID: {})", ui_pid);
 
-    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("🎉 Polos server is running!");
+    // Save PIDs
+    fs::write(&orchestrator_pid_file, orchestrator_pid.to_string())?;
+    fs::write(&ui_pid_file, ui_pid.to_string())?;
+
+    // Wait a moment for services to start
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Print success message
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("🎉 Polos server is running in background!");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!(
         "📡 Orchestrator API: http://127.0.0.1:{}",
         config.orchestrator_port
     );
-    println!("🌐 UI:              http://127.0.0.1:{}", config.ui_port);
-    println!("🔑 Project ID:      {}", config.project_id);
+    println!("🌐 UI:               http://127.0.0.1:{}", config.ui_port);
+    println!("🔑 Project ID:       {}", config.project_id);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\nPress Ctrl+C to stop the server\n");
+    println!();
+    println!("To stop the server, run: polos-server stop");
+    println!("To check status, run:    polos-server status");
 
-    tracing::info!("Polos server started successfully!");
-    tracing::info!(
-        "Orchestrator: http://127.0.0.1:{}",
-        config.orchestrator_port
-    );
-    tracing::info!("UI: http://127.0.0.1:{}", config.ui_port);
-    tracing::info!("Project ID: {}", config.project_id);
+    Ok(())
+}
 
-    // Wait for shutdown signal
-    let (tx, rx) = oneshot::channel();
+fn check_pid_running(pid_file: &std::path::Path) -> bool {
+    if let Ok(pid_str) = fs::read_to_string(pid_file) {
+        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+            #[cfg(unix)]
+            {
+                // Check if process exists by sending signal 0
+                let output = Command::new("kill").arg("-0").arg(pid.to_string()).output();
+                return output.map(|o| o.status.success()).unwrap_or(false);
+            }
+            #[cfg(not(unix))]
+            {
+                // On Windows, assume it's running if PID file exists
+                return true;
+            }
+        }
+    }
+    false
+}
+
+async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
+    let binary_path = utils::get_orchestrator_path()?;
+
+    // Build environment variables
+    let bind_address = format!("127.0.0.1:{}", config.orchestrator_port);
+    let cors_origin = format!("http://127.0.0.1:{}", config.ui_port);
+
+    // Get HMAC_SECRET from config or generate if missing
+    let hmac_secret = if !config.hmac_secret.is_empty() {
+        config.hmac_secret.clone()
+    } else {
+        std::env::var("HMAC_SECRET").unwrap_or_else(|_| {
+            use rand::distributions::Alphanumeric;
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            (0..64).map(|_| rng.sample(Alphanumeric) as char).collect()
+        })
+    };
+
+    // Get logs directory
+    let logs_dir = ServerConfig::config_dir()?.join("logs");
+    fs::create_dir_all(&logs_dir)?;
+
+    let stdout_log = fs::File::create(logs_dir.join("orchestrator.log"))?;
+    let stderr_log = stdout_log.try_clone()?;
+
+    let child = Command::new(&binary_path)
+        .env("POLOS_LOCAL_MODE", "true")
+        .env("DATABASE_URL", &config.database_url)
+        .env("BIND_ADDRESS", &bind_address)
+        .env("CORS_ORIGIN", &cors_origin)
+        .env("HMAC_SECRET", &hmac_secret)
+        .stdout(Stdio::from(stdout_log))
+        .stderr(Stdio::from(stderr_log))
+        .spawn()
+        .with_context(|| format!("Failed to start orchestrator: {:?}", binary_path))?;
+
+    let pid = child.id();
+
+    // Wait briefly and check if process is still running
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     #[cfg(unix)]
     {
-        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())?;
-        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
-
-        tokio::spawn(async move {
-            tokio::select! {
-                _ = signal::ctrl_c() => {
-                    tracing::info!("Received Ctrl+C, shutting down...");
-                    let _ = tx.send(());
-                }
-                _ = sigterm.recv() => {
-                    tracing::info!("Received SIGTERM, shutting down...");
-                    let _ = tx.send(());
-                }
-                _ = sigint.recv() => {
-                    tracing::info!("Received SIGINT, shutting down...");
-                    let _ = tx.send(());
-                }
-            }
-        });
+        let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
+        if !check.map(|o| o.status.success()).unwrap_or(false) {
+            anyhow::bail!(
+                "Orchestrator process exited immediately. Check logs at {:?}",
+                logs_dir.join("orchestrator.log")
+            );
+        }
     }
 
-    #[cfg(not(unix))]
+    Ok(pid)
+}
+
+async fn start_ui_server(config: &ServerConfig) -> Result<u32> {
+    // Get the path to our own executable
+    let exe_path = std::env::current_exe().context("Failed to get current executable path")?;
+
+    // Get logs directory
+    let logs_dir = ServerConfig::config_dir()?.join("logs");
+    fs::create_dir_all(&logs_dir)?;
+
+    let stdout_log = fs::File::create(logs_dir.join("ui.log"))?;
+    let stderr_log = stdout_log.try_clone()?;
+
+    let child = Command::new(&exe_path)
+        .arg("serve-ui")
+        .arg("--port")
+        .arg(config.ui_port.to_string())
+        .arg("--orchestrator-port")
+        .arg(config.orchestrator_port.to_string())
+        .stdout(Stdio::from(stdout_log))
+        .stderr(Stdio::from(stderr_log))
+        .spawn()
+        .with_context(|| format!("Failed to start UI server: {:?}", exe_path))?;
+
+    let pid = child.id();
+
+    // Wait briefly and check if process is still running
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    #[cfg(unix)]
     {
-        tokio::spawn(async move {
-            signal::ctrl_c().await.ok();
-            tracing::info!("Received Ctrl+C, shutting down...");
-            let _ = tx.send(());
-        });
+        let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
+        if !check.map(|o| o.status.success()).unwrap_or(false) {
+            let logs_path = ServerConfig::config_dir()?.join("logs").join("ui.log");
+            anyhow::bail!(
+                "UI server process exited immediately. Check logs at {:?}",
+                logs_path
+            );
+        }
     }
 
-    rx.await.ok();
-
-    println!("\n🛑 Shutting down Polos server...");
-
-    // Shutdown services
-    println!("  🔧 Stopping orchestrator...");
-    services::orchestrator::stop(orchestrator_handle).await?;
-    println!("  ✅ Orchestrator stopped");
-
-    println!("  🎨 Stopping UI server...");
-    services::ui::stop(ui_handle).await?;
-    println!("  ✅ UI server stopped");
-
-    println!("✅ Polos server stopped");
-    tracing::info!("Server stopped");
-    Ok(())
+    Ok(pid)
 }
 
 async fn initialize() -> Result<()> {
@@ -134,8 +226,7 @@ async fn initialize() -> Result<()> {
         use rand::distributions::Alphanumeric;
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let secret: String = (0..64).map(|_| rng.sample(Alphanumeric) as char).collect();
-        secret
+        (0..64).map(|_| rng.sample(Alphanumeric) as char).collect()
     });
 
     // Get ports from environment variables or use defaults

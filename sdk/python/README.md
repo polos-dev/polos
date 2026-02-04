@@ -61,7 +61,7 @@ Apache-2.0 - see [LICENSE](../../LICENSE) for details.
 ## Support
 
 - 📖 [Documentation](https://docs.polos.dev)
-- 💬 [Discord Community](https://discord.gg/polos)
+- 💬 [Discord Community](https://discord.gg/ZAxHKMPwFG)
 - 🐛 [Issue Tracker](https://github.com/polos-dev/polos/issues)
 - 📧 [Email Support](mailto:support@polos.dev)
 

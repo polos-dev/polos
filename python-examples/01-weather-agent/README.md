@@ -103,6 +103,8 @@ Invoking weather_agent...
 Result: 'The weather in New York is...'
 ```
 
+Alternatively, you can go to the Polos UI at [http://localhost:5173/agents](http://localhost:5173/agents) and invoke any of the agents.
+
 ## What's Happening?
 
 1. **main.py** invokes `weather_agent` with input "What's the weather like in New York?"

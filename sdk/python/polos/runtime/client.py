@@ -48,17 +48,22 @@ class PolosClient:
         api_url: str | None = None,
         api_key: str | None = None,
         project_id: str | None = None,
+        deployment_id: str | None = None,
     ):
         """Initialize Polos client.
 
         Args:
-            api_url: Orchestrator API URL (default: from POLOS_API_URL env var or http://localhost:8080)
+            api_url: Orchestrator API URL (default: from POLOS_API_URL env var or
+                http://localhost:8080)
             api_key: API key for authentication (default: from POLOS_API_KEY env var)
             project_id: Project ID for multi-tenancy (default: from POLOS_PROJECT_ID env var)
+            deployment_id: Deployment ID for workflow invocations (default: from
+                POLOS_DEPLOYMENT_ID env var, None uses latest deployment)
         """
         self.api_url = api_url or os.getenv("POLOS_API_URL", "http://localhost:8080")
         self.api_key = api_key or os.getenv("POLOS_API_KEY")
         self.project_id = project_id or os.getenv("POLOS_PROJECT_ID")
+        self.deployment_id = deployment_id or os.getenv("POLOS_DEPLOYMENT_ID")
 
         # Validate required fields (with local mode support)
         local_mode_requested = os.getenv("POLOS_LOCAL_MODE", "False").lower() == "true"
@@ -158,7 +163,6 @@ class PolosClient:
         Args:
             workflow_id: The workflow identifier
             payload: The workflow payload
-            deployment_id: Optional deployment ID (if not provided, uses latest active)
             queue_name: Optional queue name (if not provided, defaults to workflow_id)
             queue_concurrency_limit: Optional concurrency limit for queue creation
             concurrency_key: Optional concurrency key for per-tenant queuing
@@ -172,7 +176,7 @@ class PolosClient:
         """
         return await self._submit_workflow(
             workflow_id=workflow_id,
-            deployment_id=None,  # Use latest deployment
+            deployment_id=self.deployment_id,  # Use client's deployment_id (None uses latest)
             payload=payload,
             queue_name=queue_name,
             queue_concurrency_limit=queue_concurrency_limit,
@@ -235,7 +239,7 @@ class PolosClient:
         # Submit all workflows in a single batch using the batch endpoint
         handles = await self._submit_workflows(
             workflows=workflow_requests,
-            deployment_id=None,  # Use latest active deployment
+            deployment_id=self.deployment_id,  # Use client's deployment_id (None uses latest)
             parent_execution_id=None,
             root_execution_id=None,
             step_key=None,  # Not invoked from a step, so no step_key

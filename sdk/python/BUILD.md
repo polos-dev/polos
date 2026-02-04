@@ -51,6 +51,23 @@ uv run ruff check .
 uv run ruff check --fix .
 ```
 
+#### Using uvx (Alternative)
+
+If `uv run` fails due to version detection issues (e.g., missing git tags), use `uvx` to run tools directly without building the package:
+
+```bash
+# Format code
+uvx ruff format .
+
+# Lint code
+uvx ruff check .
+
+# Auto-fix linting issues
+uvx ruff check --fix .
+```
+
+`uvx` runs the tool in an isolated environment without needing to install or build the SDK package.
+
 ## Building the Package
 
 ### Build Locally

@@ -56,7 +56,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
     agent_run_id = ctx.execution_id  # Use execution_id from context
     agent_config = payload["agent_config"]
     streaming = payload.get("streaming", True)  # Default to True for backward compatibility
-    tool_stop_action = False
     input_data = payload.get("input")
 
     result = {
@@ -206,6 +205,23 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                     "tool_results": tool_results,  # Tool results from previous iteration
                 },
             )
+
+            if guardrails and streaming and llm_result.get("content"):
+                # Emit one text_delta event with full response for clients who are streaming
+                await ctx.step.publish_event(
+                    f"llm_generate:text_delta:{agent_step}",
+                    topic=f"workflow:{agent_run_id}",
+                    event_type="text_delta",
+                    data={
+                        "step": agent_step,
+                        "chunk_index": 1,
+                        "content": llm_result.get("content"),
+                        "_metadata": {
+                            "execution_id": agent_run_id,
+                            "workflow_id": ctx.workflow_id,
+                        },
+                    },
+                )
         else:
             # No guardrails - use streaming
             llm_result = await _llm_stream(
@@ -313,7 +329,7 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             )
 
         # Execute all tools in batch
-        if tool_stop_action is False and len(batch_workflows) > 0:
+        if len(batch_workflows) > 0:
             tool_results_list: list[BatchStepResult] = await ctx.step.batch_invoke_and_wait(
                 f"execute_tools:step_{agent_step}", batch_workflows
             )
@@ -453,7 +469,7 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                 raise StepExecutionError(hook_result.error_message or "Hook execution failed")
 
         # No tool results, we're done
-        if tool_results is None or len(tool_results) == 0 or tool_stop_action:
+        if tool_results is None or len(tool_results) == 0:
             end_steps = True
 
         # Evaluate stop conditions (if any)

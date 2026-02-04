@@ -351,6 +351,7 @@ class Agent(Workflow):
         id: str,  # Required: task ID
         provider: str,
         model: str,
+        description: str | None = None,  # Description for team coordination
         system_prompt: str | None = None,
         tools: list[Any] | None = None,
         temperature: float | None = None,
@@ -388,6 +389,7 @@ class Agent(Workflow):
         super().__init__(
             id=id,
             func=self._agent_execute,
+            description=description,
             workflow_type="agent",
             queue_name=queue_name,
             queue_concurrency_limit=queue_concurrency_limit,
@@ -689,6 +691,7 @@ class Agent(Workflow):
                 "input": input,
                 "session_id": session_id,
                 "user_id": user_id,
+                "conversation_id": conversation_id,
                 "streaming": True,
                 "provider_kwargs": kwargs,  # Pass kwargs to provider
             },

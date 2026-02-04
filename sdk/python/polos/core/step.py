@@ -134,6 +134,13 @@ class Step:
             # Extract full module path for Pydantic class
             # (e.g., "polos.llm.providers.base.LLMResponse")
             output_schema_name = f"{result.__class__.__module__}.{result.__class__.__name__}"
+        elif isinstance(result, list) and result and isinstance(result[0], BaseModel):
+            # Handle list of Pydantic models
+            outputs = [item.model_dump(mode="json") for item in result]
+            # Store schema name of the list item type for deserialization
+            output_schema_name = (
+                f"list[{result[0].__class__.__module__}.{result[0].__class__.__name__}]"
+            )
         else:
             outputs = result
 

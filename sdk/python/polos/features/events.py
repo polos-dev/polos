@@ -235,8 +235,7 @@ async def batch_publish(
 async def publish(
     client: PolosClient,
     topic: str,
-    event_type: str | None = None,
-    data: dict[str, Any] = None,
+    event_data: EventData,
     execution_id: str | None = None,
     root_execution_id: str | None = None,
 ) -> int:
@@ -247,20 +246,16 @@ async def publish(
     Args:
         client: PolosClient instance
         topic: Event topic
-        event_type: Optional type of event
-        data: Event payload
+        event_data: EventData
+        execution_id: Optional execution ID
+        root_execution_id: Optional root execution ID
 
     Returns:
         sequence_id: Global sequence ID for the event
     """
     sequence_ids = await batch_publish(
         topic=topic,
-        events=[
-            EventData(
-                event_type=event_type,
-                data=data or {},
-            )
-        ],
+        events=[event_data],
         execution_id=execution_id,
         root_execution_id=root_execution_id,
         client=client,

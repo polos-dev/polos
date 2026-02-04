@@ -87,11 +87,31 @@ async def deserialize(obj: Any, output_schema_name: str | None = None) -> Any:
 
     Args:
         obj: Object to deserialize
-        output_schema_name: The name of the output schema
+        output_schema_name: The name of the output schema (can be
+            "list[module.ClassName]" for lists)
 
     Returns:
         Deserialized object
     """
+    # Handle list of Pydantic models (schema format: "list[module.ClassName]")
+    if output_schema_name and output_schema_name.startswith("list[") and isinstance(obj, list):
+        try:
+            # Extract the inner class name from "list[module.ClassName]"
+            inner_schema = output_schema_name[5:-1]  # Remove "list[" and "]"
+            module_path, class_name = inner_schema.rsplit(".", 1)
+            module = __import__(module_path, fromlist=[class_name])
+            model_class = getattr(module, class_name)
+
+            # Validate each item in the list back to the Pydantic model
+            if issubclass(model_class, BaseModel):
+                obj = [model_class.model_validate(item) for item in obj]
+        except (ImportError, AttributeError, ValueError, TypeError) as e:
+            raise Exception(
+                f"Failed to reconstruct Pydantic model list from output_schema_name: "
+                f"{output_schema_name}. Error: {str(e)}"
+            ) from e
+        return obj
+
     # If output_schema_name is present, try to reconstruct the Pydantic model
     if output_schema_name and isinstance(obj, dict):
         try:

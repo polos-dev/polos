@@ -63,6 +63,7 @@ class Tool(Workflow):
             id=id,
             func=func or self._default_execute,
             workflow_type="tool",
+            description=description or self.__doc__ or "",
             queue_name=queue_name,
             queue_concurrency_limit=queue_concurrency_limit,
             on_start=on_start,

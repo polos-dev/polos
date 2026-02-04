@@ -80,6 +80,7 @@ class Workflow:
         self,
         id: str,
         func: Callable,
+        description: str | None = None,  # Description for team coordination
         workflow_type: str | None = "workflow",
         queue_name: str | None = None,
         queue_concurrency_limit: int | None = None,
@@ -94,6 +95,7 @@ class Workflow:
         state_schema: type[BaseModel] | None = None,
     ):
         self.id = id
+        self.description = description  # Description for team coordination
         self.func = func
         self.is_async = asyncio.iscoroutinefunction(func)
         # Check if function has a payload parameter
@@ -849,6 +851,7 @@ class Workflow:
 
 def workflow(
     id: str | None = None,
+    description: str | None = None,  # Description for team coordination
     queue: str | Queue | dict[str, Any] | None = None,
     trigger_on_event: str | None = None,
     batch_size: int = 1,
@@ -938,6 +941,8 @@ def workflow(
 
     Args:
         id: Optional workflow ID (defaults to function name)
+        description: Optional description for team coordination. Used when this
+            workflow is added to a Team so the coordinator LLM understands its purpose.
         queue: Optional queue configuration. Can be:
             - str: Queue name
             - Queue: Queue object
@@ -1158,6 +1163,7 @@ def workflow(
         workflow_obj = Workflow(
             id=workflow_id,
             func=func,
+            description=description,
             queue_name=queue_name,
             queue_concurrency_limit=queue_concurrency_limit,
             trigger_on_event=trigger_on_event,

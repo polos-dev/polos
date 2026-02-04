@@ -187,8 +187,8 @@ class Worker:
 
         # Build workflow registry
         self.workflows_registry: dict[str, Workflow] = {}
-        self.agents: list[Agent] = [a for a in agents if isinstance(a, Agent)] or []
-        self.tools: list[Tool] = [t for t in tools if isinstance(t, Tool)] or []
+        self.agents: list[Agent] = [a for a in (agents or []) if isinstance(a, Agent)] or []
+        self.tools: list[Tool] = [t for t in (tools or []) if isinstance(t, Tool)] or []
         self.agent_ids: list[str] = []
         self.tool_ids: list[str] = []
         self.workflow_ids: list[str] = []
@@ -938,7 +938,9 @@ class Worker:
             # Check if error is StepExecutionError - if so, mark as non-retryable
             # Tools are not retryable by default. We feed the error back to the LLM to handle.
             retryable = (
-                not isinstance(error, StepExecutionError) and workflow.workflow_type != "tool"
+                workflow
+                and not isinstance(error, StepExecutionError)
+                and workflow.workflow_type != "tool"
             )
             await self._report_failure(
                 workflow_data["execution_id"], error_message, stack_trace, retryable=retryable

@@ -7,26 +7,57 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::db;
 use crate::AppState;
 
-#[derive(Debug, Deserialize)]
+/// Request to register a tool definition
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RegisterToolRequest {
+    /// Tool ID
     pub id: String,
+    /// Deployment ID (optional, uses latest if not provided)
     pub deployment_id: Option<String>,
+    /// Tool type
     pub tool_type: Option<String>,
+    /// Tool description
     pub description: Option<String>,
+    /// Tool parameters schema
     pub parameters: Option<serde_json::Value>,
+    /// Tool metadata
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+/// Response for tool registration
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterToolResponse {
+    /// Whether registration was successful
     pub success: bool,
 }
 
+/// Register a tool definition
+#[utoipa::path(
+    post,
+    path = "/api/v1/tools/register",
+    tag = "Tools",
+    request_body = RegisterToolRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Tool registered successfully", body = RegisterToolResponse),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Project not found"),
+        (status = 409, description = "Tool already exists"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_tool(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -98,6 +129,23 @@ pub async fn register_tool(
     Ok(Json(RegisterToolResponse { success: true }))
 }
 
+/// Get all tools for a project
+#[utoipa::path(
+    get,
+    path = "/api/v1/tools",
+    tag = "Tools",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "List of tools"),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_tools(
     State(state): State<Arc<AppState>>,
     _jar: CookieJar,
@@ -122,6 +170,27 @@ pub async fn get_tools(
     Ok(Json(tools))
 }
 
+/// Get a tool definition by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/tools/{tool_id}",
+    tag = "Tools",
+    params(
+        ("tool_id" = String, Path, description = "Tool ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        ("deployment_id" = Option<String>, Query, description = "Deployment ID (optional)")
+    ),
+    responses(
+        (status = 200, description = "Tool definition"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 404, description = "Tool not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_tool_definition(
     State(state): State<Arc<AppState>>,
     _jar: CookieJar,

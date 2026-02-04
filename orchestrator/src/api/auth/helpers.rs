@@ -155,6 +155,35 @@ pub async fn get_current_user(
 
     let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
 
+    // Check if token is an API key (starts with sk_)
+    if token.starts_with("sk_") {
+        // Hash the API key and look it up
+        let key_hash =
+            crate::crypto::hash_api_key(&token).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let api_key_record = state
+            .db
+            .get_api_key_by_hash(&key_hash)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        // Get the user who created this API key
+        let created_by_id = api_key_record
+            .created_by_id
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        let user = state
+            .db
+            .get_user_by_id(&created_by_id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        return Ok(user);
+    }
+
+    // Otherwise, treat as JWT token
     let claims = decode_token(&token).ok_or(StatusCode::UNAUTHORIZED)?;
     let user_id = claims.sub;
 

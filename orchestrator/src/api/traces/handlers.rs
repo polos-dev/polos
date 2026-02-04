@@ -7,20 +7,29 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use utoipa::IntoParams;
 
 use crate::api::auth::helpers::authenticate_api_key;
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::AppState;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
+/// Query parameters for listing traces
+#[derive(Deserialize, IntoParams)]
 pub struct GetTracesQuery {
+    /// Start time filter (RFC3339)
     start_time: Option<String>,
+    /// End time filter (RFC3339)
     end_time: Option<String>,
+    /// Filter by root span type
     root_span_type: Option<String>,
+    /// Filter by root span name
     root_span_name: Option<String>,
+    /// Filter by error presence
     has_error: Option<bool>,
+    /// Maximum number of results (default: 50)
     limit: Option<i64>,
+    /// Offset for pagination
     offset: Option<i64>,
 }
 
@@ -139,6 +148,24 @@ async fn merge_span_into_linked(
     }
 }
 
+/// Get a trace by ID with all spans
+#[utoipa::path(
+    get,
+    path = "/api/v1/traces/{trace_id}",
+    tag = "Traces",
+    params(
+        ("trace_id" = String, Path, description = "Trace ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Trace with all spans"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_trace_by_id(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -386,6 +413,24 @@ pub async fn get_trace_by_id(
     Ok(Json(response))
 }
 
+/// Get traces with optional filters
+#[utoipa::path(
+    get,
+    path = "/api/v1/traces",
+    tag = "Traces",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        GetTracesQuery
+    ),
+    responses(
+        (status = 200, description = "List of traces"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_traces(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,

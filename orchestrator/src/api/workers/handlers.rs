@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::common::ProjectId;
@@ -15,23 +16,34 @@ use crate::db;
 use crate::AppState;
 use anyhow;
 
-#[derive(Deserialize)]
+/// Request to register a worker
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterWorkerRequest {
+    /// Worker capabilities
     pub capabilities: Option<serde_json::Value>,
+    /// Project ID
     pub project_id: String,
+    /// Worker mode (push)
     pub mode: Option<String>,
+    /// Push endpoint URL for receiving work
     pub push_endpoint_url: Option<String>,
+    /// Maximum concurrent executions
     pub max_concurrent_executions: Option<i32>,
+    /// Deployment ID (optional, uses latest if not provided)
     pub deployment_id: Option<String>,
 }
 
-#[derive(Deserialize)]
+/// Request to register a deployment for workers
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterWorkerDeploymentRequest {
+    /// Deployment ID
     pub deployment_id: String,
 }
 
-#[derive(Serialize)]
+/// Response after registering a worker
+#[derive(Serialize, ToSchema)]
 pub struct RegisterWorkerResponse {
+    /// Assigned worker ID
     worker_id: String,
 }
 
@@ -260,7 +272,23 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Register a worker
+/// Register a worker
+#[utoipa::path(
+    post,
+    path = "/api/v1/workers/register",
+    tag = "Workers",
+    request_body = RegisterWorkerRequest,
+    responses(
+        (status = 200, description = "Worker registered", body = RegisterWorkerResponse),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_worker(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RegisterWorkerRequest>,
@@ -424,7 +452,25 @@ pub async fn register_worker(
     }))
 }
 
-// Register or update worker deployment
+/// Register or update a worker deployment
+#[utoipa::path(
+    post,
+    path = "/api/v1/workers/deployments",
+    tag = "Workers",
+    request_body = RegisterWorkerDeploymentRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Deployment registered"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_worker_deployment(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,

@@ -9,53 +9,98 @@ use futures::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::common::{ErrorResponse, OptionalProjectId, ProjectId};
 use crate::AppState;
 
-#[derive(Debug, Deserialize)]
+/// Event data for publishing
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct EventData {
+    /// Event type identifier
     pub event_type: Option<String>,
+    /// Event payload
     pub data: serde_json::Value,
+    /// Associated execution ID
     #[serde(default)]
     pub execution_id: Option<String>,
+    /// Attempt number for retries
     #[serde(default)]
     pub attempt_number: Option<i32>,
 }
 
-#[derive(Debug, Deserialize)]
+/// Request to publish events
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct PublishEventRequest {
+    /// Topic to publish to
     pub topic: String,
+    /// List of events to publish
     pub events: Vec<EventData>,
+    /// Whether events are durable (deprecated)
     pub durable: Option<bool>,
+    /// Source execution ID
     pub execution_id: Option<String>,
+    /// Root execution ID
     pub root_execution_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+/// Response after publishing events
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PublishEventResponse {
+    /// Sequence IDs assigned to events
     pub sequence_ids: Vec<i64>,
+    /// Publication timestamp (RFC3339)
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+/// Event response
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EventResponse {
+    /// Event ID
     pub id: String,
+    /// Sequence ID
     pub sequence_id: i64,
+    /// Topic
     pub topic: String,
+    /// Event type
     pub event_type: Option<String>,
+    /// Event data
     pub data: serde_json::Value,
+    /// Creation timestamp (RFC3339)
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+/// Response for getting events
+#[derive(Debug, Serialize, ToSchema)]
 pub struct GetEventsResponse {
+    /// List of events
     pub events: Vec<EventResponse>,
+    /// Next sequence ID for pagination
     pub next_sequence_id: Option<i64>,
+    /// Whether more events exist
     pub has_more: bool,
 }
 
+/// Publish events to a topic
+#[utoipa::path(
+    post,
+    path = "/api/v1/events/publish",
+    tag = "Events",
+    request_body = PublishEventRequest,
+    params(
+        ("X-Project-ID" = Option<String>, Header, description = "Project ID (optional if execution_id is provided)")
+    ),
+    responses(
+        (status = 200, description = "Events published successfully", body = PublishEventResponse),
+        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn publish_event(
     State(state): State<Arc<AppState>>,
     OptionalProjectId(project_id_from_header): OptionalProjectId,
@@ -182,6 +227,28 @@ pub async fn publish_event(
     }))
 }
 
+/// Get events from a topic
+#[utoipa::path(
+    get,
+    path = "/api/v1/events",
+    tag = "Events",
+    params(
+        ("topic" = String, Query, description = "Topic to get events from"),
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        ("last_sequence_id" = Option<i64>, Query, description = "Last sequence ID for pagination"),
+        ("last_timestamp" = Option<String>, Query, description = "Last timestamp for pagination (RFC3339)"),
+        ("limit" = Option<i32>, Query, description = "Maximum number of events (default: 100)")
+    ),
+    responses(
+        (status = 200, description = "List of events", body = GetEventsResponse),
+        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
@@ -254,6 +321,28 @@ pub async fn get_events(
     }))
 }
 
+/// Stream events via Server-Sent Events (SSE)
+#[utoipa::path(
+    get,
+    path = "/api/v1/events/stream",
+    tag = "Events",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        ("topic" = Option<String>, Query, description = "Topic to stream from"),
+        ("workflow_run_id" = Option<String>, Query, description = "Workflow run ID to stream events for"),
+        ("last_sequence_id" = Option<i64>, Query, description = "Last sequence ID for continuation"),
+        ("last_timestamp" = Option<String>, Query, description = "Last timestamp for continuation (RFC3339)")
+    ),
+    responses(
+        (status = 200, description = "SSE stream of events"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn stream_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
@@ -438,17 +527,43 @@ pub async fn stream_events(
     Ok(Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default()))
 }
 
-#[derive(Deserialize)]
+/// Request to register an event trigger
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterEventTriggerRequest {
+    /// Workflow ID to trigger
     pub workflow_id: String,
+    /// Deployment ID
     pub deployment_id: String,
+    /// Topic to listen for events
     pub event_topic: String,
+    /// Number of events to batch before triggering
     pub batch_size: i32,
+    /// Timeout in seconds for batching
     pub batch_timeout_seconds: Option<i32>,
+    /// Queue name for triggered executions
     #[serde(default)]
     pub queue_name: Option<String>,
 }
 
+/// Register an event trigger for a workflow
+#[utoipa::path(
+    post,
+    path = "/api/v1/event-triggers/register",
+    tag = "Event Triggers",
+    request_body = RegisterEventTriggerRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Event trigger registered"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_event_trigger(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,

@@ -4,6 +4,7 @@ use axum::{
     http::{request::Parts, StatusCode},
 };
 use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 // Project ID extractor - extracts project_id from headers
@@ -53,8 +54,11 @@ where
     }
 }
 
-#[derive(Serialize)]
+/// Standard error response
+#[derive(Serialize, ToSchema)]
 pub struct ErrorResponse {
+    /// Human-readable error message
     pub error: String,
+    /// Machine-readable error type code
     pub error_type: String,
 }

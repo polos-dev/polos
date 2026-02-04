@@ -5,18 +5,45 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::api::common::ProjectId;
 use crate::AppState;
 
-#[derive(Deserialize)]
+/// Request to register a workflow in a deployment
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterDeploymentWorkflowRequest {
+    /// Workflow ID
     pub workflow_id: String,
+    /// Workflow type (workflow, agent, tool)
     pub workflow_type: String,
+    /// Whether to trigger on events
     pub trigger_on_event: Option<bool>,
+    /// Whether the workflow is scheduled
     pub scheduled: Option<bool>,
 }
 
+/// Register a workflow in a deployment
+#[utoipa::path(
+    post,
+    path = "/api/v1/workers/deployments/{deployment_id}/workflows",
+    tag = "Deployments",
+    request_body = RegisterDeploymentWorkflowRequest,
+    params(
+        ("deployment_id" = String, Path, description = "Deployment ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Workflow registered in deployment"),
+        (status = 400, description = "Invalid workflow type"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_deployment_workflow(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -83,6 +110,25 @@ pub async fn register_deployment_workflow(
     Ok(StatusCode::OK)
 }
 
+/// Get a deployment by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/deployments/{deployment_id}",
+    tag = "Deployments",
+    params(
+        ("deployment_id" = String, Path, description = "Deployment ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Deployment details"),
+        (status = 404, description = "Deployment not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_deployment(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,

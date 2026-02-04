@@ -7,6 +7,7 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::auth::helpers::{check_user_and_project_access, get_current_user};
@@ -14,27 +15,54 @@ use crate::api::common::ErrorResponse;
 use crate::db::models::ProjectRole;
 use crate::AppState;
 
-#[derive(Deserialize)]
+/// Request to create a new project
+#[derive(Deserialize, ToSchema)]
 pub struct CreateProjectRequest {
+    /// Project name
     name: String,
+    /// Optional project description
     description: Option<String>,
 }
 
-#[derive(Serialize)]
+/// Project details response
+#[derive(Serialize, ToSchema)]
 pub struct ProjectResponse {
+    /// Project ID
     id: String,
+    /// Project name
     name: String,
+    /// Optional project description
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    /// Creation timestamp (RFC3339)
     created_at: String,
+    /// Last update timestamp (RFC3339)
     updated_at: String,
 }
 
-#[derive(Serialize)]
+/// List of projects response
+#[derive(Serialize, ToSchema)]
 pub struct ProjectsResponse {
+    /// List of projects
     projects: Vec<ProjectResponse>,
 }
 
+/// Create a new project
+#[utoipa::path(
+    post,
+    path = "/api/v1/projects",
+    tag = "Projects",
+    request_body = CreateProjectRequest,
+    responses(
+        (status = 200, description = "Project created successfully", body = ProjectResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn create_project(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
@@ -79,6 +107,21 @@ pub async fn create_project(
     }))
 }
 
+/// Get all projects for the current user
+#[utoipa::path(
+    get,
+    path = "/api/v1/projects",
+    tag = "Projects",
+    responses(
+        (status = 200, description = "List of projects", body = ProjectsResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_projects(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
@@ -128,6 +171,26 @@ pub async fn get_projects(
     }))
 }
 
+/// Get a project by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/projects/{project_id}",
+    tag = "Projects",
+    params(
+        ("project_id" = String, Path, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Project details", body = ProjectResponse),
+        (status = 400, description = "Invalid project ID", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 404, description = "Project not found", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_project_by_id(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
@@ -214,28 +277,61 @@ pub async fn get_project_by_id(
     }))
 }
 
-#[derive(Serialize)]
+/// Project member details
+#[derive(Serialize, ToSchema)]
 pub struct ProjectMemberResponse {
+    /// Member ID
     id: String,
+    /// User ID
     user_id: String,
+    /// User details
     user: Option<UserInfo>,
+    /// Role (Admin, Write, Read)
     role: String,
+    /// Creation timestamp (RFC3339)
     created_at: String,
+    /// Last update timestamp (RFC3339)
     updated_at: String,
 }
 
-#[derive(Serialize)]
+/// User information
+#[derive(Serialize, ToSchema)]
 pub struct UserInfo {
+    /// User ID
     id: String,
+    /// User's email address
     email: String,
+    /// User's first name
     #[serde(skip_serializing_if = "Option::is_none")]
     first_name: Option<String>,
+    /// User's last name
     #[serde(skip_serializing_if = "Option::is_none")]
     last_name: Option<String>,
+    /// User's display name
     #[serde(skip_serializing_if = "Option::is_none")]
     display_name: Option<String>,
 }
 
+/// Get all members of a project
+#[utoipa::path(
+    get,
+    path = "/api/v1/projects/{project_id}/members",
+    tag = "Projects",
+    params(
+        ("project_id" = String, Path, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "List of project members", body = Vec<ProjectMemberResponse>),
+        (status = 400, description = "Invalid project ID", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_project_members(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,

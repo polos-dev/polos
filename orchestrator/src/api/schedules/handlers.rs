@@ -5,47 +5,90 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::api::common::ProjectId;
 use crate::AppState;
 
-#[derive(Deserialize)]
+/// Request to create a schedule
+#[derive(Deserialize, ToSchema)]
 pub struct CreateScheduleRequest {
+    /// Workflow ID to schedule
     pub workflow_id: String,
+    /// Cron expression (e.g., "0 * * * *" for every hour)
     pub cron: String,
+    /// Timezone (e.g., "America/New_York")
     pub timezone: String,
+    /// Unique key for the schedule
     pub key: String,
 }
 
-#[derive(Serialize)]
+/// Response after creating a schedule
+#[derive(Serialize, ToSchema)]
 pub struct CreateScheduleResponse {
+    /// Created schedule ID
     pub schedule_id: String,
 }
 
-#[derive(Serialize)]
+/// Schedule details
+#[derive(Serialize, ToSchema)]
 pub struct ScheduleResponse {
+    /// Schedule ID
     pub id: String,
+    /// Workflow ID
     pub workflow_id: String,
+    /// Cron expression
     pub cron: String,
+    /// Timezone
     pub timezone: String,
+    /// Unique key
     pub key: String,
+    /// Status (active, paused)
     pub status: String,
+    /// Last run timestamp (RFC3339)
     pub last_run_at: Option<String>,
+    /// Next run timestamp (RFC3339)
     pub next_run_at: String,
+    /// Creation timestamp (RFC3339)
     pub created_at: String,
+    /// Last update timestamp (RFC3339)
     pub updated_at: String,
 }
 
-#[derive(Serialize)]
+/// Response for getting schedules
+#[derive(Serialize, ToSchema)]
 pub struct GetSchedulesResponse {
+    /// List of schedules
     pub schedules: Vec<ScheduleResponse>,
 }
 
-#[derive(Serialize)]
+/// Response for getting scheduled workflow IDs
+#[derive(Serialize, ToSchema)]
 pub struct GetScheduledWorkflowsResponse {
+    /// List of workflow IDs with schedules
     pub workflow_ids: Vec<String>,
 }
 
+/// Create a schedule for a workflow
+#[utoipa::path(
+    post,
+    path = "/api/v1/schedules",
+    tag = "Schedules",
+    request_body = CreateScheduleRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Schedule created", body = CreateScheduleResponse),
+        (status = 400, description = "Workflow is not schedulable"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn create_schedule(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -112,6 +155,23 @@ pub async fn create_schedule(
     }))
 }
 
+/// Get all schedules for a workflow
+#[utoipa::path(
+    get,
+    path = "/api/v1/schedules/workflows/{workflow_id}",
+    tag = "Schedules",
+    params(
+        ("workflow_id" = String, Path, description = "Workflow ID")
+    ),
+    responses(
+        (status = 200, description = "List of schedules", body = GetSchedulesResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_schedules_for_workflow(
     State(state): State<Arc<AppState>>,
     Path(workflow_id): Path<String>,
@@ -146,6 +206,20 @@ pub async fn get_schedules_for_workflow(
     }))
 }
 
+/// Get all workflows that have schedules
+#[utoipa::path(
+    get,
+    path = "/api/v1/schedules/workflows",
+    tag = "Schedules",
+    responses(
+        (status = 200, description = "List of workflow IDs", body = GetScheduledWorkflowsResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_scheduled_workflows(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<GetScheduledWorkflowsResponse>, StatusCode> {

@@ -36,6 +36,8 @@ time = "0.3"
 rand = "0.8"
 dotenv = "0.15"
 openssl = { version = "0.10", features = ["vendored"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
 
 [dev-dependencies]
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "macros"] }

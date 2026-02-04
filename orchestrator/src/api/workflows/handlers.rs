@@ -7,47 +7,90 @@ use axum_extra::extract::CookieJar;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::api::auth::helpers::check_user_and_project_access;
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::db;
 use crate::AppState;
 
-#[derive(Deserialize)]
+/// Request to register workflow queues
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterQueuesRequest {
+    /// Deployment ID
     pub deployment_id: String,
+    /// List of queues to register
     pub queues: Vec<QueueInfo>,
 }
 
-#[derive(Deserialize)]
+/// Queue information
+#[derive(Deserialize, ToSchema)]
 pub struct QueueInfo {
+    /// Queue name
     pub name: String,
+    /// Concurrency limit for the queue
     pub concurrency_limit: Option<i32>,
 }
 
-#[derive(Deserialize)]
+/// Query parameters for getting workflow runs
+#[derive(Deserialize, IntoParams)]
 pub struct GetWorkflowRunsQuery {
+    /// Filter by workflow type (workflow, agent, tool)
     workflow_type: Option<String>,
+    /// Filter by workflow ID
     workflow_id: Option<String>,
+    /// Maximum number of results (default: 50)
     limit: Option<i64>,
+    /// Offset for pagination
     offset: Option<i64>,
+    /// Start time filter (RFC3339)
     start_time: Option<String>,
+    /// End time filter (RFC3339)
     end_time: Option<String>,
 }
 
-#[derive(Serialize)]
+/// Workflow run summary
+#[derive(Serialize, ToSchema)]
 pub struct WorkflowRunSummary {
+    /// Execution ID
     id: String,
+    /// Root execution ID (for nested workflows)
     root_execution_id: Option<String>,
+    /// Workflow ID
     workflow_id: String,
+    /// Creation timestamp (RFC3339)
     created_at: String,
+    /// Execution status
     status: String,
+    /// Completion timestamp (RFC3339)
     completed_at: Option<String>,
+    /// Input payload
     payload: serde_json::Value,
+    /// Execution result
     result: Option<serde_json::Value>,
+    /// Error message if failed
     error: Option<String>,
 }
 
+/// Register workflow queues
+#[utoipa::path(
+    post,
+    path = "/api/v1/workers/queues",
+    tag = "Workflows",
+    request_body = RegisterQueuesRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Queues registered successfully"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_queues(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -98,6 +141,25 @@ pub async fn register_queues(
     Ok(StatusCode::OK)
 }
 
+/// Get all workflows for a project
+#[utoipa::path(
+    get,
+    path = "/api/v1/workflows",
+    tag = "Workflows",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "List of workflows"),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_workflows(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
@@ -124,6 +186,27 @@ pub async fn get_workflows(
     Ok(Json(workflows))
 }
 
+/// Get a workflow by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/workflows/{workflow_id}",
+    tag = "Workflows",
+    params(
+        ("workflow_id" = String, Path, description = "Workflow ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Workflow details"),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 404, description = "Workflow not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_workflow(
     State(state): State<Arc<AppState>>,
     Path(workflow_id): Path<String>,
@@ -165,6 +248,26 @@ pub async fn get_workflow(
     }
 }
 
+/// Get workflow runs (executions) with optional filters
+#[utoipa::path(
+    get,
+    path = "/api/v1/workflows/runs",
+    tag = "Workflows",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        GetWorkflowRunsQuery
+    ),
+    responses(
+        (status = 200, description = "List of workflow runs", body = Vec<WorkflowRunSummary>),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_workflow_runs(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,

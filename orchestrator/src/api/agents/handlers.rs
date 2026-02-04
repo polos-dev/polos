@@ -7,31 +7,66 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::api::auth::helpers::check_user_and_project_access;
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::db;
 use crate::AppState;
 
-#[derive(Debug, Deserialize)]
+/// Request to register an agent definition
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RegisterAgentRequest {
+    /// Agent ID
     pub id: String,
+    /// Deployment ID (optional, uses latest if not provided)
     pub deployment_id: Option<String>,
+    /// LLM provider (e.g., "openai", "anthropic")
     pub provider: String,
+    /// Model name (e.g., "gpt-4", "claude-3")
     pub model: String,
+    /// System prompt for the agent
     pub system_prompt: Option<String>,
+    /// Tools available to the agent
     pub tools: Option<serde_json::Value>,
+    /// Temperature for LLM generation
     pub temperature: Option<f64>,
+    /// Maximum output tokens
     pub max_output_tokens: Option<i32>,
+    /// Additional configuration
     pub config: Option<serde_json::Value>,
+    /// Agent metadata
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+/// Response for agent registration
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterAgentResponse {
+    /// Whether registration was successful
     pub success: bool,
 }
 
+/// Register an agent definition
+#[utoipa::path(
+    post,
+    path = "/api/v1/agents/register",
+    tag = "Agents",
+    request_body = RegisterAgentRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Agent registered successfully", body = RegisterAgentResponse),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Project not found"),
+        (status = 409, description = "Agent already exists"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn register_agent(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -105,6 +140,25 @@ pub async fn register_agent(
     Ok(Json(RegisterAgentResponse { success: true }))
 }
 
+/// Get all agents for a project
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents",
+    tag = "Agents",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "List of agents"),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Access forbidden", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_agents(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
@@ -131,6 +185,27 @@ pub async fn get_agents(
     Ok(Json(agents))
 }
 
+/// Get an agent definition by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents/{agent_id}",
+    tag = "Agents",
+    params(
+        ("agent_id" = String, Path, description = "Agent ID"),
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        ("deployment_id" = Option<String>, Query, description = "Deployment ID (optional)")
+    ),
+    responses(
+        (status = 200, description = "Agent definition"),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_agent_definition(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,

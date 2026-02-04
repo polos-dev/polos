@@ -7,6 +7,7 @@ use axum_extra::extract::CookieJar;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::auth::helpers::authenticate_and_validate_execution_project;
@@ -15,84 +16,147 @@ use crate::api::workers::try_dispatch_execution;
 use crate::db;
 use crate::AppState;
 
-#[derive(Deserialize)]
+/// Request to submit a workflow for execution
+#[derive(Deserialize, ToSchema)]
 pub struct SubmitWorkflowRequest {
+    /// Input payload for the workflow
     payload: serde_json::Value,
+    /// Deployment ID (optional, uses latest if not provided)
     deployment_id: Option<String>,
+    /// Parent execution ID (deprecated)
     parent_execution_id: Option<String>,
+    /// Root execution ID (deprecated)
     root_execution_id: Option<String>,
+    /// Step key identifier (deprecated)
     step_key: Option<String>,
+    /// Queue name for execution
     queue_name: Option<String>,
+    /// Concurrency key for deduplication
     concurrency_key: Option<String>,
+    /// Queue concurrency limit
     queue_concurrency_limit: Option<i32>,
+    /// Whether to wait for subworkflow completion (deprecated)
     wait_for_subworkflow: Option<bool>,
+    /// Session ID for grouping executions
     session_id: Option<String>,
+    /// User ID associated with the execution
     user_id: Option<String>,
+    /// OpenTelemetry trace parent (deprecated)
     otel_traceparent: Option<String>,
+    /// Initial state for the workflow
     initial_state: Option<serde_json::Value>,
-    run_timeout_seconds: Option<i32>, // Timeout in seconds, default 3600 (60 minutes)
+    /// Timeout in seconds (default: 3600 = 60 minutes)
+    run_timeout_seconds: Option<i32>,
 }
 
-#[derive(Serialize)]
+/// Response after submitting a workflow
+#[derive(Serialize, ToSchema)]
 pub struct SubmitWorkflowResponse {
+    /// Execution ID
     execution_id: String,
+    /// Creation timestamp (RFC3339)
     created_at: String,
 }
 
-#[derive(Deserialize)]
+/// Request to submit multiple workflows in batch
+#[derive(Deserialize, ToSchema)]
 pub struct SubmitWorkflowsRequest {
+    /// List of workflows to submit
     workflows: Vec<WorkflowRequest>,
+    /// Deployment ID (optional)
     deployment_id: Option<String>,
+    /// Step key identifier (deprecated)
     step_key: Option<String>,
+    /// Parent execution ID (deprecated)
     parent_execution_id: Option<String>,
+    /// Root execution ID (deprecated)
     root_execution_id: Option<String>,
+    /// Session ID
     session_id: Option<String>,
+    /// User ID
     user_id: Option<String>,
+    /// Whether to wait for subworkflow completion (deprecated)
     wait_for_subworkflow: Option<bool>,
+    /// OpenTelemetry trace parent (deprecated)
     otel_traceparent: Option<String>,
 }
 
-#[derive(Deserialize)]
+/// Individual workflow request in a batch
+#[derive(Deserialize, ToSchema)]
 pub struct WorkflowRequest {
+    /// Workflow ID to execute
     workflow_id: String,
+    /// Input payload
     payload: serde_json::Value,
+    /// Queue name
     queue_name: Option<String>,
+    /// Concurrency key
     concurrency_key: Option<String>,
+    /// Queue concurrency limit
     queue_concurrency_limit: Option<i32>,
+    /// Initial state
     initial_state: Option<serde_json::Value>,
-    run_timeout_seconds: Option<i32>, // Timeout in seconds, default 3600 (60 minutes)
+    /// Timeout in seconds
+    run_timeout_seconds: Option<i32>,
 }
 
-#[derive(Serialize)]
+/// Response for batch workflow submission
+#[derive(Serialize, ToSchema)]
 pub struct SubmitWorkflowsResponse {
+    /// List of created executions
     executions: Vec<SubmitWorkflowResponse>,
 }
 
-#[derive(Serialize)]
+/// Execution details response
+#[derive(Serialize, ToSchema)]
 pub struct ExecutionResponse {
+    /// Execution ID
     id: String,
+    /// Workflow ID
     workflow_id: String,
+    /// Execution status (pending, running, completed, failed, cancelled)
     status: String,
+    /// Input payload
     payload: serde_json::Value,
+    /// Execution result
     result: Option<serde_json::Value>,
+    /// Error message if failed
     error: Option<String>,
+    /// Creation timestamp (RFC3339)
     created_at: String,
+    /// Start timestamp (RFC3339)
     started_at: Option<String>,
+    /// Completion timestamp (RFC3339)
     completed_at: Option<String>,
+    /// Deployment ID
     deployment_id: Option<String>,
+    /// Assigned worker ID
     assigned_to_worker: Option<String>,
+    /// Parent execution ID
     parent_execution_id: Option<String>,
+    /// Root execution ID
     root_execution_id: Option<String>,
+    /// Retry count
     retry_count: i32,
+    /// Step key
     step_key: Option<String>,
+    /// Queue name
     queue_name: Option<String>,
+    /// Concurrency key
     concurrency_key: Option<String>,
+    /// Batch ID
     batch_id: Option<String>,
+    /// Session ID
     session_id: Option<String>,
+    /// User ID
     user_id: Option<String>,
+    /// Output schema name
     output_schema_name: Option<String>,
+    /// Cancellation timestamp (RFC3339)
     cancelled_at: Option<String>,
+    /// Cancelled by (user or system)
     cancelled_by: Option<String>,
+    /// Timeout in seconds
     run_timeout_seconds: Option<i32>,
 }
 
@@ -114,9 +178,12 @@ pub struct FailExecutionRequest {
     final_state: Option<serde_json::Value>,
 }
 
-#[derive(Deserialize)]
+/// Request to resume a waiting execution
+#[derive(Deserialize, ToSchema)]
 pub struct ResumeExecutionRequest {
+    /// Step key that's waiting
     pub step_key: String,
+    /// Data to resume with
     pub data: serde_json::Value,
 }
 
@@ -173,6 +240,27 @@ pub struct UpdateExecutionOtelSpanIdRequest {
     otel_span_id: Option<String>,
 }
 
+/// Submit a workflow for execution
+#[utoipa::path(
+    post,
+    path = "/api/v1/workflows/{workflow_id}/run",
+    tag = "Executions",
+    request_body = SubmitWorkflowRequest,
+    params(
+        ("workflow_id" = String, Path, description = "Workflow ID to execute"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Workflow submitted successfully", body = SubmitWorkflowResponse),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Project or deployment not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn submit_workflow(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -316,6 +404,26 @@ pub async fn submit_workflow(
     }))
 }
 
+/// Submit multiple workflows in batch
+#[utoipa::path(
+    post,
+    path = "/api/v1/workflows/batch_run",
+    tag = "Executions",
+    request_body = SubmitWorkflowsRequest,
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Workflows submitted successfully", body = SubmitWorkflowsResponse),
+        (status = 400, description = "Bad request"),
+        (status = 404, description = "Project or deployment not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn submit_workflows(
     State(state): State<Arc<AppState>>,
     ProjectId(project_id): ProjectId,
@@ -467,6 +575,25 @@ pub async fn submit_workflows(
     Ok(Json(SubmitWorkflowsResponse { executions }))
 }
 
+/// Get execution details by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/executions/{execution_id}",
+    tag = "Executions",
+    params(
+        ("execution_id" = String, Path, description = "Execution ID")
+    ),
+    responses(
+        (status = 200, description = "Execution details", body = ExecutionResponse),
+        (status = 400, description = "Invalid execution ID"),
+        (status = 404, description = "Execution not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn get_execution(
     State(state): State<Arc<AppState>>,
     Path(execution_id): Path<String>,
@@ -739,13 +866,36 @@ pub async fn fail_execution(
     Ok(StatusCode::OK)
 }
 
-#[derive(Serialize)]
+/// Response after cancelling an execution
+#[derive(Serialize, ToSchema)]
 pub struct CancelExecutionResponse {
+    /// Execution ID
     execution_id: String,
+    /// New status
     status: String,
+    /// Cancellation timestamp (RFC3339)
     cancelled_at: String,
 }
 
+/// Cancel an execution
+#[utoipa::path(
+    post,
+    path = "/api/v1/executions/{execution_id}/cancel",
+    tag = "Executions",
+    params(
+        ("execution_id" = String, Path, description = "Execution ID to cancel")
+    ),
+    responses(
+        (status = 200, description = "Execution cancelled", body = CancelExecutionResponse),
+        (status = 400, description = "Execution cannot be cancelled", body = ErrorResponse),
+        (status = 404, description = "Execution not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn cancel_execution(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -1006,6 +1156,25 @@ pub async fn confirm_cancellation(
     Ok(StatusCode::OK)
 }
 
+/// Resume a waiting execution
+#[utoipa::path(
+    post,
+    path = "/api/v1/executions/{execution_id}/resume",
+    tag = "Executions",
+    request_body = ResumeExecutionRequest,
+    params(
+        ("execution_id" = String, Path, description = "Execution ID to resume")
+    ),
+    responses(
+        (status = 200, description = "Execution resumed"),
+        (status = 400, description = "Invalid execution ID"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
 pub async fn resume_execution(
     State(state): State<Arc<AppState>>,
     Path(execution_id): Path<String>,

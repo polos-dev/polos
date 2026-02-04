@@ -8,6 +8,8 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{prelude::*, EnvFilter};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod api;
 mod crypto;
@@ -18,6 +20,162 @@ pub use db::Database;
 pub struct AppState {
     pub db: Database,
     pub local_mode: bool,
+}
+
+/// Polos Orchestrator API
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Polos Orchestrator API",
+        version = "1.0.0",
+        description = "API for the Polos durable execution platform for AI agents",
+        contact(
+            name = "Polos Team",
+            url = "https://github.com/polos-dev/polos"
+        )
+    ),
+    servers(
+        (url = "/", description = "Current server")
+    ),
+    paths(
+        // Health
+        api::health::health,
+        // Projects
+        api::projects::handlers::create_project,
+        api::projects::handlers::get_projects,
+        api::projects::handlers::get_project_by_id,
+        api::projects::handlers::get_project_members,
+        // Agents
+        api::agents::handlers::register_agent,
+        api::agents::handlers::get_agents,
+        api::agents::handlers::get_agent_definition,
+        // Tools
+        api::tools::handlers::register_tool,
+        api::tools::handlers::get_tools,
+        api::tools::handlers::get_tool_definition,
+        // Workflows
+        api::workflows::handlers::register_queues,
+        api::workflows::handlers::get_workflows,
+        api::workflows::handlers::get_workflow,
+        api::workflows::handlers::get_workflow_runs,
+        // Executions
+        api::executions::handlers::submit_workflow,
+        api::executions::handlers::submit_workflows,
+        api::executions::handlers::get_execution,
+        api::executions::handlers::cancel_execution,
+        api::executions::handlers::resume_execution,
+        // Traces
+        api::traces::handlers::get_traces,
+        api::traces::handlers::get_trace_by_id,
+        // Events
+        api::events::handlers::publish_event,
+        api::events::handlers::get_events,
+        api::events::handlers::stream_events,
+        api::events::handlers::register_event_trigger,
+        // Schedules
+        api::schedules::handlers::create_schedule,
+        api::schedules::handlers::get_schedules_for_workflow,
+        api::schedules::handlers::get_scheduled_workflows,
+        // Workers
+        api::workers::handlers::register_worker,
+        api::workers::handlers::register_worker_deployment,
+        // Deployments
+        api::deployments::handlers::register_deployment_workflow,
+        api::deployments::handlers::get_deployment,
+    ),
+    components(
+        schemas(
+            // Common
+            api::common::ErrorResponse,
+            // Health
+            api::health::HealthResponse,
+            // Projects
+            api::projects::handlers::CreateProjectRequest,
+            api::projects::handlers::ProjectResponse,
+            api::projects::handlers::ProjectsResponse,
+            api::projects::handlers::ProjectMemberResponse,
+            api::projects::handlers::UserInfo,
+            // Agents
+            api::agents::handlers::RegisterAgentRequest,
+            api::agents::handlers::RegisterAgentResponse,
+            // Tools
+            api::tools::handlers::RegisterToolRequest,
+            api::tools::handlers::RegisterToolResponse,
+            // Workflows
+            api::workflows::handlers::RegisterQueuesRequest,
+            api::workflows::handlers::QueueInfo,
+            api::workflows::handlers::WorkflowRunSummary,
+            // Executions
+            api::executions::handlers::SubmitWorkflowRequest,
+            api::executions::handlers::SubmitWorkflowResponse,
+            api::executions::handlers::SubmitWorkflowsRequest,
+            api::executions::handlers::WorkflowRequest,
+            api::executions::handlers::SubmitWorkflowsResponse,
+            api::executions::handlers::ExecutionResponse,
+            api::executions::handlers::CancelExecutionResponse,
+            api::executions::handlers::ResumeExecutionRequest,
+            // Events
+            api::events::handlers::EventData,
+            api::events::handlers::PublishEventRequest,
+            api::events::handlers::PublishEventResponse,
+            api::events::handlers::EventResponse,
+            api::events::handlers::GetEventsResponse,
+            api::events::handlers::RegisterEventTriggerRequest,
+            // Schedules
+            api::schedules::handlers::CreateScheduleRequest,
+            api::schedules::handlers::CreateScheduleResponse,
+            api::schedules::handlers::ScheduleResponse,
+            api::schedules::handlers::GetSchedulesResponse,
+            api::schedules::handlers::GetScheduledWorkflowsResponse,
+            // Workers
+            api::workers::handlers::RegisterWorkerRequest,
+            api::workers::handlers::RegisterWorkerDeploymentRequest,
+            api::workers::handlers::RegisterWorkerResponse,
+            // Deployments
+            api::deployments::handlers::RegisterDeploymentWorkflowRequest,
+        )
+    ),
+    modifiers(&SecurityAddon),
+    tags(
+        (name = "Health", description = "Health check endpoints"),
+        (name = "Projects", description = "Project management endpoints"),
+        (name = "Agents", description = "Agent definition management"),
+        (name = "Tools", description = "Tool definition management"),
+        (name = "Workflows", description = "Workflow management"),
+        (name = "Executions", description = "Workflow execution management"),
+        (name = "Traces", description = "Observability traces"),
+        (name = "Events", description = "Event publishing and streaming"),
+        (name = "Event Triggers", description = "Event-based workflow triggers"),
+        (name = "Schedules", description = "Scheduled workflow execution"),
+        (name = "Workers", description = "Worker registration and management"),
+        (name = "Deployments", description = "Deployment management"),
+    )
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer_auth",
+                utoipa::openapi::security::SecurityScheme::Http(
+                    utoipa::openapi::security::Http::new(
+                        utoipa::openapi::security::HttpAuthScheme::Bearer,
+                    ),
+                ),
+            );
+            components.add_security_scheme(
+                "cookie_auth",
+                utoipa::openapi::security::SecurityScheme::ApiKey(
+                    utoipa::openapi::security::ApiKey::Cookie(
+                        utoipa::openapi::security::ApiKeyValue::new("polos_auth"),
+                    ),
+                ),
+            );
+        }
+    }
 }
 
 #[tokio::main]
@@ -582,6 +740,8 @@ async fn main() -> anyhow::Result<()> {
         .expect("Failed to spawn process-pending-cancellations task");
 
     let app = Router::new()
+        // OpenAPI documentation
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/health", get(api::health))
         // Auth endpoints
         .route("/api/v1/auth/signup", post(api::auth::signup))

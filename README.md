@@ -91,6 +91,30 @@ Polos consists of three components:
 
 ---
 
+## See It In Action
+
+Imagine a workflow that charges a customer, then pauses for a human fraud review. In most frameworks, a server restart during that 24-hour wait would lose the state - or worse, re-run the charge on reboot. Polos guarantees exactly-once durable execution.
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/4607d70e-b078-4b8e-ad2e-a28bd1820a3f" width="800" controls></video>
+</p>
+
+**Timeline of what's happening:**
+
+1. `charge_stripe` runs → Polos checkpoints the execution result
+
+2. Workflow suspends for fraud review → Worker resources freed
+
+3. Worker 1 crashes during the wait
+
+4. Fraud team approves → Signal sent to orchestrator
+
+5. Worker 2 resumes on a different machine → Stripe is **not** called again, result replayed from the log guaranteeing exactly-once execution
+
+6. Confirmation email sent → workflow completes
+
+Polos handles failures, rescheduling, and checkpointing. You just focus on business logic.
+
 ## Why Polos?
 
 | Feature | Description |

@@ -1180,6 +1180,12 @@ class Step:
         )
         if found:
             # Step is complete, return result
+            from ..types import AgentResult
+            if isinstance(result, AgentResult):
+                deserialized_result = await deserialize(
+                    result.result, result.result_schema
+                )
+                result.result = deserialized_result
             return result
 
         # Step did not exist yet; raise WaitException to pause execution

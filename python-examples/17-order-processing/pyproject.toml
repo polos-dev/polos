@@ -1,0 +1,9 @@
+[project]
+name = "polos-order-processing"
+version = "0.1.0"
+description = "Order processing with human-in-the-loop fraud review"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[openai]",
+    "python-dotenv>=1.0.0",
+]

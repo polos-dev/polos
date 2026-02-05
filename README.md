@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <b>⭐ Star us on GitHub to support the project!</b>
+  <b>⭐ Star us to support the project!</b>
 </p>
 
 ---
@@ -95,6 +95,8 @@ Polos consists of three components:
 
 Imagine a workflow that charges a customer, then pauses for a human fraud review. In most frameworks, a server restart during that 24-hour wait would lose the state - or worse, re-run the charge on reboot. Polos guarantees exactly-once durable execution.
 
+<br />
+
 <p align="center">
   <video src="https://github.com/user-attachments/assets/4607d70e-b078-4b8e-ad2e-a28bd1820a3f" width="800" controls></video>
 </p>
@@ -114,6 +116,8 @@ Imagine a workflow that charges a customer, then pauses for a human fraud review
 6. Confirmation email sent → workflow completes
 
 Polos handles failures, rescheduling, and checkpointing. You just focus on business logic.
+
+---
 
 ## Why Polos?
 

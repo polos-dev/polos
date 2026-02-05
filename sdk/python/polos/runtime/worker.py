@@ -69,7 +69,7 @@ class Worker:
     def __init__(
         self,
         client: PolosClient,
-        deployment_id: str,
+        deployment_id: str | None = None,
         agents: list[Agent] | None = None,
         tools: list[Tool] | None = None,
         workflows: list[Workflow] | None = None,

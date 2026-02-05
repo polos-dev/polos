@@ -30,6 +30,7 @@ Each folder contains an independently executable example with its own `pyproject
 | [06-guardrails](./06-guardrails) | Input/output validation and content filtering |
 | [07-lifecycle-hooks](./07-lifecycle-hooks) | Agent lifecycle hooks (on_start, on_end, on_tool_call) |
 | [14-router-coordinator](./14-router-coordinator) | Multi-agent coordination with workflow orchestration |
+| [17-order-processing](./17-order-processing) | Order processing with human-in-the-loop fraud review (**used in the README demo**) |
 
 ### Workflows
 

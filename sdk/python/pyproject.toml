@@ -80,11 +80,13 @@ dev = [
 
 [tool.hatch.version]
 source = "vcs"
-raw-options = { root = "../..", tag_regex = "^python-sdk-v(?P<version>.*)$" }
+tag-pattern = "python-sdk-v(?P<version>.+)"
 
-[tool.setuptools_scm]
+[tool.hatch.version.raw-options]
 root = "../.."
-tag_regex = "^python-sdk-v(?P<version>.*)$"
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "python-sdk-v*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["polos"]

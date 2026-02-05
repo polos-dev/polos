@@ -86,7 +86,7 @@ async def _stream_from_provider(
     Returns:
         Dictionary with chunk_index, response_content, response_tool_calls, usage, raw_output
     """
-    from ..features.events import publish as publish_event
+    from ..features.events import publish as publish_event, EventData
 
     chunk_index = 0
     response_content = None
@@ -103,8 +103,10 @@ async def _stream_from_provider(
     await publish_event(
         client=polos_client,
         topic=topic,
-        event_type="stream_start",
-        data={"step": agent_step},
+        event_data=EventData(
+            event_type="stream_start",
+            data={"step": agent_step},
+        ),
     )
 
     # Stream from provider
@@ -157,18 +159,20 @@ async def _stream_from_provider(
             await publish_event(
                 client=polos_client,
                 topic=topic,
-                event_type=event_type,
-                data={
-                    "step": agent_step,
-                    "chunk_index": chunk_index,
-                    "content": normalized_chunk["data"].get("content"),
-                    "tool_call": normalized_chunk["data"].get("tool_call"),
-                    "usage": normalized_chunk["data"].get("usage"),
-                    "_metadata": {
-                        "execution_id": agent_run_id,
-                        "workflow_id": ctx.workflow_id,
-                    },
-                },
+                event_data=EventData(
+                    event_type=event_type,
+                    data={
+                        "step": agent_step,
+                        "chunk_index": chunk_index,
+                        "content": normalized_chunk.get("data", {}).get("content"),
+                        "tool_call": normalized_chunk.get("data", {}).get("tool_call"),
+                        "usage": normalized_chunk.get("data", {}).get("usage"),
+                        "_metadata": {
+                            "execution_id": agent_run_id,
+                            "workflow_id": ctx.workflow_id,
+                        },
+                    }
+                ),
             )
             chunk_index += 1
 

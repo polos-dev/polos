@@ -41,7 +41,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="workflow-basics-examples",
         workflows=[
             simple_workflow,
             process_order,

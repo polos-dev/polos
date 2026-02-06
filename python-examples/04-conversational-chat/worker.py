@@ -38,7 +38,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="chat-examples",
         agents=[chat_assistant],
         tools=[get_current_time, get_weather, calculator],
     )

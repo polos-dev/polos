@@ -37,7 +37,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="streaming-examples",
         agents=[storyteller],
     )
 

@@ -40,7 +40,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="structured-output-examples",
         agents=[movie_reviewer, recipe_generator, sentiment_analyzer],
     )
 

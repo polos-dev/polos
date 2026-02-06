@@ -32,7 +32,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="thinking-examples",
         agents=[thinking_agent, math_reasoner, logic_solver],
     )
 

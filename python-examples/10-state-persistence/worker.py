@@ -36,7 +36,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="state-persistence-examples",
         workflows=[
             counter_workflow,
             shopping_cart_workflow,

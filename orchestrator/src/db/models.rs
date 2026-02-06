@@ -53,6 +53,7 @@ pub struct Execution {
     pub run_timeout_seconds: Option<i32>,
     pub cancelled_at: Option<DateTime<Utc>>,
     pub cancelled_by: Option<String>,
+    pub root_workflow_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

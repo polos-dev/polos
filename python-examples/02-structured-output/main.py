@@ -38,7 +38,6 @@ async def main():
     client = PolosClient(
         project_id=project_id,
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-        deployment_id="structured-output-examples",
     )
 
     print("Invoking movie_reviewer agent...")

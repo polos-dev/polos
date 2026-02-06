@@ -33,7 +33,6 @@ async def run_logged_agent_demo():
     client = PolosClient(
         project_id=project_id,
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-        deployment_id="lifecycle-hooks-examples",
     )
 
     print("=" * 60)

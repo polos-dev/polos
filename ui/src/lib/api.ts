@@ -407,14 +407,14 @@ export const api = {
 
   streamEvents(
     projectId: string,
-    topic: string,
+    workflowId: string,
+    workflowRunId: string,
     onEvent: (event: any) => void,
     onError?: (error: Error) => void
   ): () => void {
-    const topicParam = encodeURIComponent(topic);
     // Set last_sequence_id=0 to fetch all events from the beginning
     // Note: EventSource doesn't support custom headers, so we pass project_id as a query parameter
-    const url = `${getApiBaseUrl()}/api/v1/events/stream?topic=${topicParam}&last_sequence_id=0&project_id=${encodeURIComponent(projectId)}`;
+    const url = `${getApiBaseUrl()}/api/v1/events/stream?workflow_id=${encodeURIComponent(workflowId)}&workflow_run_id=${encodeURIComponent(workflowRunId)}&last_sequence_id=0&project_id=${encodeURIComponent(projectId)}`;
 
     const eventSource = new EventSource(url, {
       withCredentials: true,

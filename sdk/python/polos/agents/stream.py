@@ -210,7 +210,7 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                 # Emit one text_delta event with full response for clients who are streaming
                 await ctx.step.publish_event(
                     f"llm_generate:text_delta:{agent_step}",
-                    topic=f"workflow:{agent_run_id}",
+                    topic=f"workflow/{ctx.root_workflow_id}/{ctx.root_execution_id}",
                     event_type="text_delta",
                     data={
                         "step": agent_step,

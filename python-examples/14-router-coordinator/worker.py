@@ -39,7 +39,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="router-coordinator-examples",
         workflows=[blog_review, generate_blog],
         agents=[
             grammar_review_agent,

@@ -25,6 +25,7 @@ class WorkflowContext:
         user_id: str | None = None,
         parent_execution_id: str | None = None,
         root_execution_id: str | None = None,
+        root_workflow_id: str | None = None,
         retry_count: int = 0,
         created_at: datetime | None = None,
         workflow_type: str | None = "workflow",
@@ -38,6 +39,7 @@ class WorkflowContext:
         self.deployment_id = deployment_id
         self.parent_execution_id = parent_execution_id
         self.root_execution_id = root_execution_id or execution_id
+        self.root_workflow_id = root_workflow_id or workflow_id
         self.retry_count = retry_count
         self.created_at = created_at
         self.session_id = session_id
@@ -85,6 +87,7 @@ class AgentContext(WorkflowContext):
         deployment_id: str,
         parent_execution_id: str | None = None,
         root_execution_id: str | None = None,
+        root_workflow_id: str | None = None,
         retry_count: int = 0,
         model: str = "gpt-4",
         provider: str = "openai",
@@ -110,6 +113,7 @@ class AgentContext(WorkflowContext):
             user_id=user_id,
             parent_execution_id=parent_execution_id,
             root_execution_id=root_execution_id,
+            root_workflow_id=root_workflow_id,
             retry_count=retry_count,
             created_at=created_at,
             workflow_type="agent",

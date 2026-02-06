@@ -78,6 +78,7 @@ class WorkerServer:
                 workflow_id = body.get("workflow_id")
                 payload = body.get("payload", {})
                 root_execution_id = body.get("root_execution_id")
+                root_workflow_id = body.get("root_workflow_id")
                 step_key = body.get("step_key")
                 session_id = body.get("session_id")
                 user_id = body.get("user_id")
@@ -86,12 +87,13 @@ class WorkerServer:
                 # Log execution request with detailed context
                 logger.info(
                     "POST /execute - execution_id=%s, worker_id=%s, workflow_id=%s, "
-                    "root_execution_id=%s, step_key=%s, session_id=%s, user_id=%s, "
-                    "retry_count=%d",
+                    "root_execution_id=%s, root_workflow_id=%s, step_key=%s, "
+                    "session_id=%s, user_id=%s, retry_count=%d",
                     execution_id,
                     self.worker_id,
                     workflow_id,
                     root_execution_id,
+                    root_workflow_id,
                     step_key,
                     session_id,
                     user_id,
@@ -106,6 +108,7 @@ class WorkerServer:
                     "payload": payload,
                     "parent_execution_id": body.get("parent_execution_id"),
                     "root_execution_id": root_execution_id,
+                    "root_workflow_id": root_workflow_id,
                     "step_key": step_key,
                     "retry_count": retry_count,
                     "created_at": body.get("created_at"),

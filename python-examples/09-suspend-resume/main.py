@@ -102,14 +102,13 @@ async def run_approval_workflow(client: PolosClient):
 
     # Build the suspend topic used by the workflow
     suspend_step_key = "await_approval"
-    suspend_topic = f"{suspend_step_key}/{handle.id}"
 
-    print(f"\nStreaming suspend events on topic: {suspend_topic}")
+    print(f"\nStreaming suspend events for workflow: {handle.root_workflow_id}")
 
     # Stream events from the suspend topic and display the data when we receive the suspend event
     suspend_data = None
-    async for event in events.stream_topic(client, suspend_topic):
-        if event.event_type == "suspend":
+    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+        if event.event_type.startswith("suspend_"):
             print("\nReceived suspend event!")
             suspend_data = event.data
             print(f"  Request ID: {suspend_data.get('request_id')}")
@@ -138,6 +137,7 @@ async def run_approval_workflow(client: PolosClient):
     }
 
     await client.resume(
+        suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend_step_key,
         data=resume_data,
@@ -184,13 +184,11 @@ async def run_multi_step_form(client: PolosClient):
     ]
 
     for step_key, step_name, fields in steps:
-        suspend_topic = f"{step_key}/{handle.id}"
         print(f"\nWaiting for step: {step_name}")
-        print(f"Streaming events on topic: {suspend_topic}")
 
         # Stream events until we receive the suspend event
-        async for event in events.stream_topic(client, suspend_topic):
-            if event.event_type == "suspend":
+        async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+            if event.event_type.startswith("suspend_"):
                 suspend_data = event.data
                 print(f"\n  Step {suspend_data.get('step')} of {suspend_data.get('total_steps')}")
                 print(f"  {suspend_data.get('prompt')}")
@@ -223,6 +221,7 @@ async def run_multi_step_form(client: PolosClient):
         # Resume
         print(f"\nSubmitting {step_name}...")
         await client.resume(
+            suspend_workflow_id=handle.root_workflow_id,
             suspend_execution_id=handle.id,
             suspend_step_key=step_key,
             data=resume_data,
@@ -289,14 +288,12 @@ async def run_document_review(client: PolosClient):
     for i, reviewer in enumerate(reviewers):
         # Build the suspend step key matching the workflow
         suspend_step_key = f"review_{i}_{reviewer}"
-        suspend_topic = f"{suspend_step_key}/{handle.id}"
 
         print(f"\nWaiting for reviewer: {reviewer}")
-        print(f"Streaming events on topic: {suspend_topic}")
 
         # Stream events until we receive the suspend event
-        async for event in events.stream_topic(client, suspend_topic):
-            if event.event_type == "suspend":
+        async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+            if event.event_type.startswith("suspend_"):
                 suspend_data = event.data
                 print(f"\n  Reviewer {suspend_data.get('reviewer_number')} of {suspend_data.get('total_reviewers')}")
                 print(f"  Document: {suspend_data.get('document_title')}")
@@ -319,6 +316,7 @@ async def run_document_review(client: PolosClient):
         # Resume
         print(f"\nSubmitting {reviewer}'s review...")
         await client.resume(
+            suspend_workflow_id=handle.root_workflow_id,
             suspend_execution_id=handle.id,
             suspend_step_key=suspend_step_key,
             data=resume_data,

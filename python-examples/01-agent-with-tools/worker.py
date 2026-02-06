@@ -46,7 +46,6 @@ async def main():
     # Create worker with our workflows, agents, and tools
     worker = Worker(
         client=client,
-        deployment_id="python-examples",
         agents=[weather_agent],
         tools=[get_weather],
     )

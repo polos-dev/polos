@@ -130,6 +130,7 @@ class TestAgentExecution:
                     agent_id="test-agent",
                     execution_id=execution_id,
                     root_execution_id=root_execution_id,
+                    root_workflow_id="test-agent",
                     deployment_id="test-deployment",
                     session_id="test-session",
                 )
@@ -311,6 +312,7 @@ class TestAgentExecution:
                     agent_id="test-agent-tools",
                     execution_id=execution_id,
                     root_execution_id=root_execution_id,
+                    root_workflow_id="test-agent-tools",
                     deployment_id="test-deployment",
                     session_id="test-session",
                 )
@@ -453,6 +455,7 @@ class TestAgentExecution:
                     agent_id="test-agent-stop",
                     execution_id=execution_id,
                     root_execution_id=root_execution_id,
+                    root_workflow_id="test-agent-stop",
                     deployment_id="test-deployment",
                     session_id="test-session",
                 )

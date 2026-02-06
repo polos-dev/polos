@@ -32,7 +32,6 @@ async def chat_loop():
     client = PolosClient(
         project_id=project_id,
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-        deployment_id="chat-examples",
     )
 
     # Generate a conversation ID to maintain conversation context

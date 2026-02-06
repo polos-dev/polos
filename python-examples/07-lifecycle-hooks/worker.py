@@ -33,7 +33,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="lifecycle-hooks-examples",
         agents=[logged_agent, simple_logged_agent, validated_agent],
         tools=[search, calculate],
     )

@@ -189,12 +189,12 @@ export const AgentRunPage: React.FC = () => {
       setExecutionId(execId);
 
       // Stream events from SSE endpoint
-      const topic = `workflow:${execId}`;
       let accumulatedContent = '';
 
       const cleanup = api.streamEvents(
         selectedProjectId,
-        topic,
+        agentId,
+        execId,
         (event) => {
           if (event.event_type === 'text_delta') {
             // Accumulate text deltas

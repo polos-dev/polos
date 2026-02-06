@@ -321,6 +321,7 @@ impl Database {
             run_timeout_seconds: row.get("run_timeout_seconds"),
             cancelled_at: row.get("cancelled_at"),
             cancelled_by: row.get("cancelled_by"),
+            root_workflow_id: None,
         })
     }
 
@@ -433,6 +434,7 @@ impl Database {
                 run_timeout_seconds: row.get("run_timeout_seconds"),
                 cancelled_at: row.get("cancelled_at"),
                 cancelled_by: row.get("cancelled_by"),
+                root_workflow_id: None,
             })
             .collect();
 

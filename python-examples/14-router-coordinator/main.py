@@ -62,7 +62,7 @@ async def demo_generate_blog(client: PolosClient):
     print("-" * 60)
 
     # Stream workflow events and print agent_finish and workflow_finish events
-    async for event in events.stream_workflow(client, handle.id):
+    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type == "agent_finish":
@@ -120,7 +120,7 @@ async def demo_blog_review_only(client: PolosClient):
     print("-" * 60)
 
     # Stream workflow events
-    async for event in events.stream_workflow(client, handle.id):
+    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type == "agent_finish":

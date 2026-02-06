@@ -373,13 +373,15 @@ describe('api', () => {
 
       const cleanup = api.streamEvents(
         'project-123',
-        'test-topic',
+        'test-workflow',
+        'run-456',
         onEvent,
         onError
       );
 
       expect(eventSourceInstance).toBeTruthy();
-      expect(eventSourceInstance.url).toContain('topic=test-topic');
+      expect(eventSourceInstance.url).toContain('workflow_id=test-workflow');
+      expect(eventSourceInstance.url).toContain('workflow_run_id=run-456');
       expect(eventSourceInstance.url).toContain('project_id=project-123');
       expect(eventSourceInstance.url).toContain('last_sequence_id=0');
       expect(eventSourceInstance.withCredentials).toBe(true);
@@ -420,7 +422,7 @@ describe('api', () => {
         }
       } as any;
 
-      api.streamEvents('project-123', 'test-topic', onEvent);
+      api.streamEvents('project-123', 'test-workflow', 'run-456', onEvent);
 
       // Simulate valid JSON message
       eventSourceInstance.simulateMessage('{"type":"test","data":"value"}');
@@ -457,7 +459,7 @@ describe('api', () => {
         }
       } as any;
 
-      api.streamEvents('project-123', 'test-topic', onEvent);
+      api.streamEvents('project-123', 'test-workflow', 'run-456', onEvent);
 
       // Simulate keepalive message
       eventSourceInstance.simulateMessage('keepalive');
@@ -497,7 +499,7 @@ describe('api', () => {
         }
       } as any;
 
-      api.streamEvents('project-123', 'test-topic', vi.fn(), onError);
+      api.streamEvents('project-123', 'test-workflow', 'run-456', vi.fn(), onError);
 
       // Wait for onerror to be set, then simulate error
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -546,7 +548,7 @@ describe('api', () => {
         }
       } as any;
 
-      api.streamEvents('project-123', 'test-topic', onEvent);
+      api.streamEvents('project-123', 'test-workflow', 'run-456', onEvent);
 
       // Simulate malformed JSON
       eventSourceInstance.simulateMessage('invalid json');

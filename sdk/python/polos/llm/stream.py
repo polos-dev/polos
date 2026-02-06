@@ -50,7 +50,7 @@ async def _llm_stream(ctx: WorkflowContext, payload: dict[str, Any]) -> dict[str
     # Convert input to messages format (without system_prompt - provider will handle it)
     messages = convert_input_to_messages(input_data, system_prompt=None)
 
-    topic = f"workflow:{agent_run_id}"
+    topic = f"workflow/{ctx.root_workflow_id}/{ctx.root_execution_id}"
 
     # Stream from LLM API and publish events
     # Call helper function to handle streaming using step.run() for durable execution
@@ -86,7 +86,8 @@ async def _stream_from_provider(
     Returns:
         Dictionary with chunk_index, response_content, response_tool_calls, usage, raw_output
     """
-    from ..features.events import publish as publish_event, EventData
+    from ..features.events import EventData
+    from ..features.events import publish as publish_event
 
     chunk_index = 0
     response_content = None
@@ -171,7 +172,7 @@ async def _stream_from_provider(
                             "execution_id": agent_run_id,
                             "workflow_id": ctx.workflow_id,
                         },
-                    }
+                    },
                 ),
             )
             chunk_index += 1

@@ -816,6 +816,7 @@ class Worker:
                 "deployment_id": workflow_data.get("deployment_id"),
                 "parent_execution_id": workflow_data.get("parent_execution_id"),
                 "root_execution_id": workflow_data.get("root_execution_id"),
+                "root_workflow_id": workflow_data.get("root_workflow_id"),
                 "retry_count": workflow_data.get("retry_count", 0),
                 "session_id": workflow_data.get("session_id"),
                 "user_id": workflow_data.get("user_id"),
@@ -1250,8 +1251,10 @@ class Worker:
         try:
             from ..features.events import publish
 
-            # Topic format: workflow:{execution_id}
-            topic = f"workflow:{context.get('root_execution_id') or execution_id}"
+            # Topic format: workflow/{root_workflow_id}/{root_execution_id}
+            root_execution_id = context.get("root_execution_id") or execution_id
+            root_workflow_id = context.get("root_workflow_id") or workflow_id
+            topic = f"workflow/{root_workflow_id}/{root_execution_id}"
 
             # Event type: {workflow_id}_cancel
             event_type = f"{context.get('workflow_type', 'workflow')}_cancel"

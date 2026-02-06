@@ -272,4 +272,5 @@ class TestPublishStepEvent:
         ):
             await step._publish_step_event("step_start", "test-step", "run", {})
             call_kwargs = mock_publish.call_args[1]
-            assert call_kwargs["topic"] == f"workflow:{root_execution_id}"
+            root_workflow_id = mock_workflow_context.root_workflow_id
+            assert call_kwargs["topic"] == f"workflow/{root_workflow_id}/{root_execution_id}"

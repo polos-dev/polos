@@ -163,6 +163,7 @@ impl Database {
                 run_timeout_seconds: row.get("run_timeout_seconds"),
                 cancelled_at: None,
                 cancelled_by: None,
+                root_workflow_id: None,
             };
             tx.commit().await?;
             Ok(Some(execution))
@@ -303,15 +304,17 @@ impl Database {
           AND EXISTS (SELECT 1 FROM updated_execution)
         RETURNING *
       )
-      SELECT 
+      SELECT
         -- Execution fields
         e.id as exec_id, e.workflow_id, e.status as exec_status, e.payload, e.result, e.error,
         e.created_at as exec_created_at, e.started_at, e.completed_at,
-        e.deployment_id, e.parent_execution_id, e.root_execution_id,
+        e.deployment_id, e.parent_execution_id,
+        COALESCE(e.root_execution_id, e.id) as root_execution_id,
         e.retry_count, e.step_key, e.queue_name, e.concurrency_key,
         e.batch_id, e.session_id, e.user_id, e.output_schema_name,
         e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state,
         e.claimed_at, e.queued_at, e.run_timeout_seconds,
+        root_exec.workflow_id as root_workflow_id,
         -- Worker fields
         w.id as worker_id, w.status as worker_status, w.last_heartbeat, w.capabilities,
         w.current_deployment_id, w.created_at as worker_created_at,
@@ -320,6 +323,7 @@ impl Database {
         w.push_failure_threshold
       FROM updated_execution e
       CROSS JOIN updated_worker w
+      LEFT JOIN workflow_executions root_exec ON root_exec.id = COALESCE(e.root_execution_id, e.id)
       "#,
         )
         .bind(&deployment_id)
@@ -364,6 +368,7 @@ impl Database {
                     run_timeout_seconds: row.get("run_timeout_seconds"),
                     cancelled_at: None,
                     cancelled_by: None,
+                    root_workflow_id: row.get("root_workflow_id"),
                 };
 
                 // Build Worker struct

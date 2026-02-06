@@ -266,6 +266,7 @@ async def publish(
 async def _stream(
     client: PolosClient,
     topic: str | None = None,
+    workflow_id: str | None = None,
     workflow_run_id: str | None = None,
     last_sequence_id: int | None = None,
     last_timestamp: datetime | None = None,
@@ -287,6 +288,9 @@ async def _stream(
 
     # If workflow_run_id is provided, use it (API will construct topic from it)
     if workflow_run_id:
+        if not workflow_id:
+            raise ValueError("workflow_id must be provided when workflow_run_id is provided")
+        params["workflow_id"] = workflow_id
         params["workflow_run_id"] = workflow_run_id
     elif topic:
         params["topic"] = topic
@@ -382,7 +386,8 @@ def stream_topic(
 
 def stream_workflow(
     client: PolosClient,
-    workflow_run_id: str = None,
+    workflow_id: str,
+    workflow_run_id: str,
     last_sequence_id: int | None = None,
     last_timestamp: datetime | None = None,
 ) -> AsyncIterator[StreamEvent]:
@@ -396,8 +401,8 @@ def stream_workflow(
 
     Args:
         client: PolosClient instance
-        workflow_run_id: Workflow run ID. If provided, streams events for
-            "workflow:{workflow_run_id}" topic.
+        workflow_id: Workflow ID (name) of the workflow run.
+        workflow_run_id: Workflow run ID to stream events for.
         last_sequence_id: Optional sequence ID to start streaming after. If provided,
             streaming begins after this sequence ID.
         last_timestamp: Optional timestamp to start streaming after. If provided
@@ -408,7 +413,7 @@ def stream_workflow(
             sequence_id, created_at
 
     Example:
-        async for event in events.stream_workflow("review/123"):
+        async for event in events.stream_workflow("review", "123"):
             if event.event_type == "message":
                 print(event.data.get("message"))
             elif event.event_type == "result":
@@ -418,6 +423,7 @@ def stream_workflow(
     async def _stream_with_finish_check():
         async for event in _stream(
             client=client,
+            workflow_id=workflow_id,
             workflow_run_id=workflow_run_id,
             last_sequence_id=last_sequence_id,
             last_timestamp=last_timestamp,

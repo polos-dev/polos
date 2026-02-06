@@ -37,7 +37,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="scheduled-workflow-examples",
         workflows=[
             daily_cleanup,
             morning_report,

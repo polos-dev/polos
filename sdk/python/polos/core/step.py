@@ -211,7 +211,7 @@ class Step:
         asyncio.create_task(
             batch_publish(
                 client=client,
-                topic=f"workflow:{self.ctx.root_execution_id or self.ctx.execution_id}",
+                topic=f"workflow/{self.ctx.root_workflow_id}/{self.ctx.root_execution_id}",
                 events=events,
                 execution_id=self.ctx.execution_id,
                 root_execution_id=self.ctx.root_execution_id,
@@ -648,7 +648,7 @@ class Step:
             data: Event data
             event_type: Optional event type
         """
-        topic = f"workflow:{self.ctx.root_execution_id or self.ctx.execution_id}"
+        topic = f"workflow/{self.ctx.root_workflow_id}/{self.ctx.root_execution_id}"
         return await self.publish_event(step_key, topic, data, event_type)
 
     async def suspend(
@@ -656,11 +656,9 @@ class Step:
     ) -> Any:
         """Suspend execution and wait for a resume event.
 
-        This internally uses wait_for_event and waits for an event on topic
-        f"{step_key}/{ctx.root_execution_id}/resume".
-
-        The data passed to suspend will be included in the suspend event that is
-        published internally. When resumed, the event data from the resume event is returned.
+        Publishes a suspend event on the shared workflow topic with
+        event_type="suspend_{step_key}". The orchestrator will resume when it
+        sees a matching event_type="resume_{step_key}" on the same topic.
 
         Args:
             step_key: Step key identifier (must be unique per execution)
@@ -676,13 +674,13 @@ class Step:
             return await self._handle_existing_step(existing_step)
 
         serialized_data = serialize(data)
-        topic = f"{step_key}/{self.ctx.root_execution_id or self.ctx.execution_id}"
+        topic = f"workflow/{self.ctx.root_workflow_id}/{self.ctx.root_execution_id}"
         # Publish suspend event
         client = get_client_or_raise()
         await batch_publish(
             client=client,
             topic=topic,
-            events=[EventData(data=serialized_data, event_type="suspend")],
+            events=[EventData(data=serialized_data, event_type=f"suspend_{step_key}")],
             execution_id=self.ctx.execution_id,
             root_execution_id=self.ctx.root_execution_id,
         )
@@ -692,11 +690,13 @@ class Step:
         if timeout is not None:
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=timeout)
 
-        # Add row in wait_steps with wait_type="event", wait_topic=topic, expires_at=timeout
+        # Add row in wait_steps with wait_type="suspend", wait_topic=topic, expires_at=timeout
+        # Using "suspend" (not "event") so the orchestrator can distinguish from wait_for_event
+        # and require event_type="resume_{step_key}" matching for resume.
         await _set_waiting(
             self.ctx.execution_id,
             wait_until=expires_at,
-            wait_type="event",
+            wait_type="suspend",
             step_key=step_key,
             wait_topic=topic,
             expires_at=expires_at,
@@ -713,27 +713,32 @@ class Step:
         step_key: str,
         suspend_step_key: str,
         suspend_execution_id: str,
+        suspend_workflow_id: str,
         data: dict[str, Any] | BaseModel,
     ) -> None:
         """Resume a suspended execution by publishing a resume event.
 
-        This publishes an event with topic f"{step_key}/{ctx.root_execution_id}",
-        event_type="resume", and data=data.
+        Publishes an event on the shared workflow topic with
+        event_type="resume_{suspend_step_key}". The orchestrator matches this
+        against wait_steps where step_key matches.
 
         Args:
-            step_key: Step key identifier (must be unique per execution)
+            step_key: Step key identifier for this resume step (must be unique per execution)
+            suspend_step_key: The step key used in the original suspend() call
+            suspend_execution_id: The root execution ID of the suspended execution
+            suspend_workflow_id: The root workflow ID of the suspended execution
             data: Data to pass in the resume event (can be dict or Pydantic BaseModel)
         """
         serialized_data = serialize(data)
 
-        topic = f"{suspend_step_key}/{suspend_execution_id}/resume"
+        topic = f"workflow/{suspend_workflow_id}/{suspend_execution_id}"
 
-        # Publish event with event_type="resume"
+        # Publish event with event_type="resume_{step_key}"
         await self.publish_event(
             step_key=step_key,
             topic=topic,
             data=serialized_data,
-            event_type="resume",
+            event_type=f"resume_{suspend_step_key}",
         )
 
     async def _invoke(
@@ -800,6 +805,7 @@ class Step:
             user_id=self.ctx.user_id,
             deployment_id=self.ctx.deployment_id,
             parent_execution_id=self.ctx.execution_id,
+            root_workflow_id=self.ctx.root_workflow_id,
             root_execution_id=self.ctx.root_execution_id or self.ctx.execution_id,
             step_key=step_key if wait_for_subworkflow else None,
             wait_for_subworkflow=wait_for_subworkflow,
@@ -973,6 +979,7 @@ class Step:
             workflows=workflow_requests,
             deployment_id=self.ctx.deployment_id,
             parent_execution_id=self.ctx.execution_id,
+            root_workflow_id=self.ctx.root_workflow_id,
             root_execution_id=self.ctx.root_execution_id or self.ctx.execution_id,
             step_key=None,  # Don't set step_key since we don't want to wait
             # for the batch to complete
@@ -1074,6 +1081,7 @@ class Step:
             workflows=workflow_requests,
             deployment_id=self.ctx.deployment_id,
             parent_execution_id=self.ctx.execution_id,
+            root_workflow_id=self.ctx.root_workflow_id,
             root_execution_id=self.ctx.root_execution_id or self.ctx.execution_id,
             step_key=step_key,
             session_id=self.ctx.session_id,
@@ -1181,10 +1189,9 @@ class Step:
         if found:
             # Step is complete, return result
             from ..types import AgentResult
+
             if isinstance(result, AgentResult):
-                deserialized_result = await deserialize(
-                    result.result, result.result_schema
-                )
+                deserialized_result = await deserialize(result.result, result.result_schema)
                 result.result = deserialized_result
             return result
 

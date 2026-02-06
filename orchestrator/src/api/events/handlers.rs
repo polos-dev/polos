@@ -329,6 +329,7 @@ pub async fn get_events(
     params(
         ("X-Project-ID" = String, Header, description = "Project ID"),
         ("topic" = Option<String>, Query, description = "Topic to stream from"),
+        ("workflow_id" = Option<String>, Query, description = "Workflow ID (required with workflow_run_id)"),
         ("workflow_run_id" = Option<String>, Query, description = "Workflow run ID to stream events for"),
         ("last_sequence_id" = Option<i64>, Query, description = "Last sequence ID for continuation"),
         ("last_timestamp" = Option<String>, Query, description = "Last timestamp for continuation (RFC3339)")
@@ -384,11 +385,19 @@ pub async fn stream_events(
             )
         })?;
 
+    let workflow_id = params.get("workflow_id").cloned();
     let workflow_run_id = params
         .get("workflow_run_id")
         .and_then(|s| Uuid::parse_str(s).ok());
     let topic = if let Some(run_id) = workflow_run_id {
-        format!("workflow:{}", run_id)
+        let wf_id = workflow_id.ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ErrorResponse {
+                error: "workflow_id is required when workflow_run_id is provided".to_string(),
+                error_type: "BAD_REQUEST".to_string(),
+            }),
+        ))?;
+        format!("workflow/{}/{}", wf_id, run_id)
     } else {
         params.get("topic").cloned().unwrap_or_default()
     };

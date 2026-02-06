@@ -108,21 +108,31 @@ impl Database {
             last_data = Some(data);
         }
 
-        // Check for executions waiting on this topic
-        // Use FOR UPDATE SKIP LOCKED to allow parallel processing across multiple orchestrator instances
+        // Check for executions waiting on this topic.
+        // Two wait types:
+        // - "suspend": from ctx.step.suspend(), requires event_type="resume_{step_key}" matching
+        // - "event": from ctx.step.wait_for_event(), any event on the topic resumes the wait
         let waiting_rows = sqlx::query(
-            "SELECT ws.execution_id, COALESCE(ws.root_execution_id, ws.execution_id) as root_execution_id, ws.step_key
-            FROM wait_steps ws
-            INNER JOIN workflow_executions e ON ws.execution_id = e.id
-            WHERE e.status = 'waiting'
-            AND ws.wait_type = 'event'
-            AND ws.wait_topic = $1
-            AND ws.step_key IS NOT NULL
-            FOR UPDATE SKIP LOCKED"
-        )
-        .bind(&topic)
-        .fetch_all(&mut *tx)
-        .await?;
+                "SELECT ws.execution_id, COALESCE(ws.root_execution_id, ws.execution_id) as root_execution_id, ws.step_key
+                FROM wait_steps ws
+                INNER JOIN workflow_executions e ON ws.execution_id = e.id
+                WHERE e.status = 'waiting'
+                AND ws.wait_type IN ('event', 'suspend')
+                AND ws.wait_topic = $1
+                AND ws.step_key IS NOT NULL
+                AND (
+                    -- suspend: require event_type = 'resume_{step_key}'
+                    (ws.wait_type = 'suspend' AND $2 = 'resume_' || ws.step_key)
+                    OR
+                    -- wait_for_event: any event on the topic matches
+                    (ws.wait_type = 'event')
+                )
+                FOR UPDATE SKIP LOCKED"
+            )
+            .bind(&topic)
+            .bind(last_event_type.as_deref().unwrap_or(""))
+            .fetch_all(&mut *tx)
+            .await?;
 
         // Resume each waiting execution (use last event data)
         for row in waiting_rows {
@@ -160,7 +170,7 @@ impl Database {
       .await?;
 
             // Clear wait step
-            sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL, wait_topic = NULL, expires_at = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type = 'event'")
+            sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL, wait_topic = NULL, expires_at = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type IN ('event', 'suspend')")
         .bind(exec_id)
         .bind(&step_key_value)
         .execute(&mut *tx)
@@ -193,17 +203,18 @@ impl Database {
         let result = sqlx::query_scalar::<_, i64>(
             r#"
         WITH waiting_for_events AS (
-            -- Find one execution waiting for an event
-            SELECT 
+            -- Find one execution waiting for an event (suspend or wait_for_event)
+            SELECT
                 ws.execution_id,
                 ws.step_key,
                 ws.wait_topic,
+                ws.wait_type,
                 ws.created_at as wait_created_at,
                 e.project_id
             FROM wait_steps ws
             INNER JOIN workflow_executions e ON ws.execution_id = e.id
             WHERE e.status = 'waiting'
-              AND ws.wait_type = 'event'
+              AND ws.wait_type IN ('event', 'suspend')
               AND ws.wait_topic IS NOT NULL
               AND ws.step_key IS NOT NULL
             ORDER BY ws.created_at ASC  -- Process oldest waits first
@@ -211,8 +222,10 @@ impl Database {
             FOR UPDATE OF ws SKIP LOCKED
         ),
         matching_event AS (
-            -- Find the most recent event for this topic
-            SELECT 
+            -- Find a matching event for this wait:
+            -- suspend: requires event_type = 'resume_{step_key}'
+            -- event (wait_for_event): any event on the topic matches
+            SELECT
                 w.execution_id,
                 w.step_key,
                 w.wait_topic,
@@ -230,6 +243,13 @@ impl Database {
                   AND e.status = 'valid'
                   AND e.project_id = w.project_id
                   AND e.created_at >= w.wait_created_at
+                  AND (
+                      -- suspend: require event_type = 'resume_{step_key}'
+                      (w.wait_type = 'suspend' AND e.event_type = 'resume_' || w.step_key)
+                      OR
+                      -- wait_for_event: any event on the topic matches
+                      (w.wait_type = 'event')
+                  )
                 ORDER BY e.sequence_id DESC
                 LIMIT 1
             ) e ON true
@@ -274,7 +294,7 @@ impl Database {
             FROM matching_event me
             WHERE ws.execution_id = me.execution_id
               AND ws.step_key = me.step_key
-              AND ws.wait_type = 'event'
+              AND ws.wait_type IN ('event', 'suspend')
             RETURNING 1
         ),
         resumed_execution AS (

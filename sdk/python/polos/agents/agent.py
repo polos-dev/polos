@@ -68,7 +68,7 @@ class StreamResult:
         # Expose commonly used properties for convenience
         self.agent_run_id = execution_handle.id  # execution_id is the same as agent_run_id
         self.topic = (
-            f"workflow:{execution_handle.root_execution_id}"  # Topic derived from root_execution_id
+            f"workflow/{execution_handle.root_workflow_id}/{execution_handle.root_execution_id}"
         )
 
     # Delegate ExecutionHandle properties/methods
@@ -91,6 +91,11 @@ class StreamResult:
     def parent_execution_id(self) -> str | None:
         """Get parent execution ID."""
         return self.handle.parent_execution_id
+
+    @property
+    def root_workflow_id(self) -> str | None:
+        """Get root execution ID."""
+        return self.handle.root_workflow_id
 
     @property
     def root_execution_id(self) -> str | None:
@@ -170,11 +175,14 @@ class StreamResult:
         from ..features.events import stream_workflow
 
         async for event in stream_workflow(
-            client=self.client, workflow_run_id=self.agent_run_id, last_sequence_id=0
+            client=self.client,
+            workflow_id=self.root_workflow_id,
+            workflow_run_id=self.root_execution_id,
+            last_sequence_id=0,
         ):
             if (
                 event.event_type == "agent_finish"
-                and event.data.get("_metadata", {}).get("execution_id") == self.agent_run_id
+                and event.data.get("_metadata", {}).get("execution_id") == self.root_execution_id
             ):
                 result_data = event.data.get("result")
                 break
@@ -200,12 +208,15 @@ class AgentStreamHandle:
         self,
         client: PolosClient,
         agent_run_id: str,
+        root_workflow_id: str,
         root_execution_id: str,
         created_at: str | None = None,
     ):
         self.client = client
         self.agent_run_id = agent_run_id
-        self.topic = f"workflow:{root_execution_id or agent_run_id}"
+        self.root_workflow_id = root_workflow_id
+        self.root_execution_id = root_execution_id or agent_run_id
+        self.topic = f"workflow/{self.root_workflow_id}/{self.root_execution_id}"
         self.last_valid_event_id = None  # Track last valid event (skip invalid ones)
         self.created_at = created_at  # Timestamp when agent_run was created
 
@@ -227,7 +238,10 @@ class AgentStreamHandle:
 
         # Use events.stream_workflow() with agent_run_id
         async for event in stream_workflow(
-            client=self.client, workflow_run_id=self.agent_run_id, last_timestamp=last_timestamp
+            client=self.client,
+            workflow_id=self.root_workflow_id,
+            workflow_run_id=self.root_execution_id,
+            last_timestamp=last_timestamp,
         ):
             event_type = event.event_type
             self.last_valid_event_id = event.id
@@ -236,14 +250,14 @@ class AgentStreamHandle:
             # Handle workflow finish event
             if (
                 event_type == "agent_finish"
-                and event.data.get("_metadata", {}).get("execution_id") == self.agent_run_id
+                and event.data.get("_metadata", {}).get("execution_id") == self.root_execution_id
             ):
                 break
 
     def __repr__(self) -> str:
         return (
             f"AgentStreamHandle(agent_run_id={self.agent_run_id}, "
-            f"root_execution_id={self.root_execution_id or self.agent_run_id})"
+            f"root_execution_id={self.root_execution_id})"
         )
 
 
@@ -262,6 +276,7 @@ class TextChunkIterator:
             handle = AgentStreamHandle(
                 self.result.client,
                 self.result.id,
+                self.result.root_workflow_id,
                 self.result.root_execution_id,
                 self.result.created_at,
             )
@@ -292,6 +307,7 @@ class FullEventIterator:
             handle = AgentStreamHandle(
                 self.result.client,
                 self.result.id,
+                self.result.root_workflow_id,
                 self.result.root_execution_id,
                 self.result.created_at,
             )
@@ -512,8 +528,6 @@ class Agent(Workflow):
             guardrail_max_retries=self.guardrail_max_retries,
         )
 
-        # Create agent_run record using step.run() for durable execution
-        # agent_run_id is now the same as execution_id
         agent_run_id = ctx.execution_id
 
         # Update context with conversation_id if provided

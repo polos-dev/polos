@@ -379,18 +379,19 @@ class TestPolosClientResume:
 
         suspend_execution_id = str(uuid.uuid4())
         suspend_step_key = "test-step"
+        suspend_workflow_id = "test-workflow"
         data = {"key": "value"}
 
         with patch("polos.features.events.batch_publish", new_callable=AsyncMock) as mock_publish:
-            await client.resume(suspend_execution_id, suspend_step_key, data)
+            await client.resume(suspend_workflow_id, suspend_execution_id, suspend_step_key, data)
 
             mock_publish.assert_called_once()
             call_kwargs = mock_publish.call_args[1]
-            assert call_kwargs["topic"] == f"{suspend_step_key}/{suspend_execution_id}"
+            assert call_kwargs["topic"] == f"workflow/{suspend_workflow_id}/{suspend_execution_id}"
             assert call_kwargs["client"] == client
             events = call_kwargs["events"]
             assert len(events) == 1
-            assert events[0].event_type == "resume"
+            assert events[0].event_type == f"resume_{suspend_step_key}"
             assert events[0].data == data
 
 

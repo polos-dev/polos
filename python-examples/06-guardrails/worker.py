@@ -32,7 +32,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="guardrails-examples",
         agents=[safe_assistant, content_generator, simple_agent],
     )
 

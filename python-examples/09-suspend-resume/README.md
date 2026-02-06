@@ -62,7 +62,7 @@ The `main.py` script provides an interactive demonstration of suspend/resume:
 2. **Multi-Step Form** - Fill out a 3-step form with suspend between each step
 3. **Document Review** - Simulate multiple reviewers providing feedback
 
-The demo polls for suspended state, prompts you for input, and resumes the workflow.
+The demo streams events to detect when the workflow suspends, prompts you for input, and resumes the workflow.
 
 ## Suspend/Resume Flow
 
@@ -71,17 +71,24 @@ The demo polls for suspended state, prompts you for input, and resumes the workf
    │
 2. ctx.step.suspend("await_approval", data={...})
    │
-   └──> Workflow pauses, status becomes "suspended"
+   └──> Workflow pauses, status becomes "waiting"
+   │    Suspend event published to workflow/{root_workflow_id}/{root_execution_id}
+   │    with event_type="suspend_await_approval"
    │
-3. Client detects suspended state
+3. Client streams events via events.stream_workflow()
+   │    and detects the suspend event
    │
 4. Client collects user input
    │
-5. Client calls client.resume_workflow()
+5. Client calls client.resume(...)
+   │    Resume event published to same topic
+   │    with event_type="resume_await_approval"
    │
-6. Workflow resumes with resume data
+6. Orchestrator matches resume event to waiting execution
    │
-7. Workflow continues to completion
+7. Workflow resumes, suspend() returns the resume data
+   │
+8. Workflow continues to completion
 ```
 
 ## Workflow Examples
@@ -175,13 +182,13 @@ async def multi_step_form(
 ## Client-Side Resume
 
 ```python
-from polos import PolosClient
+from polos import PolosClient, events
 from workflows import approval_workflow, ApprovalRequest
 
 client = PolosClient(project_id="...", api_url="http://localhost:8080")
 
-# Start workflow (returns immediately)
-execution = await approval_workflow.start(
+# Start workflow (returns ExecutionHandle immediately)
+handle = await approval_workflow.invoke(
     client,
     ApprovalRequest(
         request_id="REQ-001",
@@ -190,40 +197,41 @@ execution = await approval_workflow.start(
         amount=1500.00,
     ),
 )
-execution_id = execution.get("execution_id")
 
-# Poll for suspended state
-while True:
-    execution = await client.get_execution(execution_id)
-    if execution.get("status") == "suspended":
+# Stream events to detect when the workflow suspends
+suspend_data = None
+async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    if event.event_type.startswith("suspend_"):
+        suspend_data = event.data
         break
-    await asyncio.sleep(1)
-
-# Get suspend info
-suspend_info = execution.get("suspend_info", {})
-step_key = suspend_info.get("step_key")
 
 # Resume with user decision
-await client.resume_workflow(
-    execution_id=execution_id,
-    step_key=step_key,
+await client.resume(
+    suspend_workflow_id=handle.root_workflow_id,
+    suspend_execution_id=handle.id,
+    suspend_step_key="await_approval",
     data={"approved": True, "approver": "manager@example.com"},
 )
 ```
 
 ## Suspend Data
 
-When a workflow suspends, it includes:
-- `step_key` - The suspend step identifier
-- `execution_id` - The suspended execution ID
-- `data` - Custom data passed to suspend()
+When a workflow calls `ctx.step.suspend()`:
+
+1. A suspend event is published to the shared workflow topic `workflow/{root_workflow_id}/{root_execution_id}` with:
+   - `event_type` - `suspend_{step_key}` (e.g. `suspend_await_approval`)
+   - `data` - The data dict passed to `suspend()`
+
+2. A wait step is created with `wait_type="suspend"` (distinct from `wait_for_event()` which uses `wait_type="event"`). The orchestrator uses this to require `event_type="resume_{step_key}"` matching when resuming.
+
+Clients detect suspend by streaming events and checking for `event_type.startswith("suspend_")`.
 
 ## Resume Data
 
-When resuming, the data is returned from `suspend()`:
+When resuming, the data from the resume event is returned by `suspend()`:
 ```python
 resume_data = await ctx.step.suspend("step_key", data={...})
-# resume_data["data"] contains the data passed to resume_workflow()
+# resume_data["data"] contains the data passed to client.resume()
 ```
 
 ## Timeout Handling
@@ -249,4 +257,4 @@ step2_data = await ctx.step.suspend("step_2", data={"step": 2})
 step3_data = await ctx.step.suspend("step_3", data={"step": 3})
 ```
 
-Each suspend creates a new wait point that must be resumed before continuing.
+Each suspend creates a new wait point. The orchestrator matches resume events by `event_type` (`resume_{step_key}`), so each suspend is resumed independently.

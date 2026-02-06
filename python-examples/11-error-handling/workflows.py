@@ -225,7 +225,7 @@ async def compensation_pattern(ctx: WorkflowContext, payload: dict) -> dict:
         return {
             "status": "rolled_back",
             "error": str(e),
-            "compensated": reversed(completed_steps),
+            "compensated": list(reversed(completed_steps)),
         }
 
 

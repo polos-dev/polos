@@ -39,7 +39,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="event-triggered-examples",
         workflows=[
             on_order_created,
             on_user_signup,

@@ -44,7 +44,6 @@ async def run_workflow_demos():
     client = PolosClient(
         project_id=project_id,
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-        deployment_id="workflow-basics-examples",
     )
 
     print("=" * 60)

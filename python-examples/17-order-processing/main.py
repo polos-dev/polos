@@ -58,10 +58,8 @@ async def main():
 
     # If amount > $1000, wait for fraud review suspend
     if amount > 1000:
-        suspend_topic = f"fraud_review/{handle.id}"
-
-        async for event in events.stream_topic(client, suspend_topic):
-            if event.event_type == "suspend":
+        async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+            if event.event_type.startswith("suspend_"):
                 data = event.data
                 print("\n" + "*" * 50)
                 print("*** FRAUD REVIEW REQUIRED ***")

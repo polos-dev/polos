@@ -246,6 +246,7 @@ class Workflow:
         created_at = context.get("created_at")
         session_id = context.get("session_id")
         user_id = context.get("user_id")
+        root_workflow_id = context.get("root_workflow_id")
         otel_traceparent = context.get("otel_traceparent")
         otel_span_id = context.get("otel_span_id")
 
@@ -287,6 +288,7 @@ class Workflow:
                 deployment_id=deployment_id,
                 parent_execution_id=parent_execution_id,
                 root_execution_id=effective_root_execution_id,
+                root_workflow_id=root_workflow_id,
                 retry_count=retry_count,
                 model=self.model,
                 provider=self.provider,
@@ -315,6 +317,7 @@ class Workflow:
                 deployment_id=deployment_id,
                 parent_execution_id=parent_execution_id,
                 root_execution_id=effective_root_execution_id,
+                root_workflow_id=root_workflow_id,
                 retry_count=retry_count,
                 created_at=created_at,
                 session_id=session_id,
@@ -439,7 +442,7 @@ class Workflow:
             token = _execution_context.set(exec_context)
 
             # Topic for workflow events
-            topic = f"workflow:{ctx.root_execution_id or ctx.execution_id}"
+            topic = f"workflow/{ctx.root_workflow_id}/{ctx.root_execution_id}"
 
             serialized_payload = serialize(payload) if payload is not None else None
 
@@ -695,6 +698,7 @@ class Workflow:
         user_id: str | None = None,
         deployment_id: str | None = None,
         parent_execution_id: str | None = None,
+        root_workflow_id: str | None = None,
         root_execution_id: str | None = None,
         step_key: str | None = None,
         wait_for_subworkflow: bool = False,
@@ -742,6 +746,10 @@ class Workflow:
                 pass
             payload = None
 
+        # Default root_workflow_id to self.id if not provided (top-level invocation)
+        if not root_workflow_id:
+            root_workflow_id = self.id
+
         # Invoke the workflow (it will be checkpointed when it executes)
         # For nested workflows called via step.invoke(), use workflow's own queue configuration
         queue_name = queue if queue else self.queue_name if self.queue_name is not None else self.id
@@ -750,6 +758,7 @@ class Workflow:
             payload,
             deployment_id=deployment_id,
             parent_execution_id=parent_execution_id,
+            root_workflow_id=root_workflow_id,
             root_execution_id=root_execution_id,
             step_key=step_key,
             queue_name=queue_name,

@@ -39,7 +39,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="parallel-review-examples",
         workflows=[
             single_review,
             parallel_review,

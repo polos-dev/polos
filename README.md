@@ -236,7 +236,7 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
 
 | Example | Description |
 |---------|-------------|
-| [Weather Agent](./python-examples/01-weather-agent) | Simple agent with tool calling |
+| [Agent with tools](./python-examples/01-agent-with-tools) | Simple agent with tool calling |
 | [Structured Output](./python-examples/02-structured-output) | Agent with Pydantic model responses |
 | [Streaming](./python-examples/03-agent-streaming) | Real-time streaming responses |
 | [Conversational Chat](./python-examples/04-conversational-chat) | Multi-turn conversations with memory |

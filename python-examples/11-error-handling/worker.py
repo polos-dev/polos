@@ -38,7 +38,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="error-handling-examples",
         workflows=[
             retry_example,
             error_recovery,

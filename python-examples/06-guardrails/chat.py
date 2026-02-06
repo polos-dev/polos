@@ -55,7 +55,6 @@ async def chat_loop():
     client = PolosClient(
         project_id=project_id,
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-        deployment_id="guardrails-examples",
     )
 
     print("=" * 60)

@@ -1,7 +1,7 @@
 [project]
-name = "polos-hello-world"
+name = "polos-agent-with-tools"
 version = "0.1.0"
-description = "Hello World example for Polos SDK"
+description = "Simple agent using weather tool"
 requires-python = ">=3.10"
 dependencies = [
     "polos-sdk[openai]",
@@ -12,3 +12,5 @@ dependencies = [
 dev = [
     "ruff>=0.1.0",
 ]
+[tool.uv.sources]
+polos-sdk = { path = "../../sdk/python" }

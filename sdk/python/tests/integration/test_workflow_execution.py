@@ -68,6 +68,7 @@ class TestWorkflowExecution:
                         workflow_id="test_workflow",
                         execution_id=execution_id,
                         root_execution_id=root_execution_id,
+                        root_workflow_id="test_workflow",
                         deployment_id="test-deployment",
                         session_id="test-session",
                     ),
@@ -172,6 +173,7 @@ class TestWorkflowExecution:
                         workflow_id="test_workflow_with_step",
                         execution_id=execution_id,
                         root_execution_id=root_execution_id,
+                        root_workflow_id="test_workflow_with_step",
                         deployment_id="test-deployment",
                         session_id="test-session",
                     )
@@ -217,6 +219,7 @@ class TestWorkflowExecution:
                     workflow_id="test_workflow_state",
                     execution_id=execution_id,
                     root_execution_id=root_execution_id,
+                    root_workflow_id="test_workflow_state",
                     deployment_id="test-deployment",
                     session_id="test-session",
                     state_schema=CounterState,
@@ -287,6 +290,7 @@ class TestWorkflowExecution:
                 context = {
                     "execution_id": execution_id,
                     "root_execution_id": root_execution_id,
+                    "root_workflow_id": "test_workflow_hooks",
                     "deployment_id": "test-deployment",
                     "session_id": "test-session",
                 }
@@ -342,6 +346,7 @@ class TestWorkflowExecution:
                     workflow_id="test_workflow_error",
                     execution_id=execution_id,
                     root_execution_id=root_execution_id,
+                    root_workflow_id="test_workflow_error",
                     deployment_id="test-deployment",
                     session_id="test-session",
                 )

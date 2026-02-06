@@ -36,7 +36,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="suspend-resume-examples",
         workflows=[
             approval_workflow,
             multi_step_form,

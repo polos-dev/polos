@@ -36,6 +36,7 @@ async def main():
     print(f"  Execution ID: {execution_id}")
 
     await client.resume(
+        suspend_workflow_id="order_processing_workflow",
         suspend_execution_id=execution_id,
         suspend_step_key="fraud_review",
         data={"approved": approved},

@@ -22,7 +22,7 @@ Each folder contains an independently executable example with its own `pyproject
 
 | Example | Description |
 |---------|-------------|
-| [01-weather-agent](./01-weather-agent) | Simple agent with a weather tool |
+| [01-agent-with-tools](./01-agent-with-tools) | Simple agent with a weather tool |
 | [02-structured-output](./02-structured-output) | Agent with structured output using Pydantic models |
 | [03-agent-streaming](./03-agent-streaming) | Streaming agent responses in real-time |
 | [04-conversational-chat](./04-conversational-chat) | Multi-turn conversational agent with memory |
@@ -30,6 +30,7 @@ Each folder contains an independently executable example with its own `pyproject
 | [06-guardrails](./06-guardrails) | Input/output validation and content filtering |
 | [07-lifecycle-hooks](./07-lifecycle-hooks) | Agent lifecycle hooks (on_start, on_end, on_tool_call) |
 | [14-router-coordinator](./14-router-coordinator) | Multi-agent coordination with workflow orchestration |
+| [17-order-processing](./17-order-processing) | Order processing with human-in-the-loop fraud review (**used in the demo above**) |
 
 ### Workflows
 

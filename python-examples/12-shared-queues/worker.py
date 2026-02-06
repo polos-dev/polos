@@ -42,7 +42,6 @@ async def main():
 
     worker = Worker(
         client=client,
-        deployment_id="shared-queues-examples",
         workflows=[
             api_call_workflow,
             db_read_workflow,

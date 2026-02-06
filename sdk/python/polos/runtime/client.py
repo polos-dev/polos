@@ -241,6 +241,7 @@ class PolosClient:
             workflows=workflow_requests,
             deployment_id=self.deployment_id,  # Use client's deployment_id (None uses latest)
             parent_execution_id=None,
+            root_workflow_id=None,
             root_execution_id=None,
             step_key=None,  # Not invoked from a step, so no step_key
             session_id=session_id,
@@ -250,11 +251,18 @@ class PolosClient:
 
         return handles
 
-    async def resume(self, suspend_execution_id: str, suspend_step_key: str, data: Any) -> None:
+    async def resume(
+        self,
+        suspend_workflow_id: str,
+        suspend_execution_id: str,
+        suspend_step_key: str,
+        data: Any,
+    ) -> None:
         """Resume a suspended execution by publishing a resume event.
 
         Args:
-            suspend_execution_id: The execution ID that is suspended
+            suspend_workflow_id: The root workflow ID of the suspended execution
+            suspend_execution_id: The root execution ID of the suspended execution
             suspend_step_key: The step key that was used in suspend()
             data: Data to pass in the resume event (can be dict or Pydantic BaseModel)
         """
@@ -264,12 +272,12 @@ class PolosClient:
         # Serialize data
         serialized_data = serialize(data)
 
-        topic = f"{suspend_step_key}/{suspend_execution_id}"
+        topic = f"workflow/{suspend_workflow_id}/{suspend_execution_id}"
 
         # Publish resume event
         await batch_publish(
             topic=topic,
-            events=[EventData(data=serialized_data, event_type="resume")],
+            events=[EventData(data=serialized_data, event_type=f"resume_{suspend_step_key}")],
             client=self,
         )
 
@@ -354,6 +362,7 @@ class PolosClient:
         payload: Any,
         deployment_id: str | None = None,
         parent_execution_id: str | None = None,
+        root_workflow_id: str | None = None,
         root_execution_id: str | None = None,
         step_key: str | None = None,
         queue_name: str | None = None,
@@ -404,8 +413,10 @@ class PolosClient:
             }
             if step_key:
                 request_json["step_key"] = step_key
-            if deployment_id:
-                request_json["deployment_id"] = deployment_id
+            # Fall back to client's deployment_id (from env) if not explicitly provided
+            effective_deployment_id = deployment_id or self.deployment_id
+            if effective_deployment_id:
+                request_json["deployment_id"] = effective_deployment_id
             if parent_execution_id:
                 request_json["parent_execution_id"] = parent_execution_id
             if root_execution_id:
@@ -449,6 +460,7 @@ class PolosClient:
                 workflow_id=workflow_id,
                 created_at=created_at,
                 parent_execution_id=parent_execution_id,
+                root_workflow_id=root_workflow_id,
                 root_execution_id=root_execution_id,
                 session_id=session_id,
                 user_id=user_id,
@@ -463,6 +475,7 @@ class PolosClient:
         workflows: list[dict[str, Any]],
         deployment_id: str | None = None,
         parent_execution_id: str | None = None,
+        root_workflow_id: str | None = None,
         root_execution_id: str | None = None,
         step_key: str | None = None,
         session_id: str | None = None,
@@ -505,8 +518,10 @@ class PolosClient:
             # Common batch-level properties (shared by all workflows)
             if step_key:
                 request_json["step_key"] = step_key
-            if deployment_id:
-                request_json["deployment_id"] = deployment_id
+            # Fall back to client's deployment_id (from env) if not explicitly provided
+            effective_deployment_id = deployment_id or self.deployment_id
+            if effective_deployment_id:
+                request_json["deployment_id"] = effective_deployment_id
             if parent_execution_id:
                 request_json["parent_execution_id"] = parent_execution_id
             if root_execution_id:
@@ -545,6 +560,7 @@ class PolosClient:
                         workflow_id=workflow_id,
                         created_at=created_at,
                         parent_execution_id=parent_execution_id,
+                        root_workflow_id=root_workflow_id,
                         root_execution_id=root_execution_id,
                         session_id=session_id,
                         user_id=user_id,
@@ -566,6 +582,7 @@ class ExecutionHandle(BaseModel):
     workflow_id: str | None = None
     created_at: str | None = None
     parent_execution_id: str | None = None
+    root_workflow_id: str | None = None
     root_execution_id: str | None = None
     session_id: str | None = None
     user_id: str | None = None
@@ -608,6 +625,7 @@ class ExecutionHandle(BaseModel):
             "created_at": execution.get("created_at"),
             "completed_at": execution.get("completed_at"),
             "parent_execution_id": execution.get("parent_execution_id"),
+            "root_workflow_id": execution.get("root_workflow_id"),
             "root_execution_id": execution.get("root_execution_id"),
             "output_schema_name": execution.get("output_schema_name"),
             "step_key": execution.get("step_key"),

@@ -32,12 +32,13 @@ impl Database {
     }
 
     /// Log current pool metrics
-    pub async fn log_pool_metrics(&self) {
+    pub async fn log_pool_metrics(&self, name: &str) {
         let size = self.pool.size();
         let num_idle = self.pool.num_idle();
         let active = size.saturating_sub(num_idle as u32);
 
         tracing::info!(
+            pool = name,
             pool_size = size,
             idle_connections = num_idle,
             active_connections = active,

@@ -18,7 +18,9 @@ mod db;
 pub use db::Database;
 
 pub struct AppState {
-    pub db: Database,
+    pub db: Database,     // API handlers (short-lived requests)
+    pub db_sse: Database, // SSE streaming + long-polling
+    pub db_bg: Database,  // Background tasks
     pub local_mode: bool,
 }
 
@@ -216,18 +218,52 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/polos".to_string());
 
-    let pool = PgPoolOptions::new()
-        .max_connections(20)
-        .min_connections(5)
+    // Pool sizes configurable via env vars
+    let pool_api_max: u32 = std::env::var("DB_POOL_API_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    let pool_sse_max: u32 = std::env::var("DB_POOL_SSE_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(15);
+    let pool_bg_max: u32 = std::env::var("DB_POOL_BG_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
+    let pool_api = PgPoolOptions::new()
+        .max_connections(pool_api_max)
+        .min_connections(2)
         .connect(&database_url)
         .await?;
 
-    tracing::info!("Connected to database");
+    let pool_sse = PgPoolOptions::new()
+        .max_connections(pool_sse_max)
+        .min_connections(2)
+        .connect(&database_url)
+        .await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    let pool_bg = PgPoolOptions::new()
+        .max_connections(pool_bg_max)
+        .min_connections(2)
+        .connect(&database_url)
+        .await?;
+
+    tracing::info!(
+        api_max = pool_api_max,
+        sse_max = pool_sse_max,
+        bg_max = pool_bg_max,
+        "Connected to database with 3 connection pools"
+    );
+
+    // Run migrations on the API pool only (migrations only need to run once)
+    sqlx::migrate!("./migrations").run(&pool_api).await?;
     tracing::info!("Migrations complete");
 
-    let db = Database::new(pool);
+    let db = Database::new(pool_api);
+    let db_sse = Database::new(pool_sse);
+    let db_bg = Database::new(pool_bg);
 
     // Check if local mode can be enabled (only allowed for localhost bind addresses)
     let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -255,7 +291,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let state = Arc::new(AppState {
-        db: db.clone(),
+        db,
+        db_sse,
+        db_bg,
         local_mode,
     });
 
@@ -268,8 +306,10 @@ async fn main() -> anyhow::Result<()> {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
-                    // Log pool metrics
-                    pool_metrics_state.db.log_pool_metrics().await;
+                    // Log pool metrics for all pools
+                    pool_metrics_state.db.log_pool_metrics("api").await;
+                    pool_metrics_state.db_sse.log_pool_metrics("sse").await;
+                    pool_metrics_state.db_bg.log_pool_metrics("bg").await;
 
                     // Sample connection acquisition time
                     pool_metrics_state
@@ -288,7 +328,7 @@ async fn main() -> anyhow::Result<()> {
     .spawn(async move {
       loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-        match cleanup_state.db.cleanup_stale_workers().await {
+        match cleanup_state.db_bg.cleanup_stale_workers().await {
           Ok((stale_claimed, deleted_workers, marked_offline_workers, orphaned_executions)) => {
             if stale_claimed > 0 || marked_offline_workers > 0 || deleted_workers > 0 || orphaned_executions > 0 {
               tracing::info!(
@@ -317,7 +357,7 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await; // Run every hour
                 match execution_cleanup_state
-                    .db
+                    .db_bg
                     .cleanup_old_executions(retention_days)
                     .await
                 {
@@ -347,7 +387,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // Process expired waits one at a time until none remain
                 loop {
-                    match wait_resume_state.db.get_and_resume_expired_wait().await {
+                    match wait_resume_state.db_bg.get_and_resume_expired_wait().await {
                         Ok(Some(expired_wait)) => {
                             tracing::info!(
                                 "Resumed execution {}: {} from expired wait",
@@ -388,7 +428,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // Process event triggers one at a time until none remain
                 loop {
-                    match trigger_state.db.process_one_event_trigger().await {
+                    match trigger_state.db_bg.process_one_event_trigger().await {
                         Ok(Some(count)) => {
                             if count > 0 {
                                 tracing::info!("Processed {} event trigger(s)", count);
@@ -428,7 +468,11 @@ async fn main() -> anyhow::Result<()> {
 
                 // Process event waits one at a time until none remain
                 loop {
-                    match event_wait_state.db.check_and_resume_one_event_wait().await {
+                    match event_wait_state
+                        .db_bg
+                        .check_and_resume_one_event_wait()
+                        .await
+                    {
                         Ok(Some(count)) => {
                             if count > 0 {
                                 tracing::info!("Resumed 1 execution waiting on event");
@@ -467,7 +511,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // Process scheduled workflows one at a time until none remain
                 loop {
-                    match schedule_state.db.process_one_scheduled_workflow().await {
+                    match schedule_state.db_bg.process_one_scheduled_workflow().await {
                         Ok(Some(count)) => {
                             if count > 0 {
                                 tracing::info!("Processed 1 scheduled workflow");
@@ -520,14 +564,14 @@ async fn main() -> anyhow::Result<()> {
         let mut processed_count = 0;
         // Process timed-out executions one at a time
         loop {
-          match timeout_monitor_state.db.get_timed_out_executions(10).await {
+          match timeout_monitor_state.db_bg.get_timed_out_executions(10).await {
             Ok(timed_out_executions) => {
               if timed_out_executions.is_empty() {
                 break; // No more timed-out executions
               }
               for (execution_id, _assigned_to_worker, _push_endpoint_url) in timed_out_executions {
                 // Cancel the execution (recursively cancels all children)
-                match timeout_monitor_state.db.cancel_execution(&execution_id, "timeout").await {
+                match timeout_monitor_state.db_bg.cancel_execution(&execution_id, "timeout").await {
                   Ok(executions_to_cancel) => {
                     tracing::info!("Cancelled timed-out execution: {} (and {} children)", execution_id, executions_to_cancel.len().saturating_sub(1));
                     // Send cancel requests to all workers for all executions being cancelled
@@ -543,7 +587,7 @@ async fn main() -> anyhow::Result<()> {
                             api::workers::CancelRequestResult::NotFound => {
                               // Execution not found on worker - mark as cancelled
                               tracing::info!("Timed-out execution {} not found on worker {} - marking as cancelled", exec_id_clone, worker_id);
-                              if let Err(e) = timeout_state_clone.db.mark_execution_cancelled(&exec_id_clone).await {
+                              if let Err(e) = timeout_state_clone.db_bg.mark_execution_cancelled(&exec_id_clone).await {
                                 tracing::error!("Failed to mark timed-out execution {} as cancelled (not found): {}", exec_id_clone, e);
                               }
                             }
@@ -588,7 +632,7 @@ async fn main() -> anyhow::Result<()> {
                 // Process pending_cancel executions
                 loop {
                     match pending_cancel_state
-                        .db
+                        .db_bg
                         .get_pending_cancel_executions(10)
                         .await
                     {
@@ -618,7 +662,7 @@ async fn main() -> anyhow::Result<()> {
                                 if should_directly_cancel {
                                     // Cancelled more than 2 minutes ago - directly mark as cancelled
                                     if let Err(e) = pending_cancel_state
-                                        .db
+                                        .db_bg
                                         .mark_execution_cancelled(&execution_id)
                                         .await
                                     {
@@ -660,7 +704,7 @@ async fn main() -> anyhow::Result<()> {
                         worker_id
                       );
                                             if let Err(e) = pending_cancel_state
-                                                .db
+                                                .db_bg
                                                 .mark_execution_cancelled(&execution_id)
                                                 .await
                                             {
@@ -683,7 +727,7 @@ async fn main() -> anyhow::Result<()> {
                         execution_id
                       );
                                             if let Err(e) = pending_cancel_state
-                                                .db
+                                                .db_bg
                                                 .mark_execution_cancelled(&execution_id)
                                                 .await
                                             {
@@ -706,7 +750,7 @@ async fn main() -> anyhow::Result<()> {
                                 } else {
                                     // No worker assigned - directly mark as cancelled
                                     if let Err(e) = pending_cancel_state
-                                        .db
+                                        .db_bg
                                         .mark_execution_cancelled(&execution_id)
                                         .await
                                     {

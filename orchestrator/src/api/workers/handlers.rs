@@ -201,13 +201,13 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
     loop {
         // Claim and assign execution in a single transaction
         // Uses SELECT FOR UPDATE SKIP LOCKED to allow multiple orchestrators to work in parallel
-        match state.db.claim_and_assign_execution_for_push().await {
+        match state.db_bg.claim_and_assign_execution_for_push().await {
             Ok(Some((execution, worker))) => {
                 // Successfully claimed and assigned, now push
                 match push_work_to_worker(&worker, &execution).await {
                     Ok(()) => {
                         // Push successful - mark execution as running
-                        if let Err(e) = state.db.mark_execution_running(&execution.id).await {
+                        if let Err(e) = state.db_bg.mark_execution_running(&execution.id).await {
                             tracing::error!(
                                 "Failed to mark execution {} as running: {}",
                                 execution.id,
@@ -215,7 +215,7 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                             );
                             // Rollback since we can't mark as running (no error since push succeeded)
                             if let Err(e) = state
-                                .db
+                                .db_bg
                                 .rollback_execution_assignment(&execution.id, &worker.id, None)
                                 .await
                             {
@@ -229,7 +229,11 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                             continue;
                         }
                         // Update push status
-                        if let Err(e) = state.db.update_worker_push_status(&worker.id, true).await {
+                        if let Err(e) = state
+                            .db_bg
+                            .update_worker_push_status(&worker.id, true)
+                            .await
+                        {
                             tracing::error!("Failed to update worker push status: {}", e);
                         }
                         // Successfully dispatched, continue processing more executions
@@ -243,7 +247,7 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                         );
                         // Rollback execution assignment with error
                         if let Err(e) = state
-                            .db
+                            .db_bg
                             .rollback_execution_assignment(&execution.id, &worker.id, Some(&err))
                             .await
                         {
@@ -524,7 +528,7 @@ pub async fn poll_workflow(
 
     // Get project_id from worker and set session variable for RLS
     let project_id = state
-        .db
+        .db_sse
         .get_project_id_from_worker(&worker_id)
         .await
         .map_err(|e| {
@@ -533,7 +537,7 @@ pub async fn poll_workflow(
         })?;
 
     state
-        .db
+        .db_sse
         .set_project_id(&project_id, false)
         .await
         .map_err(|e| {
@@ -549,7 +553,7 @@ pub async fn poll_workflow(
 
     // Update heartbeat
     state
-        .db
+        .db_sse
         .update_worker_heartbeat(&worker_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -568,7 +572,7 @@ pub async fn poll_workflow(
                 break;
             }
 
-            match state.db.claim_next_executions(&worker_id).await {
+            match state.db_sse.claim_next_executions(&worker_id).await {
                 Ok(Some(execution)) => {
                     tracing::info!("[poll_workflow] claimed execution: {}", execution.id);
                     executions.push(execution);
@@ -590,7 +594,10 @@ pub async fn poll_workflow(
                 worker_id
             );
 
-            let _ = state.db.update_worker_status(&worker_id, "online").await;
+            let _ = state
+                .db_sse
+                .update_worker_status(&worker_id, "online")
+                .await;
 
             let responses: Vec<PollWorkflowResponse> = executions
                 .into_iter()

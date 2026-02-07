@@ -371,7 +371,7 @@ pub async fn stream_events(
 
     // Set project_id for RLS - required, error if it fails
     state
-        .db
+        .db_sse
         .set_project_id(&project_id, false)
         .await
         .map_err(|e| {
@@ -433,7 +433,7 @@ pub async fn stream_events(
 
         loop {
             let events = match state_clone
-                .db
+                .db_sse
                 .get_events(
                     &topic_clone,
                     &project_id_clone,
@@ -455,7 +455,7 @@ pub async fn stream_events(
             if events.is_empty() {
                 if let Some(execution_id) = workflow_run_id_clone {
                     if !execution_completed {
-                        match state_clone.db.get_execution(&execution_id).await {
+                        match state_clone.db_sse.get_execution(&execution_id).await {
                             Ok(execution) => {
                                 match execution.status.as_str() {
                                     "failed" => {

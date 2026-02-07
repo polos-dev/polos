@@ -252,11 +252,13 @@ async fn test_get_timed_out_executions() {
         .await
         .expect("Failed to create test worker");
 
-    // Manually set status to running and started_at to past (simulating a timed-out execution)
+    // Manually set status to running and started_at far in the past (simulating a timed-out execution)
+    // Use a very old started_at so this execution sorts first in the ORDER BY started_at ASC query,
+    // even when the test DB has accumulated stale timed-out executions from previous runs.
     sqlx::query(
-        "UPDATE workflow_executions 
-         SET status = 'running', 
-             started_at = NOW() - INTERVAL '2 seconds',
+        "UPDATE workflow_executions
+         SET status = 'running',
+             started_at = NOW() - INTERVAL '999 days',
              assigned_to_worker = $1
          WHERE id = $2",
     )

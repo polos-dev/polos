@@ -36,9 +36,12 @@ impl Database {
                 .execute(&mut *tx)
                 .await?;
 
-            // Get project_id from execution
-            let wait_project_id =
-                Database::get_project_id_from_execution(self, execution_id).await?;
+            // Get project_id from execution (inline to avoid acquiring a separate pool connection mid-tx)
+            let wait_project_id: Uuid =
+                sqlx::query_scalar("SELECT project_id FROM workflow_executions WHERE id = $1")
+                    .bind(execution_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
             // Insert wait step
             sqlx::query(
@@ -116,41 +119,62 @@ impl Database {
         // Mark the wait step as completed in execution_step_outputs and wait_steps
         // execution_id = root_execution_id (for hierarchical tracking)
         // source_execution_id = actual execution that created this step output
-        if wait_type == "time" {
-            // Use step_outputs module to store the output
-            self.store_step_output(
-        execution_id,
-        step_key,
-        Some(serde_json::json!({"success": true, "wait_until": wait_until.unwrap_or(Utc::now()).to_rfc3339()})),
-        None,
-        Some(true),
-        Some(execution_id),
-        None,
-      ).await?;
+        if wait_type == "time" || wait_type == "event" || wait_type == "suspend" {
+            // Get project_id from the transaction (avoid acquiring a separate pool connection mid-tx)
+            let project_id: Uuid =
+                sqlx::query_scalar("SELECT project_id FROM workflow_executions WHERE id = $1")
+                    .bind(execution_id)
+                    .fetch_one(tx.as_mut())
+                    .await?;
 
-            sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type = 'time'")
-        .bind(execution_id)
-        .bind(step_key)
-        .execute(tx.as_mut())
-        .await?;
-        } else if wait_type == "event" {
-            // For expired event waits, mark as failed with error
-            // Use step_outputs module to store the output
-            self.store_step_output(
-        execution_id,
-        step_key,
-        None,
-        Some(serde_json::json!({"message": format!("Event wait expired at {}", expires_at.unwrap_or(Utc::now()).to_rfc3339())})),
-        Some(false),
-        Some(execution_id),
-        None,
-      ).await?;
+            if wait_type == "time" {
+                let outputs = serde_json::json!({"success": true, "wait_until": wait_until.unwrap_or(Utc::now()).to_rfc3339()});
+                sqlx::query(
+                    "INSERT INTO execution_step_outputs (execution_id, step_key, outputs, error, success, source_execution_id, project_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)
+                     ON CONFLICT (execution_id, step_key) DO UPDATE
+                     SET outputs = $3, error = $4, success = $5, source_execution_id = $6"
+                )
+                .bind(execution_id)
+                .bind(step_key)
+                .bind(Some(outputs))
+                .bind(None::<serde_json::Value>)
+                .bind(Some(true))
+                .bind(execution_id)
+                .bind(project_id)
+                .execute(tx.as_mut())
+                .await?;
 
-            sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL, wait_topic = NULL, expires_at = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type = 'event'")
-        .bind(execution_id)
-        .bind(step_key)
-        .execute(tx.as_mut())
-        .await?;
+                sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type = 'time'")
+                    .bind(execution_id)
+                    .bind(step_key)
+                    .execute(tx.as_mut())
+                    .await?;
+            } else {
+                // event: expired event waits, mark as failed with error
+                let error = serde_json::json!({"message": format!("Event wait expired at {}", expires_at.unwrap_or(Utc::now()).to_rfc3339())});
+                sqlx::query(
+                    "INSERT INTO execution_step_outputs (execution_id, step_key, outputs, error, success, source_execution_id, project_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)
+                     ON CONFLICT (execution_id, step_key) DO UPDATE
+                     SET outputs = $3, error = $4, success = $5, source_execution_id = $6"
+                )
+                .bind(execution_id)
+                .bind(step_key)
+                .bind(None::<serde_json::Value>)
+                .bind(Some(error))
+                .bind(Some(false))
+                .bind(execution_id)
+                .bind(project_id)
+                .execute(tx.as_mut())
+                .await?;
+
+                sqlx::query("UPDATE wait_steps SET wait_type = NULL, wait_until = NULL, wait_topic = NULL, expires_at = NULL WHERE execution_id = $1 AND step_key = $2 AND wait_type IN ('event', 'suspend')")
+                    .bind(execution_id)
+                    .bind(step_key)
+                    .execute(tx.as_mut())
+                    .await?;
+            }
         }
 
         // Don't commit here - let the caller commit

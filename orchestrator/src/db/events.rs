@@ -149,9 +149,12 @@ impl Database {
               "created_at": last_created_at,
             });
 
-            // Get project_id from execution
-            let event_wait_project_id =
-                Database::get_project_id_from_execution(self, &exec_id).await?;
+            // Get project_id from execution (inline to avoid acquiring a separate pool connection mid-tx)
+            let event_wait_project_id: Uuid =
+                sqlx::query_scalar("SELECT project_id FROM workflow_executions WHERE id = $1")
+                    .bind(exec_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
             sqlx::query(
         "INSERT INTO execution_step_outputs (execution_id, step_key, outputs, error, success, source_execution_id, project_id)

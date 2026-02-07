@@ -236,7 +236,13 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                         {
                             tracing::error!("Failed to update worker push status: {}", e);
                         }
-                        // Successfully dispatched, continue processing more executions
+                        // Successfully dispatched — small backoff to avoid hogging pool connections
+                        processed_count += 1;
+                        if processed_count % 10 == 0 {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                        } else {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        }
                         continue;
                     }
                     Err(err) => {
@@ -252,12 +258,6 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                             .await
                         {
                             tracing::error!("Failed to rollback execution {}: {}", execution.id, e);
-                        }
-                        // Continue processing more executions
-                        processed_count += 1;
-                        // Small delay every 10 items
-                        if processed_count % 10 == 0 {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
                         }
                         continue;
                     }

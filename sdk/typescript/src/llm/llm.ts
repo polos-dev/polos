@@ -1,0 +1,158 @@
+/**
+ * LLM class wrapping Vercel AI SDK LanguageModel.
+ *
+ * Provides Python-compatible generate() and stream() methods
+ * without durability or guardrails (use llmGenerate/llmStream for those).
+ */
+
+import { generateText, streamText, Output } from 'ai';
+import type { ModelMessage as CoreMessage, LanguageModel } from 'ai';
+import type { ZodSchema } from 'zod';
+import type { LLMGenerateOptions, LLMResponse, LLMStreamEvent, LLMToolCall } from './types.js';
+import {
+  convertToolsToVercel,
+  convertToolResultsToMessages,
+  convertVercelToolCallToPython,
+  convertVercelUsageToPython,
+  convertFinishReason,
+  getModelId,
+} from './types.js';
+
+/**
+ * Build args object for generateText/streamText, only including defined properties
+ * to satisfy exactOptionalPropertyTypes.
+ */
+function buildGenerateArgs(
+  model: LanguageModel,
+  messages: CoreMessage[],
+  options: LLMGenerateOptions
+): Record<string, unknown> {
+  const args: Record<string, unknown> = { model, messages };
+  const tools = convertToolsToVercel(options.tools);
+  if (options.system !== undefined) args['system'] = options.system;
+  if (tools !== undefined) args['tools'] = tools;
+  if (options.temperature !== undefined) args['temperature'] = options.temperature;
+  if (options.maxTokens !== undefined) args['maxTokens'] = options.maxTokens;
+  if (options.topP !== undefined) args['topP'] = options.topP;
+  if (options.outputSchema) {
+    args['experimental_output'] = Output.object({ schema: options.outputSchema as ZodSchema });
+  }
+  return args;
+}
+
+/**
+ * LLM wraps a Vercel AI SDK LanguageModel to provide Python-compatible
+ * generate() and stream() methods.
+ *
+ * @example
+ * ```typescript
+ * import { LLM } from '@polos/sdk';
+ * import { anthropic } from '@ai-sdk/anthropic';
+ *
+ * const llm = new LLM({ model: anthropic('claude-sonnet-4-20250514') });
+ * const response = await llm.generate({
+ *   messages: [{ role: 'user', content: 'Hello!' }],
+ * });
+ * console.log(response.content);
+ * ```
+ */
+export class LLM {
+  readonly model: LanguageModel;
+
+  constructor(options: { model: LanguageModel }) {
+    this.model = options.model;
+  }
+
+  /**
+   * Generate a response (non-streaming).
+   *
+   * Returns an LLMResponse in Python-compatible format.
+   */
+  async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
+    const messages = [...options.messages, ...convertToolResultsToMessages(options.tool_results)];
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- conditionally built args to satisfy exactOptionalPropertyTypes
+    const result = await generateText(buildGenerateArgs(this.model, messages, options) as any);
+
+    const toolCalls: LLMToolCall[] | null =
+      result.toolCalls.length > 0
+        ? result.toolCalls.map((tc) => convertVercelToolCallToPython(tc))
+        : null;
+
+    return {
+      content: result.text || null,
+      usage: convertVercelUsageToPython(result.totalUsage),
+      tool_calls: toolCalls,
+      raw_output: [...result.response.messages],
+      model: getModelId(this.model),
+      stop_reason: convertFinishReason(result.finishReason),
+    };
+  }
+
+  /**
+   * Stream a response.
+   *
+   * Yields LLMStreamEvents in Python-compatible format.
+   */
+  async *stream(options: LLMGenerateOptions): AsyncGenerator<LLMStreamEvent> {
+    const messages = [...options.messages, ...convertToolResultsToMessages(options.tool_results)];
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- conditionally built args to satisfy exactOptionalPropertyTypes
+    const result = streamText(buildGenerateArgs(this.model, messages, options) as any);
+
+    let finishUsage:
+      | {
+          inputTokens: number | undefined;
+          outputTokens: number | undefined;
+          totalTokens?: number | undefined;
+        }
+      | undefined;
+    let finishReason: string | undefined;
+
+    for await (const part of result.fullStream) {
+      switch (part.type) {
+        case 'text-delta':
+          yield { type: 'text_delta', data: { content: part.text } };
+          break;
+        case 'tool-call':
+          yield {
+            type: 'tool_call',
+            data: { tool_call: convertVercelToolCallToPython(part) },
+          };
+          break;
+        case 'finish':
+          finishUsage = part.totalUsage;
+          finishReason = part.finishReason;
+          break;
+        case 'error':
+          yield {
+            type: 'error',
+            data: {
+              error: part.error instanceof Error ? part.error.message : String(part.error),
+            },
+          };
+          break;
+        // Ignore all other part types (reasoning, step-start, step-finish, etc.)
+        default:
+          break;
+      }
+    }
+
+    // After stream completes, get the full response messages for raw_output
+    // (matching generate() which returns result.response.messages)
+    const fullResponse = await result.response;
+    const rawOutput = [...fullResponse.messages];
+
+    yield {
+      type: 'done',
+      data: {
+        usage: finishUsage
+          ? convertVercelUsageToPython(finishUsage)
+          : { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        raw_output: rawOutput,
+        model: getModelId(this.model),
+        stop_reason: convertFinishReason(finishReason),
+      },
+    };
+  }
+}

@@ -1,0 +1,16 @@
+export {
+  initializeOtel,
+  getTracer,
+  getCurrentSpan,
+  extractTraceparent,
+  createContextFromTraceparent,
+  createContextWithTraceId,
+  generateTraceIdFromExecutionId,
+  formatTimestamp,
+  isOtelAvailable,
+  type OtelConfig,
+  type Span,
+  type SpanContext,
+  type Context,
+  SpanStatusCode,
+} from './tracing.js';

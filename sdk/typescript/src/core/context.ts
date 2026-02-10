@@ -5,6 +5,7 @@
  * step execution, and metadata about the current execution.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { StepHelper } from './step.js';
 
 /**
@@ -128,7 +129,7 @@ export interface CreateContextOptions<TState> {
 export function createWorkflowContext<TState>(
   options: CreateContextOptions<TState>
 ): WorkflowContext<TState> {
-  const executionId = options.executionId ?? crypto.randomUUID();
+  const executionId = options.executionId ?? randomUUID();
 
   const context: WorkflowContext<TState> = {
     workflowId: options.workflowId,

@@ -4,6 +4,7 @@
  * The createOrchestratorStepHelper function.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { ZodSchema, ZodTypeDef } from 'zod';
 import type { Workflow } from '../core/workflow.js';
 import type { WorkflowContext, AgentContext } from '../core/context.js';
@@ -879,7 +880,7 @@ function createOrchestratorStepHelper(
         return handleExistingStep(existing) as string;
       }
 
-      const generatedUuid = crypto.randomUUID();
+      const generatedUuid = randomUUID();
       await saveStepOutput(key, generatedUuid);
       return generatedUuid;
     },

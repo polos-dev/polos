@@ -2,6 +2,7 @@
  * OpenTelemetry tracing support for Polos workflows.
  */
 
+import { randomBytes } from 'node:crypto';
 import {
   type Context,
   type Span,
@@ -335,9 +336,7 @@ class DeterministicTraceIdGenerator implements IdGenerator {
 }
 
 function randomHex(length: number): string {
-  const bytes = new Uint8Array(length / 2);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return randomBytes(length / 2).toString('hex');
 }
 
 // ---------------------------------------------------------------------------

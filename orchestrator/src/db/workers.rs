@@ -8,6 +8,28 @@ use crate::db::{
 };
 
 impl Database {
+    // Get count of online workers for a deployment
+    pub async fn get_worker_count_for_deployment(
+        &self,
+        project_id: &Uuid,
+        deployment_id: &str,
+    ) -> anyhow::Result<i64> {
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) as count
+             FROM workers
+             WHERE project_id = $1
+               AND current_deployment_id = $2
+               AND status = 'online'
+               AND last_heartbeat > NOW() - INTERVAL '60 seconds'",
+        )
+        .bind(project_id)
+        .bind(deployment_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count.0)
+    }
+
     // Worker registration
     #[allow(clippy::too_many_arguments)]
     pub async fn register_worker(

@@ -121,3 +121,81 @@ async fn test_update_worker_status() {
         .expect("Failed to query worker");
     assert_eq!(row.get::<String, _>("status"), "online");
 }
+
+#[tokio::test]
+async fn test_get_worker_count_for_deployment() {
+    let db = setup_test_db()
+        .await
+        .expect("Failed to setup test database");
+
+    let project = create_test_project(&db)
+        .await
+        .expect("Failed to create test project");
+    let deployment_id = create_test_deployment(&db, &project.id)
+        .await
+        .expect("Failed to create test deployment");
+
+    // Initially no online workers
+    let count = db
+        .get_worker_count_for_deployment(&project.id, &deployment_id)
+        .await
+        .expect("Failed to get worker count");
+    assert_eq!(count, 0);
+
+    // Register a worker and mark it online
+    let worker_id = create_test_worker(&db, &project.id, Some(&deployment_id))
+        .await
+        .expect("Failed to create test worker");
+    db.update_worker_status(&worker_id, "online")
+        .await
+        .expect("Failed to update worker status");
+    db.update_worker_heartbeat(&worker_id)
+        .await
+        .expect("Failed to update heartbeat");
+
+    // Now should have 1 online worker
+    let count = db
+        .get_worker_count_for_deployment(&project.id, &deployment_id)
+        .await
+        .expect("Failed to get worker count");
+    assert_eq!(count, 1);
+
+    // Register a second online worker
+    let worker_id_2 = create_test_worker(&db, &project.id, Some(&deployment_id))
+        .await
+        .expect("Failed to create second test worker");
+    db.update_worker_status(&worker_id_2, "online")
+        .await
+        .expect("Failed to update worker status");
+    db.update_worker_heartbeat(&worker_id_2)
+        .await
+        .expect("Failed to update heartbeat");
+
+    // Now should have 2 online workers
+    let count = db
+        .get_worker_count_for_deployment(&project.id, &deployment_id)
+        .await
+        .expect("Failed to get worker count");
+    assert_eq!(count, 2);
+
+    // Mark one worker offline - count should drop to 1
+    db.update_worker_status(&worker_id, "offline")
+        .await
+        .expect("Failed to update worker status");
+
+    let count = db
+        .get_worker_count_for_deployment(&project.id, &deployment_id)
+        .await
+        .expect("Failed to get worker count");
+    assert_eq!(count, 1);
+
+    // Different deployment should return 0
+    let other_deployment = create_test_deployment(&db, &project.id)
+        .await
+        .expect("Failed to create other deployment");
+    let count = db
+        .get_worker_count_for_deployment(&project.id, &other_deployment)
+        .await
+        .expect("Failed to get worker count");
+    assert_eq!(count, 0);
+}

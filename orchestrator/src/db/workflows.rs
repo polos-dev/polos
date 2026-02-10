@@ -148,6 +148,38 @@ impl Database {
         }
     }
 
+    pub async fn get_workflow_by_id_and_deployment(
+        &self,
+        project_id: &Uuid,
+        workflow_id: &str,
+        deployment_id: &str,
+    ) -> anyhow::Result<Option<DeploymentWorkflow>> {
+        let row = sqlx::query(
+      "SELECT workflow_id, deployment_id, workflow_type, trigger_on_event, scheduled, created_at
+       FROM deployment_workflows
+       WHERE project_id = $1 AND workflow_id = $2 AND deployment_id = $3 AND workflow_type = 'workflow'
+       LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(workflow_id)
+    .bind(deployment_id)
+    .fetch_optional(&self.pool)
+    .await?;
+
+        if let Some(row) = row {
+            Ok(Some(DeploymentWorkflow {
+                workflow_id: row.get("workflow_id"),
+                deployment_id: row.get("deployment_id"),
+                workflow_type: row.get("workflow_type"),
+                trigger_on_event: row.get("trigger_on_event"),
+                scheduled: row.get("scheduled"),
+                created_at: row.get("created_at"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn create_or_update_event_trigger(
         &self,

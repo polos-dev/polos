@@ -6,6 +6,7 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 
@@ -193,7 +194,8 @@ pub async fn get_workflows(
     tag = "Workflows",
     params(
         ("workflow_id" = String, Path, description = "Workflow ID"),
-        ("X-Project-ID" = String, Header, description = "Project ID")
+        ("X-Project-ID" = String, Header, description = "Project ID"),
+        ("deployment_id" = Option<String>, Query, description = "Optional deployment ID. If not provided, uses the latest deployment.")
     ),
     responses(
         (status = 200, description = "Workflow details"),
@@ -213,28 +215,33 @@ pub async fn get_workflow(
     jar: CookieJar,
     headers: HeaderMap,
     ProjectId(project_id): ProjectId,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<db::DeploymentWorkflow>, (StatusCode, Json<ErrorResponse>)> {
     check_user_and_project_access(&state, &jar, &headers, &project_id).await?;
 
-    let workflow = state
-        .db
-        .get_workflow_by_id(&project_id, &workflow_id)
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                "Failed to get workflow {} for project {}: {}",
-                workflow_id,
-                project_id,
-                e
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Failed to get workflow".to_string(),
-                    error_type: "INTERNAL_ERROR".to_string(),
-                }),
-            )
-        })?;
+    let workflow = if let Some(deployment_id) = params.get("deployment_id") {
+        state
+            .db
+            .get_workflow_by_id_and_deployment(&project_id, &workflow_id, deployment_id)
+            .await
+    } else {
+        state.db.get_workflow_by_id(&project_id, &workflow_id).await
+    }
+    .map_err(|e| {
+        tracing::error!(
+            "Failed to get workflow {} for project {}: {}",
+            workflow_id,
+            project_id,
+            e
+        );
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "Failed to get workflow".to_string(),
+                error_type: "INTERNAL_ERROR".to_string(),
+            }),
+        )
+    })?;
 
     match workflow {
         Some(wf) => Ok(Json(wf)),

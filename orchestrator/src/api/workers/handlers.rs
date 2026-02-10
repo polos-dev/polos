@@ -723,6 +723,57 @@ pub async fn worker_heartbeat(
     }
 }
 
+/// Response for worker status query
+#[derive(Serialize, ToSchema)]
+pub struct WorkerStatusResponse {
+    pub online_count: i64,
+    pub has_workers: bool,
+}
+
+#[derive(Deserialize)]
+pub struct WorkerStatusQuery {
+    pub deployment_id: String,
+}
+
+/// Get worker status for a deployment
+#[utoipa::path(
+    get,
+    path = "/api/v1/workers/status",
+    tag = "Workers",
+    params(
+        ("deployment_id" = String, Query, description = "Deployment ID to check worker status for"),
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Worker status", body = WorkerStatusResponse),
+        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
+pub async fn get_worker_status(
+    State(state): State<Arc<AppState>>,
+    ProjectId(project_id): ProjectId,
+    Query(query): Query<WorkerStatusQuery>,
+) -> Result<Json<WorkerStatusResponse>, StatusCode> {
+    let online_count = state
+        .db
+        .get_worker_count_for_deployment(&project_id, &query.deployment_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get worker count: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(WorkerStatusResponse {
+        online_count,
+        has_workers: online_count > 0,
+    }))
+}
+
 // Mark worker as online (called after worker completes registration of agents, tools, workflows, etc.)
 pub async fn mark_worker_online(
     State(state): State<Arc<AppState>>,

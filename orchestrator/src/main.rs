@@ -81,6 +81,7 @@ pub struct AppState {
         // Workers
         api::workers::handlers::register_worker,
         api::workers::handlers::register_worker_deployment,
+        api::workers::handlers::get_worker_status,
         // Deployments
         api::deployments::handlers::register_deployment_workflow,
         api::deployments::handlers::get_deployment,
@@ -133,6 +134,7 @@ pub struct AppState {
             api::workers::handlers::RegisterWorkerRequest,
             api::workers::handlers::RegisterWorkerDeploymentRequest,
             api::workers::handlers::RegisterWorkerResponse,
+            api::workers::handlers::WorkerStatusResponse,
             // Deployments
             api::deployments::handlers::RegisterDeploymentWorkflowRequest,
         )
@@ -844,6 +846,10 @@ async fn main() -> anyhow::Result<()> {
             get(api::deployments::get_deployment),
         )
         // Worker endpoints
+        .route(
+            "/api/v1/workers/status",
+            get(api::workers::get_worker_status),
+        )
         .route(
             "/api/v1/workers/register",
             post(api::workers::register_worker),

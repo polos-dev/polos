@@ -156,7 +156,10 @@ class WorkerServer:
                 # Get worker_id from header (X-Worker-ID) or request body
                 worker_id = request.headers.get("X-Worker-ID")
                 if not worker_id:
-                    raise ValueError("Missing Worker ID in the request headers")
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={"error": "Missing Worker ID in request headers"},
+                    )
 
                 if worker_id and str(worker_id) != self.worker_id:
                     return JSONResponse(

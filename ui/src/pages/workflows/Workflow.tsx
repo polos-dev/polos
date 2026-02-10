@@ -65,13 +65,17 @@ export const WorkflowsPage: React.FC = () => {
     });
   }, [workflows, searchQuery]);
 
-  const handleWorkflowClick = (workflowId: string) => {
-    navigate(`/workflows/${workflowId}/run`);
+  const handleWorkflowClick = (workflow: Workflow) => {
+    navigate(
+      `/workflows/${workflow.workflow_id}/run?deployment_id=${encodeURIComponent(workflow.deployment_id)}`
+    );
   };
 
-  const handleRunWorkflow = (e: React.MouseEvent, workflowId: string) => {
+  const handleRunWorkflow = (e: React.MouseEvent, workflow: Workflow) => {
     e.stopPropagation(); // Prevent row click
-    navigate(`/workflows/${workflowId}/run`);
+    navigate(
+      `/workflows/${workflow.workflow_id}/run?deployment_id=${encodeURIComponent(workflow.deployment_id)}`
+    );
   };
 
   if (isLoading) {
@@ -180,9 +184,7 @@ export const WorkflowsPage: React.FC = () => {
                     {filteredWorkflows.map((workflow, index) => (
                       <tr
                         key={`${workflow.workflow_id}-${workflow.deployment_id}-${index}`}
-                        onClick={() =>
-                          handleWorkflowClick(workflow.workflow_id)
-                        }
+                        onClick={() => handleWorkflowClick(workflow)}
                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         <td className="px-3 py-2 whitespace-nowrap">
@@ -215,9 +217,7 @@ export const WorkflowsPage: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={(e) =>
-                              handleRunWorkflow(e, workflow.workflow_id)
-                            }
+                            onClick={(e) => handleRunWorkflow(e, workflow)}
                             className="text-xs h-7"
                           >
                             Run Workflow

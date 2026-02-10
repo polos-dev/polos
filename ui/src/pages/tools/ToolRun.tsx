@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useProject } from '@/context/ProjectContext';
 import { Copy, Check, ChevronLeft } from 'lucide-react';
 import type { Tool, WorkflowRunSummary } from '@/types/models';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui/tooltip';
 import { useExecutionStatus } from '@/hooks/useExecutionStatus';
 
 interface ParameterField {
@@ -19,6 +24,8 @@ interface ParameterField {
 export const ToolRunPage: React.FC = () => {
   const { toolId } = useParams<{ toolId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deploymentId = searchParams.get('deployment_id');
   const { selectedProjectId } = useProject();
   const [tool, setTool] = useState<Tool | null>(null);
   const [parameters, setParameters] = useState<Record<string, string>>({});
@@ -31,6 +38,7 @@ export const ToolRunPage: React.FC = () => {
     null
   );
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
+  const [hasWorkers, setHasWorkers] = useState<boolean | null>(null);
 
   const {
     status,
@@ -48,7 +56,11 @@ export const ToolRunPage: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const foundTool = await api.getTool(selectedProjectId, toolId);
+        const foundTool = await api.getTool(
+          selectedProjectId,
+          toolId,
+          deploymentId || undefined
+        );
         setTool(foundTool);
 
         // Parse parameters from JSON schema
@@ -79,7 +91,15 @@ export const ToolRunPage: React.FC = () => {
     };
 
     fetchTool();
-  }, [selectedProjectId, toolId]);
+  }, [selectedProjectId, toolId, deploymentId]);
+
+  useEffect(() => {
+    if (!selectedProjectId || !tool?.deployment_id) return;
+    api
+      .getWorkerStatus(selectedProjectId, tool.deployment_id)
+      .then((res) => setHasWorkers(res.has_workers))
+      .catch(() => setHasWorkers(null));
+  }, [selectedProjectId, tool?.deployment_id]);
 
   const fetchToolRuns = useCallback(async () => {
     if (!selectedProjectId) {
@@ -314,6 +334,22 @@ export const ToolRunPage: React.FC = () => {
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-semibold text-gray-900">{tool.id}</h1>
+            {hasWorkers !== null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`inline-block w-2.5 h-2.5 rounded-full ${hasWorkers ? 'bg-green-500' : 'bg-red-500'}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {hasWorkers
+                      ? 'Workers available to run this tool'
+                      : 'No workers are online for this tool'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
           <Button size="sm" onClick={() => navigate(`/tools/${toolId}/traces`)}>
             View Traces

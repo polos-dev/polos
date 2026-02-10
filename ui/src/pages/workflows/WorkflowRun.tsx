@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useProject } from '@/context/ProjectContext';
 import { Copy, Check, ChevronLeft } from 'lucide-react';
 import type { WorkflowRunSummary } from '@/types/models';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui/tooltip';
 import { useExecutionStatus } from '@/hooks/useExecutionStatus';
 
 export const WorkflowRunPage: React.FC = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deploymentId = searchParams.get('deployment_id');
   const { selectedProjectId } = useProject();
   const [error, setError] = useState<string | null>(null);
+  const [hasWorkers, setHasWorkers] = useState<boolean | null>(null);
   const [copiedInput, setCopiedInput] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
   const [executionId, setExecutionId] = useState<string | null>(null);
@@ -27,6 +35,14 @@ export const WorkflowRunPage: React.FC = () => {
     result,
     error: executionError,
   } = useExecutionStatus(executionId, selectedProjectId || null);
+
+  useEffect(() => {
+    if (!selectedProjectId || !deploymentId) return;
+    api
+      .getWorkerStatus(selectedProjectId, deploymentId)
+      .then((res) => setHasWorkers(res.has_workers))
+      .catch(() => setHasWorkers(null));
+  }, [selectedProjectId, deploymentId]);
 
   const fetchWorkflowRuns = useCallback(async () => {
     if (!selectedProjectId) {
@@ -200,6 +216,22 @@ export const WorkflowRunPage: React.FC = () => {
             <h1 className="text-2xl font-semibold text-gray-900">
               {workflowId}
             </h1>
+            {hasWorkers !== null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`inline-block w-2.5 h-2.5 rounded-full ${hasWorkers ? 'bg-green-500' : 'bg-red-500'}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {hasWorkers
+                      ? 'Workers available to run this workflow'
+                      : 'No workers are online for this workflow'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
           <Button
             size="sm"

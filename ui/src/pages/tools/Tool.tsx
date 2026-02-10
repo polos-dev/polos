@@ -19,13 +19,17 @@ export const ToolsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
-  const handleToolClick = (toolId: string) => {
-    navigate(`/tools/${toolId}/run`);
+  const handleToolClick = (tool: Tool) => {
+    navigate(
+      `/tools/${tool.id}/run?deployment_id=${encodeURIComponent(tool.deployment_id)}`
+    );
   };
 
-  const handleNewToolRun = (e: React.MouseEvent, toolId: string) => {
+  const handleNewToolRun = (e: React.MouseEvent, tool: Tool) => {
     e.stopPropagation(); // Prevent row click
-    navigate(`/tools/${toolId}/run`);
+    navigate(
+      `/tools/${tool.id}/run?deployment_id=${encodeURIComponent(tool.deployment_id)}`
+    );
   };
 
   useEffect(() => {
@@ -169,7 +173,7 @@ export const ToolsPage: React.FC = () => {
                     {filteredTools.map((tool, index) => (
                       <tr
                         key={`${tool.id}-${tool.deployment_id}-${index}`}
-                        onClick={() => handleToolClick(tool.id)}
+                        onClick={() => handleToolClick(tool)}
                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         <td className="px-3 py-2 whitespace-nowrap">
@@ -197,7 +201,7 @@ export const ToolsPage: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={(e) => handleNewToolRun(e, tool.id)}
+                            onClick={(e) => handleNewToolRun(e, tool)}
                             className="text-xs h-7"
                           >
                             Run Tool

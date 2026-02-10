@@ -298,9 +298,16 @@ export const api = {
     return response.json();
   },
 
-  async getAgent(projectId: string, agentId: string): Promise<Agent> {
+  async getAgent(
+    projectId: string,
+    agentId: string,
+    deploymentId?: string
+  ): Promise<Agent> {
+    const params = deploymentId
+      ? `?deployment_id=${encodeURIComponent(deploymentId)}`
+      : '';
     const response = await fetch(
-      `${getApiBaseUrl()}/api/v1/agents/${agentId}`,
+      `${getApiBaseUrl()}/api/v1/agents/${agentId}${params}`,
       {
         credentials: 'include',
         headers: {
@@ -340,9 +347,16 @@ export const api = {
     return response.json();
   },
 
-  async getWorkflow(projectId: string, workflowId: string): Promise<Workflow> {
+  async getWorkflow(
+    projectId: string,
+    workflowId: string,
+    deploymentId?: string
+  ): Promise<Workflow> {
+    const params = deploymentId
+      ? `?deployment_id=${encodeURIComponent(deploymentId)}`
+      : '';
     const response = await fetch(
-      `${getApiBaseUrl()}/api/v1/workflows/${workflowId}`,
+      `${getApiBaseUrl()}/api/v1/workflows/${workflowId}${params}`,
       {
         credentials: 'include',
         headers: {
@@ -473,15 +487,24 @@ export const api = {
     return response.json();
   },
 
-  async getTool(projectId: string, toolId: string): Promise<Tool> {
-    // Use the tool_definition endpoint which gets the latest deployment
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/tools/${toolId}`, {
-      credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        'X-Project-ID': projectId,
-      },
-    });
+  async getTool(
+    projectId: string,
+    toolId: string,
+    deploymentId?: string
+  ): Promise<Tool> {
+    const params = deploymentId
+      ? `?deployment_id=${encodeURIComponent(deploymentId)}`
+      : '';
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/v1/tools/${toolId}${params}`,
+      {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'X-Project-ID': projectId,
+        },
+      }
+    );
     if (!response.ok) {
       const errorData = await response
         .json()
@@ -489,6 +512,27 @@ export const api = {
       throw new Error(
         errorData.error || `HTTP error! status: ${response.status}`
       );
+    }
+    return response.json();
+  },
+
+  async getWorkerStatus(
+    projectId: string,
+    deploymentId: string
+  ): Promise<{ online_count: number; has_workers: boolean }> {
+    const params = new URLSearchParams({ deployment_id: deploymentId });
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/v1/workers/status?${params.toString()}`,
+      {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'X-Project-ID': projectId,
+        },
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },

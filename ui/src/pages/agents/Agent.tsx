@@ -65,8 +65,10 @@ export const AgentsPage: React.FC = () => {
     return 0;
   };
 
-  const handleAgentClick = (agentId: string) => {
-    navigate(`/agents/${agentId}/run`);
+  const handleAgentClick = (agent: Agent) => {
+    navigate(
+      `/agents/${agent.id}/run?deployment_id=${encodeURIComponent(agent.deployment_id)}`
+    );
   };
 
   if (isLoading) {
@@ -172,7 +174,7 @@ export const AgentsPage: React.FC = () => {
                     {filteredAgents.map((agent, index) => (
                       <tr
                         key={`${agent.id}-${agent.deployment_id}-${index}`}
-                        onClick={() => handleAgentClick(agent.id)}
+                        onClick={() => handleAgentClick(agent)}
                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         <td className="px-3 py-2 whitespace-nowrap">

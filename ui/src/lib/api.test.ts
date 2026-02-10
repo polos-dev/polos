@@ -163,6 +163,59 @@ describe('api', () => {
     });
   });
 
+  describe('getWorkerStatus', () => {
+    it('sends GET request with correct query params and headers', async () => {
+      const mockResponse = { online_count: 2, has_workers: true };
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const result = await api.getWorkerStatus('project-123', 'deploy-456');
+
+      const callUrl = mockFetch.mock.calls[0][0];
+      expect(callUrl).toContain('/api/v1/workers/status');
+      expect(callUrl).toContain('deployment_id=deploy-456');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Project-ID': 'project-123',
+          }),
+        })
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('returns has_workers false when no workers online', async () => {
+      const mockResponse = { online_count: 0, has_workers: false };
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      });
+      global.fetch = mockFetch;
+
+      const result = await api.getWorkerStatus('project-123', 'deploy-456');
+      expect(result.has_workers).toBe(false);
+      expect(result.online_count).toBe(0);
+    });
+
+    it('handles error responses', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+      global.fetch = mockFetch;
+
+      await expect(
+        api.getWorkerStatus('project-123', 'deploy-456')
+      ).rejects.toThrow();
+    });
+  });
+
   describe('getWorkflowRuns', () => {
     it('builds query params correctly with all parameters', async () => {
       const mockRuns = [{ id: 'run-1' }, { id: 'run-2' }];
@@ -499,7 +552,13 @@ describe('api', () => {
         }
       } as any;
 
-      api.streamEvents('project-123', 'test-workflow', 'run-456', vi.fn(), onError);
+      api.streamEvents(
+        'project-123',
+        'test-workflow',
+        'run-456',
+        vi.fn(),
+        onError
+      );
 
       // Wait for onerror to be set, then simulate error
       await new Promise((resolve) => setTimeout(resolve, 10));

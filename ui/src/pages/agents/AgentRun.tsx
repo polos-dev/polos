@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useProject } from '@/context/ProjectContext';
@@ -8,6 +8,11 @@ import type { Agent, WorkflowRunSummary } from '@/types/models';
 import { useExecutionStatus } from '@/hooks/useExecutionStatus';
 import ReactMarkdown from 'react-markdown';
 import { getProviderLogo } from '@/components/logos/ProviderLogo';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui/tooltip';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'tool_call';
@@ -19,6 +24,8 @@ interface ChatMessage {
 export const AgentRunPage: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deploymentId = searchParams.get('deployment_id');
   const { selectedProjectId } = useProject();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +42,7 @@ export const AgentRunPage: React.FC = () => {
   const [executionId, setExecutionId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [streamCleanup, setStreamCleanup] = useState<(() => void) | null>(null);
+  const [hasWorkers, setHasWorkers] = useState<boolean | null>(null);
 
   const { status } = useExecutionStatus(executionId, selectedProjectId || null);
 
@@ -48,7 +56,11 @@ export const AgentRunPage: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const foundAgent = await api.getAgent(selectedProjectId, agentId);
+        const foundAgent = await api.getAgent(
+          selectedProjectId,
+          agentId,
+          deploymentId || undefined
+        );
         setAgent(foundAgent);
       } catch (err) {
         console.error('Failed to fetch agent:', err);
@@ -59,7 +71,15 @@ export const AgentRunPage: React.FC = () => {
     };
 
     fetchAgent();
-  }, [selectedProjectId, agentId]);
+  }, [selectedProjectId, agentId, deploymentId]);
+
+  useEffect(() => {
+    if (!selectedProjectId || !agent?.deployment_id) return;
+    api
+      .getWorkerStatus(selectedProjectId, agent.deployment_id)
+      .then((res) => setHasWorkers(res.has_workers))
+      .catch(() => setHasWorkers(null));
+  }, [selectedProjectId, agent?.deployment_id]);
 
   const fetchAgentRuns = useCallback(async () => {
     if (!selectedProjectId) {
@@ -445,6 +465,22 @@ export const AgentRunPage: React.FC = () => {
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-semibold text-gray-900">{agent.id}</h1>
+            {hasWorkers !== null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`inline-block w-2.5 h-2.5 rounded-full ${hasWorkers ? 'bg-green-500' : 'bg-red-500'}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {hasWorkers
+                      ? 'Workers available to run this agent'
+                      : 'No workers are online for this agent'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
           <Button
             size="sm"

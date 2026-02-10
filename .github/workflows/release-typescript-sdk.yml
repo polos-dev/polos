@@ -1,0 +1,171 @@
+name: Release TypeScript SDK
+
+on:
+  push:
+    tags:
+      - 'typescript-sdk-v*'
+
+jobs:
+  test:
+    name: Test TypeScript SDK
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20', '22']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: |
+          cd sdk/typescript
+          npm ci
+
+      - name: Run typecheck
+        run: |
+          cd sdk/typescript
+          npm run typecheck
+
+      - name: Run tests
+        run: |
+          cd sdk/typescript
+          npm test
+
+      - name: Run lint
+        run: |
+          cd sdk/typescript
+          npm run lint
+
+  build:
+    name: Build TypeScript SDK
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd sdk/typescript
+          npm ci
+
+      - name: Build package
+        run: |
+          cd sdk/typescript
+          npm run build
+
+      - name: Get version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/typescript-sdk-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Verify version matches package.json
+        run: |
+          cd sdk/typescript
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.tag.outputs.version }}"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) does not match tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version match confirmed: $TAG_VERSION"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: polos-sdk-typescript
+          path: |
+            sdk/typescript/dist/
+            sdk/typescript/package.json
+            sdk/typescript/README.md
+          if-no-files-found: error
+
+  release:
+    name: Create Release and Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: polos-sdk-typescript
+          path: sdk/typescript
+
+      - name: Get version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/typescript-sdk-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          CURRENT_TAG="typescript-sdk-v${{ steps.tag.outputs.version }}"
+          # Find previous typescript-sdk-v tag
+          PREV_TAG=$(git tag -l "typescript-sdk-v*" --sort=-version:refname | sed -n "2p" || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # First release, get all commits up to this tag
+            NOTES=$(git log --pretty=format:"- %s (%h)" ${CURRENT_TAG} 2>/dev/null || echo "Initial release")
+          else
+            # Get commits since last typescript-sdk-v tag
+            NOTES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null || echo "No commits found")
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: TypeScript SDK v${{ steps.tag.outputs.version }}
+          body: |
+            ## TypeScript SDK v${{ steps.tag.outputs.version }}
+
+            ### Changes
+            ${{ steps.release_notes.outputs.notes }}
+
+            ### Installation
+            ```bash
+            npm install @polos/sdk@${{ steps.tag.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Publish to npm
+        run: |
+          cd sdk/typescript
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

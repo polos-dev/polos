@@ -1,0 +1,23 @@
+{
+  "name": "polos-order-processing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Order processing with human-in-the-loop fraud review",
+  "scripts": {
+    "worker": "tsx worker.ts",
+    "start": "tsx main.ts",
+    "approve": "tsx approve_order.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@polos/sdk": "^0.1.1",
+    "dotenv": "^16.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

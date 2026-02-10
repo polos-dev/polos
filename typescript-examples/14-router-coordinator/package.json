@@ -1,0 +1,21 @@
+{
+  "name": "polos-router-coordinator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Router coordinator example with agent orchestration for Polos TypeScript SDK",
+  "scripts": {
+    "worker": "tsx worker.ts",
+    "start": "tsx main.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@polos/sdk": "^0.1.1",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "polos-structured-output",
+  "version": "0.1.0",
+  "description": "Structured output example for Polos SDK",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "worker": "tsx worker.ts",
+    "main": "tsx main.ts"
+  },
+  "dependencies": {
+    "@polos/sdk": "^0.1.1",
+    "@ai-sdk/openai": "^3.0.0",
+    "dotenv": "^16.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

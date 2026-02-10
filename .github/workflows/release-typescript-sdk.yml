@@ -99,7 +99,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Create Release and Publish
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -110,18 +110,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: polos-sdk-typescript
-          path: sdk/typescript
 
       - name: Get version from tag
         id: tag
@@ -163,9 +151,28 @@ jobs:
           draft: false
           prerelease: false
 
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC trusted publishing
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: polos-sdk-typescript
+          path: sdk/typescript
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Publish to npm
         run: |
           cd sdk/typescript
           npm publish --access public --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

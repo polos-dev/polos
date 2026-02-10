@@ -6,6 +6,7 @@
  *
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Workflow, WorkflowHandle, WorkflowStatus } from '../types/workflow.js';
 import { retry, type RetryOptions } from '../utils/retry.js';
 
@@ -429,7 +430,7 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
       }
 
       // Local stub — no orchestrator
-      const executionId = crypto.randomUUID();
+      const executionId = randomUUID();
       const handle: WorkflowHandle<TResult> = {
         executionId,
         // eslint-disable-next-line @typescript-eslint/require-await -- stub
@@ -580,7 +581,7 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
       if (cached) {
         return cached.value;
       }
-      const generated = crypto.randomUUID();
+      const generated = randomUUID();
       store.set(key, generated);
       return generated;
     },

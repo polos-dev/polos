@@ -30,8 +30,9 @@
 
 Polos is a durable execution platform for AI agents. It provides the stateful infrastructure required to run long-running, autonomous agents reliably at scale, including a **built-in event system** for agent coordination, so you don't need to bolt on Kafka or RabbitMQ.
 
-Write it all in plain Python (or TypeScript - coming soon). No DAGs to define, no graph syntax to learn. Use loops, conditionals, and function calls naturally while Polos handles durability, reliability and scaling automatically.
+Write it all in plain Python or TypeScript. No DAGs to define, no graph syntax to learn. Use loops, conditionals, and function calls naturally while Polos handles durability, reliability and scaling automatically.
 
+**Python**
 ```python
 from polos import Agent, workflow, WorkflowContext
 
@@ -73,6 +74,65 @@ async def process_order(ctx: WorkflowContext, order: ProcessOrderInput):
     return ProcessOrderOutput(status="completed", payment_id=payment.id)
 ```
 
+**TypeScript**
+```typescript
+import { defineAgent, defineWorkflow } from "@polos/sdk";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+const orderAgent = defineAgent({
+  id: "order-agent",
+  model: openai("gpt-4o"),
+  tools: [checkInventory, calculateShipping],
+});
+
+const processOrder = defineWorkflow(
+  {
+    id: "process-order",
+    triggerOnEvent: "order/new",
+    payloadSchema: z.object({
+      id: z.string(),
+      amount: z.number(),
+      items: z.array(z.string()),
+    }),
+  },
+  async (ctx, order) => {
+    // Agent validates order and checks inventory
+    const validation = await ctx.step.agentInvokeAndWait(
+      "validate_order",
+      orderAgent.withInput(`Validate this order: ${JSON.stringify(order)}`)
+    );
+
+    if (!validation.result.valid) {
+      return { status: "invalid", reason: validation.result.reason };
+    }
+
+    // High-value orders need approval - suspend until human decides
+    if (order.amount > 1000) {
+      const decision = await ctx.step.suspend("approval", {
+        data: { id: order.id, amount: order.amount, items: order.items },
+      });
+      if (!decision.data.approved) {
+        return { status: "rejected" };
+      }
+    }
+
+    // Charge customer (exactly-once guarantee)
+    const payment = await ctx.step.run("charge", () => chargeStripe(order));
+
+    // Wait for warehouse pickup (could be hours or days)
+    await ctx.step.waitForEvent("wait_pickup", {
+      topic: `warehouse.pickup/${order.id}`,
+    });
+
+    // Send shipping notification
+    await ctx.step.run("notify", () => sendShippingEmail(order));
+
+    return { status: "completed", paymentId: payment.id };
+  }
+);
+```
+
 This workflow survives crashes, resumes mid-execution, and pauses for approval - automatically.
 
 ---
@@ -87,7 +147,7 @@ Polos consists of three components:
 
 - **Orchestrator**: Manages execution state, handles retries, and coordinates workers
 - **Worker**: Runs your agents and workflows, connects to the orchestrator
-- **SDK**: Python library for defining agents, workflows, and tools
+- **SDK**: Python and TypeScript libraries for defining agents, workflows, and tools
 
 ---
 
@@ -135,6 +195,8 @@ Polos handles failures, rescheduling, and checkpointing. You just focus on busin
 ### Logic Belongs in Code, Not Configs
 
 **With Polos:**
+
+**Python**
 ```python
 @workflow
 async def process_order(ctx: WorkflowContext, order: ProcessOrderInput):
@@ -145,6 +207,21 @@ async def process_order(ctx: WorkflowContext, order: ProcessOrderInput):
 
     await ctx.step.run("charge", charge_stripe, order)
     await ctx.step.run("notify", send_email, order)
+```
+
+**TypeScript**
+```typescript
+const processOrder = defineWorkflow({ id: "process-order" }, async (ctx, order) => {
+  if (order.amount > 1000) {
+    const approved = await ctx.step.suspend("approval", { data: order });
+    if (!approved.data.ok) {
+      return { status: "rejected" };
+    }
+  }
+
+  await ctx.step.run("charge", () => chargeStripe(order));
+  await ctx.step.run("notify", () => sendEmail(order));
+});
 ```
 
 **Other platforms:**
@@ -165,7 +242,7 @@ dag = DAG(
 )
 ```
 
-No DAGs. No graph syntax. Just Python.
+No DAGs. No graph syntax. Just Python or TypeScript.
 
 ---
 
@@ -182,12 +259,19 @@ Copy the project ID displayed when you start the server. You'll need it in the n
 
 ### 2. Install the SDK
 
+**Python**
 ```bash
 pip install polos-sdk
 ```
 
+**TypeScript**
+```bash
+npm install @polos/sdk
+```
+
 ### 3. Create your first agent
 
+**Python**
 ```python
 # worker.py
 from polos import Agent, Worker, PolosClient
@@ -208,14 +292,43 @@ if __name__ == "__main__":
     asyncio.run(worker.run())
 ```
 
+**TypeScript**
+```typescript
+// worker.ts
+import { defineAgent, PolosClient, Worker } from "@polos/sdk";
+import { openai } from "@ai-sdk/openai";
+
+const weatherAgent = defineAgent({
+  id: "weather-agent",
+  model: openai("gpt-4o-mini"),
+  systemPrompt: "You are a helpful weather assistant.",
+  tools: [getWeather],
+});
+
+const client = new PolosClient({ projectId: "your-project-id" });
+const worker = new Worker({ client, agents: [weatherAgent] });
+
+await worker.run();
+```
+
 ### 4. Run your agent
 
+**Python**
 ```bash
 # Terminal 1: Start the worker
 python worker.py
 
 # Terminal 2: Invoke the agent
 python main.py
+```
+
+**TypeScript**
+```bash
+# Terminal 1: Start the worker
+npx tsx worker.ts
+
+# Terminal 2: Invoke the agent
+npx tsx main.ts
 ```
 
 ### 5. See it in action
@@ -234,33 +347,33 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
 
 ### Agents
 
-| Example | Description |
-|---------|-------------|
-| [Agent with tools](./python-examples/01-agent-with-tools) | Simple agent with tool calling |
-| [Structured Output](./python-examples/02-structured-output) | Agent with Pydantic model responses |
-| [Streaming](./python-examples/03-agent-streaming) | Real-time streaming responses |
-| [Conversational Chat](./python-examples/04-conversational-chat) | Multi-turn conversations with memory |
-| [Thinking Agent](./python-examples/05-thinking-agent) | Chain-of-thought reasoning |
-| [Guardrails](./python-examples/06-guardrails) | Input/output validation |
-| [Multi-Agent Coordination](./python-examples/14-router-coordinator) | Workflow orchestrating multiple agents |
+| Example | Python | TypeScript | Description |
+|---------|--------|------------|-------------|
+| Agent with tools | [Python](./python-examples/01-agent-with-tools) | [TypeScript](./typescript-examples/01-agent-with-tools) | Simple agent with tool calling |
+| Structured Output | [Python](./python-examples/02-structured-output) | [TypeScript](./typescript-examples/02-structured-output) | Agent with structured model responses |
+| Streaming | [Python](./python-examples/03-agent-streaming) | [TypeScript](./typescript-examples/03-agent-streaming) | Real-time streaming responses |
+| Conversational Chat | [Python](./python-examples/04-conversational-chat) | [TypeScript](./typescript-examples/04-conversational-chat) | Multi-turn conversations with memory |
+| Thinking Agent | [Python](./python-examples/05-thinking-agent) | [TypeScript](./typescript-examples/05-thinking-agent) | Chain-of-thought reasoning |
+| Guardrails | [Python](./python-examples/06-guardrails) | [TypeScript](./typescript-examples/06-guardrails) | Input/output validation |
+| Multi-Agent Coordination | [Python](./python-examples/14-router-coordinator) | [TypeScript](./typescript-examples/14-router-coordinator) | Workflow orchestrating multiple agents |
 
 ### Workflows
 
-| Example | Description |
-|---------|-------------|
-| [Workflow Basics](./python-examples/08-workflow-basics) | Core workflow patterns |
-| [Suspend/Resume](./python-examples/09-suspend-resume) | Human-in-the-loop approvals |
-| [State Persistence](./python-examples/10-state-persistence) | Durable state across executions |
-| [Error Handling](./python-examples/11-error-handling) | Retry, fallback, compensation patterns |
-| [Queues & Concurrency](./python-examples/12-shared-queues) | Rate limiting and concurrency control |
-| [Parallel Execution](./python-examples/13-parallel-review) | Fan-out/fan-in patterns |
+| Example | Python | TypeScript | Description |
+|---------|--------|------------|-------------|
+| Workflow Basics | [Python](./python-examples/08-workflow-basics) | [TypeScript](./typescript-examples/08-workflow-basics) | Core workflow patterns |
+| Suspend/Resume | [Python](./python-examples/09-suspend-resume) | [TypeScript](./typescript-examples/09-suspend-resume) | Human-in-the-loop approvals |
+| State Persistence | [Python](./python-examples/10-state-persistence) | [TypeScript](./typescript-examples/10-state-persistence) | Durable state across executions |
+| Error Handling | [Python](./python-examples/11-error-handling) | [TypeScript](./typescript-examples/11-error-handling) | Retry, fallback, compensation patterns |
+| Queues & Concurrency | [Python](./python-examples/12-shared-queues) | [TypeScript](./typescript-examples/12-shared-queues) | Rate limiting and concurrency control |
+| Parallel Execution | [Python](./python-examples/13-parallel-review) | [TypeScript](./typescript-examples/13-parallel-review) | Fan-out/fan-in patterns |
 
 ### Events & Scheduling
 
-| Example | Description |
-|---------|-------------|
-| [Event-Triggered](./python-examples/15-event-triggered) | Pub/sub event-driven workflows |
-| [Scheduled Workflows](./python-examples/16-scheduled-workflow) | Cron-based scheduling |
+| Example | Python | TypeScript | Description |
+|---------|--------|------------|-------------|
+| Event-Triggered | [Python](./python-examples/15-event-triggered) | [TypeScript](./typescript-examples/15-event-triggered) | Pub/sub event-driven workflows |
+| Scheduled Workflows | [Python](./python-examples/16-scheduled-workflow) | [TypeScript](./typescript-examples/16-scheduled-workflow) | Cron-based scheduling |
 
 ---
 

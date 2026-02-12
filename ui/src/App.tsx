@@ -15,6 +15,7 @@ import { TraceDetailPage } from '@/pages/traces/TraceDetail';
 import { TraceListPage } from '@/pages/traces/TraceList';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
+import { ApprovePage } from '@/pages/approve/ApprovePage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { isLocalMode } from '@/lib/localMode';
 
@@ -32,6 +33,7 @@ function App() {
       {/* Public auth routes */}
       <Route path="/sign-in" element={<SignIn />} />
       <Route path="/sign-up" element={<SignUp />} />
+      <Route path="/approve/:executionId/:stepKey" element={<ApprovePage />} />
 
       {/* Protected app routes */}
       <Route

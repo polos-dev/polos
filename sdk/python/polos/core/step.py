@@ -677,6 +677,10 @@ class Step:
         topic = f"workflow/{self.ctx.root_workflow_id}/{self.ctx.root_execution_id}"
         # Publish suspend event
         client = get_client_or_raise()
+        # Inject approval URL into event data so consumers can link to it
+        approval_url = f"{client.api_url}/approve/{self.ctx.root_execution_id}/{step_key}"
+        if isinstance(serialized_data, dict):
+            serialized_data["_approval_url"] = approval_url
         await batch_publish(
             client=client,
             topic=topic,

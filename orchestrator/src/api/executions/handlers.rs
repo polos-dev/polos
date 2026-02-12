@@ -178,15 +178,6 @@ pub struct FailExecutionRequest {
     final_state: Option<serde_json::Value>,
 }
 
-/// Request to resume a waiting execution
-#[derive(Deserialize, ToSchema)]
-pub struct ResumeExecutionRequest {
-    /// Step key that's waiting
-    pub step_key: String,
-    /// Data to resume with
-    pub data: serde_json::Value,
-}
-
 #[derive(Deserialize)]
 pub struct StoreStepOutputRequest {
     step_key: String,
@@ -1153,74 +1144,6 @@ pub async fn confirm_cancellation(
         execution_id,
         worker_id
     );
-    Ok(StatusCode::OK)
-}
-
-/// Resume a waiting execution
-#[utoipa::path(
-    post,
-    path = "/api/v1/executions/{execution_id}/resume",
-    tag = "Executions",
-    request_body = ResumeExecutionRequest,
-    params(
-        ("execution_id" = String, Path, description = "Execution ID to resume")
-    ),
-    responses(
-        (status = 200, description = "Execution resumed"),
-        (status = 400, description = "Invalid execution ID"),
-        (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearer_auth" = []),
-        ("cookie_auth" = [])
-    )
-)]
-pub async fn resume_execution(
-    State(state): State<Arc<AppState>>,
-    Path(execution_id): Path<String>,
-    Json(req): Json<ResumeExecutionRequest>,
-) -> Result<StatusCode, StatusCode> {
-    let execution_id_uuid = Uuid::parse_str(&execution_id).map_err(|e| {
-        tracing::error!("Invalid execution_id format: {} - {}", execution_id, e);
-        StatusCode::BAD_REQUEST
-    })?;
-
-    let project_id = state
-        .db
-        .get_project_id_from_execution(&execution_id_uuid)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get project_id from execution: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    state
-        .db
-        .set_project_id(&project_id, false)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to set project_id: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let topic = format!("{}/{}/resume", req.step_key, execution_id_uuid);
-
-    let events: Vec<(Option<String>, serde_json::Value, Option<Uuid>, i32)> =
-        vec![(Some("resume".to_string()), req.data, None, 0)];
-
-    state
-        .db
-        .publish_events_batch(topic, events, None, None, &project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                "Failed to publish resume event for execution {}: {}",
-                execution_id_uuid,
-                e
-            );
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
     Ok(StatusCode::OK)
 }
 

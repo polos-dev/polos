@@ -19,6 +19,7 @@ function createMockOrchestratorClient(): OrchestratorClient {
     })),
     batchInvokeWorkflows: mock.fn(async () => ({ executions: [] })),
     publishEvent: mock.fn(async () => ({ sequence_ids: [1] })),
+    getApiUrl: mock.fn(() => 'http://localhost:8080'),
     setWaiting: mock.fn(async () => undefined),
     getExecution: mock.fn(async () => ({
       execution_id: 'exec-1',

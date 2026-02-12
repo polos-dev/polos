@@ -94,7 +94,35 @@ export async function getJSON<T>(
   return res.json() as Promise<T>;
 }
 
+export interface ApprovalResponse {
+  execution_id: string;
+  step_key: string;
+  status: string;
+  data: Record<string, unknown> | null;
+}
+
 export const api = {
+  // Approval functions
+  async getApproval(
+    executionId: string,
+    stepKey: string
+  ): Promise<ApprovalResponse> {
+    return getJSON<ApprovalResponse>(
+      `/api/v1/approvals/${executionId}/${encodeURIComponent(stepKey)}`
+    );
+  },
+
+  async submitApproval(
+    executionId: string,
+    stepKey: string,
+    data: unknown
+  ): Promise<void> {
+    return postJSON<void>(
+      `/api/v1/approvals/${executionId}/${encodeURIComponent(stepKey)}/submit`,
+      { data }
+    );
+  },
+
   // Project functions
   async getProjects(): Promise<{ projects: Project[] }> {
     const response = await fetch(`${getApiBaseUrl()}/api/v1/projects`, {

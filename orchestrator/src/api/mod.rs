@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod api_keys;
+pub mod approvals;
 pub mod auth;
 pub mod common;
 pub mod deployments;

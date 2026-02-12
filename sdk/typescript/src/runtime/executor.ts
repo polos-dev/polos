@@ -850,12 +850,17 @@ function createOrchestratorStepHelper(
 
       // Publish suspend event on workflow topic
       const topic = `workflow/${execCtx.rootWorkflowId}/${execCtx.rootExecutionId}`;
+      const approvalUrl = `${orchestratorClient.getApiUrl()}/approve/${execCtx.rootExecutionId}/${key}`;
+      const eventData =
+        options?.data != null && typeof options.data === 'object' && !Array.isArray(options.data)
+          ? { ...(options.data as Record<string, unknown>), _approval_url: approvalUrl }
+          : { _original: options?.data, _approval_url: approvalUrl };
       await orchestratorClient.publishEvent({
         topic,
         events: [
           {
             eventType: `suspend_${key}`,
-            data: options?.data,
+            data: eventData,
           },
         ],
         executionId: execCtx.executionId,

@@ -84,6 +84,13 @@ export class OrchestratorClient {
   }
 
   /**
+   * Get the API URL.
+   */
+  getApiUrl(): string {
+    return this.apiUrl;
+  }
+
+  /**
    * Get the project ID.
    */
   getProjectId(): string {

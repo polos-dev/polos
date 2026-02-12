@@ -65,7 +65,6 @@ pub struct AppState {
         api::executions::handlers::submit_workflows,
         api::executions::handlers::get_execution,
         api::executions::handlers::cancel_execution,
-        api::executions::handlers::resume_execution,
         // Traces
         api::traces::handlers::get_traces,
         api::traces::handlers::get_trace_by_id,
@@ -116,7 +115,6 @@ pub struct AppState {
             api::executions::handlers::SubmitWorkflowsResponse,
             api::executions::handlers::ExecutionResponse,
             api::executions::handlers::CancelExecutionResponse,
-            api::executions::handlers::ResumeExecutionRequest,
             // Events
             api::events::handlers::EventData,
             api::events::handlers::PublishEventRequest,
@@ -268,7 +266,8 @@ async fn main() -> anyhow::Result<()> {
     let db_bg = Database::new(pool_bg);
 
     // Check if local mode can be enabled (only allowed for localhost bind addresses)
-    let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let bind_address =
+        std::env::var("POLOS_BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let local_mode_requested = std::env::var("POLOS_LOCAL_MODE")
         .unwrap_or_else(|_| "False".to_string())
@@ -834,10 +833,6 @@ async fn main() -> anyhow::Result<()> {
             post(api::executions::cancel_execution),
         )
         .route(
-            "/api/v1/executions/:execution_id/resume",
-            post(api::executions::resume_execution),
-        )
-        .route(
             "/internal/executions/:execution_id/confirm-cancellation",
             post(api::executions::confirm_cancellation),
         )
@@ -970,6 +965,15 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/conversation/:conversation_id/get",
             get(api::state::get_conversation_history),
         )
+        // Approval endpoints
+        .route(
+            "/api/v1/approvals/:execution_id/:step_key",
+            get(api::approvals::get_approval),
+        )
+        .route(
+            "/api/v1/approvals/:execution_id/:step_key/submit",
+            post(api::approvals::submit_approval),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             api::auth::middleware::authenticate_api_v1_middleware,
@@ -1028,7 +1032,8 @@ async fn main() -> anyhow::Result<()> {
         })
         .with_state(state);
 
-    let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let bind_address =
+        std::env::var("POLOS_BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!("Orchestrator listening on {}", listener.local_addr()?);
 

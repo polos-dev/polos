@@ -20,8 +20,9 @@
  */
 
 import type { ToolWorkflow } from '../core/tool.js';
-import type { ExecutionEnvironment, SandboxToolsConfig } from './types.js';
+import type { ExecutionEnvironment, SandboxToolsConfig, ExecToolConfig } from './types.js';
 import { DockerEnvironment } from './docker.js';
+import { LocalEnvironment } from './local.js';
 import { createExecTool } from './tools/exec.js';
 import { createReadTool } from './tools/read.js';
 import { createWriteTool } from './tools/write.js';
@@ -55,7 +56,7 @@ function createEnvironment(config?: SandboxToolsConfig): ExecutionEnvironment {
     case 'e2b':
       throw new Error('E2B environment is not yet implemented.');
     case 'local':
-      throw new Error('Local environment is not yet implemented.');
+      return new LocalEnvironment(config?.local, config?.exec?.maxOutputChars);
     default:
       throw new Error(`Unknown environment type: ${String(envType)}`);
   }
@@ -93,9 +94,20 @@ export function sandboxTools(config?: SandboxToolsConfig): SandboxToolsResult {
   if (envType === 'e2b') {
     throw new Error('E2B environment is not yet implemented.');
   }
-  if (envType === 'local') {
-    throw new Error('Local environment is not yet implemented.');
-  }
+
+  // For local mode, default exec security to 'approval-always' (no sandbox isolation)
+  const effectiveExecConfig: ExecToolConfig | undefined =
+    envType === 'local' && !config?.exec?.security
+      ? { ...config?.exec, security: 'approval-always' }
+      : config?.exec;
+
+  // For local mode, default file-mutating tools (write, edit) to approval-always
+  const fileApproval = config?.fileApproval ?? (envType === 'local' ? 'always' : undefined);
+
+  // Path restriction for read-only tools (read, glob, grep) — approval gate
+  const pathConfig = config?.local?.pathRestriction
+    ? { pathRestriction: config.local.pathRestriction }
+    : undefined;
 
   // Determine which tools to include
   const include = new Set(
@@ -104,12 +116,12 @@ export function sandboxTools(config?: SandboxToolsConfig): SandboxToolsResult {
 
   const tools: ToolWorkflow[] = [];
 
-  if (include.has('exec')) tools.push(createExecTool(getEnv, config?.exec));
-  if (include.has('read')) tools.push(createReadTool(getEnv));
-  if (include.has('write')) tools.push(createWriteTool(getEnv));
-  if (include.has('edit')) tools.push(createEditTool(getEnv));
-  if (include.has('glob')) tools.push(createGlobTool(getEnv));
-  if (include.has('grep')) tools.push(createGrepTool(getEnv));
+  if (include.has('exec')) tools.push(createExecTool(getEnv, effectiveExecConfig));
+  if (include.has('read')) tools.push(createReadTool(getEnv, pathConfig));
+  if (include.has('write')) tools.push(createWriteTool(getEnv, fileApproval));
+  if (include.has('edit')) tools.push(createEditTool(getEnv, fileApproval));
+  if (include.has('glob')) tools.push(createGlobTool(getEnv, pathConfig));
+  if (include.has('grep')) tools.push(createGrepTool(getEnv, pathConfig));
 
   // Create result array with cleanup method
   const result = tools as SandboxToolsResult;

@@ -74,7 +74,8 @@ export function createAskUserTool(): ToolWorkflow {
         },
       ];
 
-      const response = await ctx.step.suspend('ask_user', {
+      const askId = await ctx.step.uuid('_ask_user_id');
+      const response = await ctx.step.suspend(`ask_user_${askId}`, {
         data: {
           _form: {
             title: input.title ?? 'Agent Question',

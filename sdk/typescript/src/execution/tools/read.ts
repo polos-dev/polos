@@ -1,16 +1,25 @@
 /**
  * Read tool — read file contents from the execution environment.
+ *
+ * When pathRestriction is set, reads within the restriction proceed
+ * without approval. Reads outside the restriction suspend for user approval.
  */
 
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import { defineTool } from '../../core/tool.js';
 import type { ToolWorkflow } from '../../core/tool.js';
 import type { ExecutionEnvironment } from '../types.js';
+import type { PathRestrictionConfig } from './path-approval.js';
+import { isPathAllowed, requirePathApproval } from './path-approval.js';
 
 /**
  * Create the read tool for reading file contents.
  */
-export function createReadTool(getEnv: () => Promise<ExecutionEnvironment>): ToolWorkflow {
+export function createReadTool(
+  getEnv: () => Promise<ExecutionEnvironment>,
+  pathConfig?: PathRestrictionConfig
+): ToolWorkflow {
   return defineTool(
     {
       id: 'read',
@@ -23,8 +32,17 @@ export function createReadTool(getEnv: () => Promise<ExecutionEnvironment>): Too
         limit: z.number().optional().describe('Maximum number of lines to return'),
       }),
     },
-    async (_ctx, input) => {
+    async (ctx, input) => {
       const env = await getEnv();
+
+      // Check path restriction — approve if outside
+      if (pathConfig?.pathRestriction) {
+        const resolved = resolve(env.getCwd(), input.path);
+        if (!isPathAllowed(resolved, pathConfig.pathRestriction)) {
+          await requirePathApproval(ctx, 'read', resolved, pathConfig.pathRestriction);
+        }
+      }
+
       let content = await env.readFile(input.path);
 
       // Apply offset/limit if specified

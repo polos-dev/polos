@@ -4,13 +4,16 @@
 
 import { z } from 'zod';
 import { defineTool } from '../../core/tool.js';
-import type { ToolWorkflow } from '../../core/tool.js';
+import type { ToolWorkflow, ToolApproval } from '../../core/tool.js';
 import type { ExecutionEnvironment } from '../types.js';
 
 /**
  * Create the write tool for writing file contents.
  */
-export function createWriteTool(getEnv: () => Promise<ExecutionEnvironment>): ToolWorkflow {
+export function createWriteTool(
+  getEnv: () => Promise<ExecutionEnvironment>,
+  approval?: ToolApproval
+): ToolWorkflow {
   return defineTool(
     {
       id: 'write',
@@ -21,6 +24,7 @@ export function createWriteTool(getEnv: () => Promise<ExecutionEnvironment>): To
         path: z.string().describe('Path to the file to write'),
         content: z.string().describe('Content to write to the file'),
       }),
+      approval,
     },
     async (_ctx, input) => {
       const env = await getEnv();

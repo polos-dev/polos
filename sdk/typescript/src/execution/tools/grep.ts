@@ -1,16 +1,25 @@
 /**
  * Grep tool — search file contents by pattern in the execution environment.
+ *
+ * When pathRestriction is set, searches within the restriction proceed
+ * without approval. Custom cwd outside the restriction suspends for approval.
  */
 
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import { defineTool } from '../../core/tool.js';
 import type { ToolWorkflow } from '../../core/tool.js';
 import type { ExecutionEnvironment } from '../types.js';
+import type { PathRestrictionConfig } from './path-approval.js';
+import { isPathAllowed, requirePathApproval } from './path-approval.js';
 
 /**
  * Create the grep tool for searching file contents.
  */
-export function createGrepTool(getEnv: () => Promise<ExecutionEnvironment>): ToolWorkflow {
+export function createGrepTool(
+  getEnv: () => Promise<ExecutionEnvironment>,
+  pathConfig?: PathRestrictionConfig
+): ToolWorkflow {
   return defineTool(
     {
       id: 'grep',
@@ -31,8 +40,17 @@ export function createGrepTool(getEnv: () => Promise<ExecutionEnvironment>): Too
         contextLines: z.number().optional().describe('Number of context lines around each match'),
       }),
     },
-    async (_ctx, input) => {
+    async (ctx, input) => {
       const env = await getEnv();
+
+      // Check path restriction on custom cwd
+      if (pathConfig?.pathRestriction && input.cwd) {
+        const resolved = resolve(env.getCwd(), input.cwd);
+        if (!isPathAllowed(resolved, pathConfig.pathRestriction)) {
+          await requirePathApproval(ctx, 'grep', resolved, pathConfig.pathRestriction);
+        }
+      }
+
       const matches = await env.grep(input.pattern, {
         cwd: input.cwd,
         include: input.include,

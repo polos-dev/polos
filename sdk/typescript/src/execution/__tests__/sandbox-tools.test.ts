@@ -127,7 +127,31 @@ describe('sandboxTools', () => {
     assert.throws(() => sandboxTools({ env: 'e2b' }), /not yet implemented/);
   });
 
-  it('throws for local environment (not yet implemented)', () => {
-    assert.throws(() => sandboxTools({ env: 'local' }), /not yet implemented/);
+  it('creates tools for local environment', () => {
+    const tools = sandboxTools({ env: 'local' });
+
+    assert.strictEqual(tools.length, 6);
+
+    const ids = tools.map((t) => t.id);
+    assert.ok(ids.includes('exec'));
+    assert.ok(ids.includes('read'));
+    assert.ok(ids.includes('write'));
+    assert.ok(ids.includes('edit'));
+    assert.ok(ids.includes('glob'));
+    assert.ok(ids.includes('grep'));
+  });
+
+  it('local environment defaults exec security to approval-always', () => {
+    // Should not throw — local is supported
+    const tools = sandboxTools({ env: 'local' });
+    assert.strictEqual(tools.length, 6);
+  });
+
+  it('local environment respects explicit exec security', () => {
+    const tools = sandboxTools({
+      env: 'local',
+      exec: { security: 'allow-always' },
+    });
+    assert.strictEqual(tools.length, 6);
   });
 });

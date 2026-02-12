@@ -150,8 +150,9 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
   const effectiveHandler: typeof handler =
     config.approval === 'always'
       ? async (ctx, input) => {
+          const approvalId = await ctx.step.uuid('_approval_id');
           const response = await ctx.step.suspend<Record<string, unknown>, ToolApprovalResumeData>(
-            `approve_${config.id}`,
+            `approve_${config.id}_${approvalId}`,
             {
               data: {
                 _form: {

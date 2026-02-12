@@ -38,6 +38,18 @@ export function evaluateAllowlist(command: string, patterns: string[]): boolean 
 }
 
 /**
+ * Check whether a resolved path stays within a restriction directory.
+ *
+ * @param resolvedPath - The fully resolved path to check
+ * @param restriction - The base directory the path must stay within
+ * @returns Whether the path is within the restriction
+ */
+export function isWithinRestriction(resolvedPath: string, restriction: string): boolean {
+  const base = resolve(restriction);
+  return resolvedPath === base || resolvedPath.startsWith(base + '/');
+}
+
+/**
  * Assert that a file path stays within a restriction directory.
  * Throws if path traversal is detected.
  *
@@ -49,7 +61,7 @@ export function assertSafePath(filePath: string, restriction: string): void {
   const base = resolve(restriction);
   const resolved = resolve(base, filePath);
 
-  if (resolved !== base && !resolved.startsWith(base + '/')) {
+  if (!isWithinRestriction(resolved, base)) {
     throw new Error(`Path traversal detected: "${filePath}" resolves outside of "${restriction}"`);
   }
 }

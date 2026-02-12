@@ -29,8 +29,9 @@ async function requestApproval(
   env: ExecutionEnvironment
 ): Promise<{ approved: boolean; feedback?: string }> {
   const envInfo = env.getInfo();
+  const approvalId = await ctx.step.uuid('_approval_id');
   const response = await ctx.step.suspend<Record<string, unknown>, ApprovalResumeData>(
-    'approve_exec',
+    `approve_exec_${approvalId}`,
     {
       data: {
         _form: {

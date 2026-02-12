@@ -4,13 +4,16 @@
 
 import { z } from 'zod';
 import { defineTool } from '../../core/tool.js';
-import type { ToolWorkflow } from '../../core/tool.js';
+import type { ToolWorkflow, ToolApproval } from '../../core/tool.js';
 import type { ExecutionEnvironment } from '../types.js';
 
 /**
  * Create the edit tool for find-and-replace in files.
  */
-export function createEditTool(getEnv: () => Promise<ExecutionEnvironment>): ToolWorkflow {
+export function createEditTool(
+  getEnv: () => Promise<ExecutionEnvironment>,
+  approval?: ToolApproval
+): ToolWorkflow {
   return defineTool(
     {
       id: 'edit',
@@ -22,6 +25,7 @@ export function createEditTool(getEnv: () => Promise<ExecutionEnvironment>): Too
         old_text: z.string().describe('Exact text to find and replace'),
         new_text: z.string().describe('Text to replace the old_text with'),
       }),
+      approval,
     },
     async (_ctx, input) => {
       const env = await getEnv();

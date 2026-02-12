@@ -28,9 +28,10 @@ export type {
 
 // Environment implementations
 export { DockerEnvironment } from './docker.js';
+export { LocalEnvironment } from './local.js';
 
 // Security utilities
-export { evaluateAllowlist, assertSafePath } from './security.js';
+export { evaluateAllowlist, assertSafePath, isWithinRestriction } from './security.js';
 
 // Output utilities
 export { truncateOutput, isBinary, parseGrepOutput, stripAnsi } from './output.js';

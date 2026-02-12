@@ -214,4 +214,6 @@ export interface SandboxToolsConfig {
   local?: LocalEnvironmentConfig | undefined;
   /** Exec tool configuration */
   exec?: ExecToolConfig | undefined;
+  /** Approval mode for file-mutating tools (write, edit). Defaults to 'always' for local env. */
+  fileApproval?: 'always' | 'none' | undefined;
 }

@@ -74,6 +74,19 @@ describe('createWebSearchTool', () => {
     assert.strictEqual(tool.id, 'web_search');
   });
 
+  it('accepts approval option and produces a valid tool', () => {
+    const tool = createWebSearchTool({
+      approval: 'always',
+      search: async (query) => ({ query, results: [] }),
+    });
+    assert.strictEqual(tool.id, 'web_search');
+
+    const def = tool.toLlmToolDefinition();
+    assert.strictEqual(def.type, 'function');
+    assert.strictEqual(def.function.name, 'web_search');
+    assert.ok(def.function.description);
+  });
+
   it('Tavily API key error is descriptive when missing', () => {
     // Factory succeeds even without an API key (lazy resolution)
     const originalEnv = process.env['TAVILY_API_KEY'];

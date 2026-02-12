@@ -42,6 +42,7 @@ export {
   type ToolWorkflow,
   type DefineToolConfig,
   type LlmToolDefinition,
+  type ToolApproval,
 } from './core/tool.js';
 
 // Hooks (single source of truth: middleware/hook.ts, re-exported via core/workflow.ts)
@@ -76,6 +77,7 @@ export {
   type SuspendOptions,
   type ResumeOptions,
   type BatchWorkflowInput,
+  type BatchStepResult,
   AgentRunConfig,
   type StepStore,
 } from './core/step.js';

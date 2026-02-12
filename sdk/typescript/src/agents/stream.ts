@@ -388,7 +388,7 @@ export async function agentStreamFunction(
 
     // Execute all tools in batch
     if (batchWorkflows.length > 0) {
-      const batchResults: unknown[] = await ctx.step.batchInvokeAndWait(
+      const batchResults = await ctx.step.batchInvokeAndWait(
         `execute_tools:step_${String(agentStep)}`,
         batchWorkflows
       );
@@ -396,14 +396,18 @@ export async function agentStreamFunction(
       toolResultsRecordedList = [];
 
       for (let i = 0; i < batchResults.length; i++) {
-        const batchToolResult = batchResults[i];
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- bounds match batchResults
+        const batchToolResult = batchResults[i]!;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- bounds match batchResults
         const toolSpec = batchWorkflows[i]!;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- bounds match batchResults
         const toolCallInfo = toolCallList[i]!;
         const toolName = toolCallInfo.tool_name;
 
-        const toolResult = batchToolResult;
+        // Check success — convert errors to strings for the LLM (matching Python stream.py)
+        const toolResult: unknown = batchToolResult.success
+          ? batchToolResult.result
+          : `Error: ${batchToolResult.error ?? 'unknown error'}`;
         const toolCallId = toolCallInfo.tool_call_id;
         const toolCallCallId = toolCallInfo.tool_call_call_id;
 

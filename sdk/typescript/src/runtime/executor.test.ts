@@ -685,7 +685,7 @@ describe('step.suspend', () => {
 });
 
 describe('step.batchInvokeAndWait', () => {
-  it('unwraps cached result wrapper format', async () => {
+  it('preserves BatchStepResult wrapper from orchestrator', async () => {
     const mockClient = createMockOrchestratorClient();
     (mockClient.getAllStepOutputs as unknown as ReturnType<typeof mock.fn>).mock.mockImplementation(
       async () => [
@@ -721,6 +721,106 @@ describe('step.batchInvokeAndWait', () => {
     });
 
     assert.strictEqual(result.success, true);
-    assert.deepStrictEqual(batchResults, ['result-a', 'result-b']);
+    assert.deepStrictEqual(batchResults, [
+      { workflowId: 'wf-a', success: true, result: 'result-a', error: null },
+      { workflowId: 'wf-b', success: true, result: 'result-b', error: null },
+    ]);
+  });
+
+  it('preserves error info for failed batch items', async () => {
+    const mockClient = createMockOrchestratorClient();
+    (mockClient.getAllStepOutputs as unknown as ReturnType<typeof mock.fn>).mock.mockImplementation(
+      async () => [
+        {
+          stepKey: 'batch-key',
+          outputs: [
+            { workflow_id: 'wf-a', success: true, result: 'result-a' },
+            {
+              workflow_id: 'wf-b',
+              success: false,
+              result: null,
+              error: 'Tool "web_search" was rejected by the user.',
+            },
+          ],
+          completedAt: new Date().toISOString(),
+          success: true,
+        },
+      ]
+    );
+
+    let batchResults: unknown;
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        batchResults = await ctx.step.batchInvokeAndWait('batch-key', [
+          { workflow: 'wf-a', payload: {} },
+          { workflow: 'wf-b', payload: {} },
+        ]);
+        return 'done';
+      },
+    });
+
+    const result = await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.deepStrictEqual(batchResults, [
+      { workflowId: 'wf-a', success: true, result: 'result-a', error: null },
+      {
+        workflowId: 'wf-b',
+        success: false,
+        result: null,
+        error: 'Tool "web_search" was rejected by the user.',
+      },
+    ]);
+  });
+
+  it('recovers from step-level failure when sub-workflows have per-item errors', async () => {
+    const mockClient = createMockOrchestratorClient();
+    // Simulate what the orchestrator does: step-level success=false with error,
+    // but outputs still contain per-item results with individual success flags
+    (mockClient.getAllStepOutputs as unknown as ReturnType<typeof mock.fn>).mock.mockImplementation(
+      async () => [
+        {
+          stepKey: 'batch-key',
+          outputs: [
+            { workflow_id: 'wf-a', success: true, result: 'result-a' },
+            { workflow_id: 'wf-b', success: false, result: null, error: 'Tool rejected by user' },
+          ],
+          completedAt: new Date().toISOString(),
+          success: false,
+          error: { message: 'Tool rejected by user' },
+        },
+      ]
+    );
+
+    let batchResults: unknown;
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        batchResults = await ctx.step.batchInvokeAndWait('batch-key', [
+          { workflow: 'wf-a', payload: {} },
+          { workflow: 'wf-b', payload: {} },
+        ]);
+        return 'done';
+      },
+    });
+
+    const result = await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.deepStrictEqual(batchResults, [
+      { workflowId: 'wf-a', success: true, result: 'result-a', error: null },
+      { workflowId: 'wf-b', success: false, result: null, error: 'Tool rejected by user' },
+    ]);
   });
 });

@@ -19,6 +19,7 @@ import type {
   SuspendOptions,
   ResumeOptions,
   BatchWorkflowInput,
+  BatchStepResult,
 } from '../core/step.js';
 import type { AgentRunConfig } from '../core/step.js';
 import { StepExecutionError, WaitError, isWaitError } from '../core/step.js';
@@ -578,26 +579,45 @@ function createOrchestratorStepHelper(
       return handleData.map((d) => createWorkflowHandle<unknown>(orchestratorClient, d.id));
     },
 
-    async batchInvokeAndWait<T>(key: string, items: BatchWorkflowInput[]): Promise<T[]> {
+    async batchInvokeAndWait<T>(
+      key: string,
+      items: BatchWorkflowInput[]
+    ): Promise<BatchStepResult<T>[]> {
       checkAborted();
 
       if (items.length === 0) return [];
 
-      // Check for existing step output
+      // Check for existing step output (matching Python batch_invoke_and_wait:
+      // try handleExistingStep, fall back to raw outputs on error — because
+      // the step-level success may be false when sub-workflows fail, even
+      // though individual items carry their own success/error fields).
       const existing = checkExistingStep(key);
       if (existing) {
-        const raw = handleExistingStep(existing);
+        let raw: unknown;
+        try {
+          raw = handleExistingStep(existing);
+        } catch {
+          raw = existing.outputs;
+        }
+
         // The orchestrator stores batch results as [{workflow_id, success, result, error}, ...].
-        // Unwrap: extract .result from each item
+        // Preserve the wrapper (matching Python BatchStepResult) so callers can check success/error.
         if (Array.isArray(raw)) {
-          return raw.map((item: unknown) => {
-            if (item && typeof item === 'object' && 'result' in item) {
-              return (item as Record<string, unknown>)['result'] as T;
+          return raw.map((item: unknown): BatchStepResult<T> => {
+            if (item && typeof item === 'object' && 'success' in item) {
+              const rec = item as Record<string, unknown>;
+              return {
+                workflowId: typeof rec['workflow_id'] === 'string' ? rec['workflow_id'] : '',
+                success: rec['success'] === true,
+                result: (rec['result'] ?? null) as T | null,
+                error: typeof rec['error'] === 'string' ? rec['error'] : null,
+              };
             }
-            return item as T;
+            // Fallback: treat raw item as a successful result
+            return { workflowId: '', success: true, result: item as T, error: null };
           });
         }
-        return raw as T[];
+        return (raw as T[]).map((r) => ({ workflowId: '', success: true, result: r, error: null }));
       }
 
       // Build batch request with waitForSubworkflow=true
@@ -981,7 +1001,10 @@ function createOrchestratorStepHelper(
       return this.batchInvoke(key, workflows);
     },
 
-    async batchAgentInvokeAndWait<T>(key: string, configs: AgentRunConfig[]): Promise<T[]> {
+    async batchAgentInvokeAndWait<T>(
+      key: string,
+      configs: AgentRunConfig[]
+    ): Promise<BatchStepResult<T>[]> {
       checkAborted();
 
       const workflows: BatchWorkflowInput[] = configs.map((config) => ({

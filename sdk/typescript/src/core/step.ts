@@ -156,6 +156,21 @@ export interface BatchWorkflowInput {
 }
 
 /**
+ * Result of a single workflow in a batch invocation.
+ * Matches Python BatchStepResult.
+ */
+export interface BatchStepResult<T = unknown> {
+  /** The workflow ID that was invoked */
+  workflowId: string;
+  /** Whether the workflow completed successfully */
+  success: boolean;
+  /** The result from the workflow (if successful) */
+  result: T | null;
+  /** Error message (if failed) */
+  error: string | null;
+}
+
+/**
  * Configuration for agent invocation.
  * Matches Python AgentRunConfig.
  *
@@ -293,7 +308,7 @@ export interface StepHelper {
   /**
    * Invoke multiple workflows and wait for all results.
    */
-  batchInvokeAndWait<T>(key: string, items: BatchWorkflowInput[]): Promise<T[]>;
+  batchInvokeAndWait<T>(key: string, items: BatchWorkflowInput[]): Promise<BatchStepResult<T>[]>;
 
   /**
    * Wait for a time duration.
@@ -363,7 +378,7 @@ export interface StepHelper {
   /**
    * Invoke multiple agent workflows in batch and wait for all results.
    */
-  batchAgentInvokeAndWait<T>(key: string, configs: AgentRunConfig[]): Promise<T[]>;
+  batchAgentInvokeAndWait<T>(key: string, configs: AgentRunConfig[]): Promise<BatchStepResult<T>[]>;
 
   /**
    * Create a custom traced span around an async operation.
@@ -490,11 +505,14 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
     },
 
     // eslint-disable-next-line @typescript-eslint/require-await -- stub throws WaitError
-    async batchInvokeAndWait<T>(key: string, items: BatchWorkflowInput[]): Promise<T[]> {
+    async batchInvokeAndWait<T>(
+      key: string,
+      items: BatchWorkflowInput[]
+    ): Promise<BatchStepResult<T>[]> {
       if (items.length === 0) return [];
 
       // Check cache (matching Python: _check_existing_step → reconstruct results)
-      const cached = store.get<T[]>(key);
+      const cached = store.get<BatchStepResult<T>[]>(key);
       if (cached) {
         return cached.value;
       }
@@ -655,7 +673,10 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
       return this.batchInvoke(key, items);
     },
 
-    async batchAgentInvokeAndWait<T>(key: string, configs: AgentRunConfig[]): Promise<T[]> {
+    async batchAgentInvokeAndWait<T>(
+      key: string,
+      configs: AgentRunConfig[]
+    ): Promise<BatchStepResult<T>[]> {
       const items: BatchWorkflowInput[] = configs.map((config) => ({
         workflow: config.agent,
         payload: {

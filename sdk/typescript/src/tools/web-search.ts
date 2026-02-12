@@ -24,7 +24,7 @@
 
 import { z } from 'zod';
 import { defineTool } from '../core/tool.js';
-import type { ToolWorkflow } from '../core/tool.js';
+import type { ToolWorkflow, ToolApproval } from '../core/tool.js';
 
 // ── Result types (provider-agnostic) ─────────────────────────────────
 
@@ -90,6 +90,8 @@ export interface WebSearchToolConfig extends TavilySearchConfig {
   topic?: 'general' | 'news';
   /** Tool identifier exposed to the LLM. @default 'web_search' */
   toolId?: string;
+  /** Require human approval before execution. */
+  approval?: ToolApproval;
 }
 
 // ── LLM-facing input schema ──────────────────────────────────────────
@@ -218,6 +220,7 @@ export function createWebSearchTool(config?: WebSearchToolConfig): ToolWorkflow 
         'Search the web for current information. ' +
         'Returns a list of relevant results with titles, URLs, and content snippets.',
       inputSchema: webSearchInputSchema,
+      approval: config?.approval,
     },
     async (ctx, input: WebSearchInput) => {
       const options: WebSearchOptions = {

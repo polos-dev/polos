@@ -13,6 +13,10 @@ import type { QueueConfig, WorkflowHandler, Workflow } from './workflow.js';
 import { defineWorkflow } from './workflow.js';
 import type { HookHandler, Hook as HookObject } from '../middleware/hook.js';
 
+// ── Tool approval ────────────────────────────────────────────────────
+
+export type ToolApproval = 'always' | 'none';
+
 // ── LLM tool definition ──────────────────────────────────────────────
 
 /**
@@ -59,6 +63,8 @@ export interface DefineToolConfig<TInput = unknown, TOutput = unknown, TState = 
     | undefined;
   /** Whether to auto-register in the global workflow registry (default: true) */
   autoRegister?: boolean | undefined;
+  /** Require human approval before tool execution. @default undefined (no approval) */
+  approval?: ToolApproval | undefined;
 }
 
 // ── ToolWorkflow ─────────────────────────────────────────────────────
@@ -94,6 +100,12 @@ export interface ToolWorkflow<
  */
 export function isToolWorkflow(workflow: Workflow): workflow is ToolWorkflow {
   return workflow.config.workflowType === 'tool';
+}
+
+// ── Tool approval resume data ────────────────────────────────────────
+
+interface ToolApprovalResumeData {
+  data?: { approved?: boolean; feedback?: string };
 }
 
 // ── defineTool ───────────────────────────────────────────────────────
@@ -134,6 +146,52 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
     ? (zodToJsonSchema(config.inputSchema, { target: 'openApi3' }) as Record<string, unknown>)
     : { type: 'object', properties: {} };
 
+  // Wrap handler with approval gate when configured
+  const effectiveHandler: typeof handler =
+    config.approval === 'always'
+      ? async (ctx, input) => {
+          const response = await ctx.step.suspend<Record<string, unknown>, ToolApprovalResumeData>(
+            `approve_${config.id}`,
+            {
+              data: {
+                _form: {
+                  title: `Approve tool: ${config.id}`,
+                  description: `The agent wants to use the "${config.id}" tool.`,
+                  fields: [
+                    {
+                      key: 'approved',
+                      type: 'boolean',
+                      label: 'Approve this tool call?',
+                      required: true,
+                      default: false,
+                    },
+                    {
+                      key: 'feedback',
+                      type: 'textarea',
+                      label: 'Feedback for the agent (optional)',
+                      description: 'If rejecting, tell the agent what to do instead.',
+                      required: false,
+                    },
+                  ],
+                  context: { tool: config.id, input },
+                },
+                _source: 'tool_approval',
+                _tool: config.id,
+              },
+            }
+          );
+
+          if (response.data?.approved !== true) {
+            const feedback = response.data?.feedback;
+            throw new Error(
+              `Tool "${config.id}" was rejected by the user.${feedback ? ` Feedback: ${feedback}` : ''}`
+            );
+          }
+
+          return handler(ctx, input);
+        }
+      : handler;
+
   // Create the underlying workflow
   const workflow = defineWorkflow<TInput, TState, TOutput>(
     {
@@ -147,7 +205,7 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
       onStart: config.onStart,
       onEnd: config.onEnd,
     },
-    handler as WorkflowHandler<TInput, TState, TOutput>,
+    effectiveHandler as WorkflowHandler<TInput, TState, TOutput>,
     config.autoRegister === undefined ? undefined : { autoRegister: config.autoRegister }
   );
 

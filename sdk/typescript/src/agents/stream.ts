@@ -15,6 +15,7 @@ import { llmGenerate } from '../llm/generate.js';
 import { llmStream } from '../llm/stream.js';
 import type { LLM } from '../llm/llm.js';
 import type { LLMToolCall, LLMUsage, LLMToolResult, LLMGenerateResult } from '../llm/types.js';
+import { convertToolResultsToMessages } from '../llm/types.js';
 import type { Guardrail } from '../middleware/guardrail.js';
 import type { Hook } from '../middleware/hook.js';
 import type { PublishEventFn } from '../llm/stream.js';
@@ -135,7 +136,6 @@ export async function agentStreamFunction(
   const allToolResults: ToolResultInfo[] = [];
   const steps: StepInfo[] = [];
   let endSteps = false;
-  let toolResults: LLMToolResult[] | undefined;
   let checkedStructuredOutput = false;
 
   // Retrieve conversation history if enabled
@@ -191,7 +191,7 @@ export async function agentStreamFunction(
 
   const safetyMaxSteps: number | null = hasMaxStepsCondition
     ? null
-    : parseInt(process.env['POLOS_AGENT_MAX_STEPS'] ?? '10', 10);
+    : parseInt(process.env['POLOS_AGENT_MAX_STEPS'] ?? '20', 10);
 
   // Build publishEvent function for streaming
   const execCtxForPublish = getExecutionContext();
@@ -258,7 +258,6 @@ export async function agentStreamFunction(
         agent_step: agentStep,
         guardrails,
         guardrail_max_retries: guardrailMaxRetries,
-        tool_results: toolResults,
         outputSchema: outputSchemaForLlm,
       });
 
@@ -290,15 +289,11 @@ export async function agentStreamFunction(
           temperature: agentConfig.temperature,
           maxTokens: agentConfig.maxOutputTokens,
           agent_step: agentStep,
-          tool_results: toolResults,
           outputSchema: outputSchemaForLlm,
         },
         publishEvent
       );
     }
-
-    // Reset tool results for next iteration
-    toolResults = undefined;
 
     // Accumulate usage
     if (llmResult.usage) {
@@ -315,6 +310,8 @@ export async function agentStreamFunction(
         `LLM failed to generate output: agent_id=${agentDef.id}, agent_step=${String(agentStep)}`
       );
     }
+
+    conversationMessages.push(...llmResult.raw_output);
 
     // Execute tools in batch
     const batchWorkflows: BatchWorkflowInput[] = [];
@@ -446,8 +443,10 @@ export async function agentStreamFunction(
 
       allToolResults.push(...toolResultsRecordedList);
 
-      // Set tool_results for next iteration
-      toolResults = currentIterationToolResults;
+      // Add tool results to conversation as role:'tool' messages
+      // so the full conversation accumulates naturally
+      const toolResultMessages = convertToolResultsToMessages(currentIterationToolResults);
+      conversationMessages.push(...toolResultMessages);
     }
 
     // Build step record
@@ -457,7 +456,7 @@ export async function agentStreamFunction(
       tool_calls: toolCalls,
       tool_results: toolResultsRecordedList,
       usage: llmResult.usage,
-      raw_output: llmResult.raw_output,
+      raw_output: conversationMessages,
     });
 
     // Execute on_agent_step_end hooks
@@ -481,7 +480,7 @@ export async function agentStreamFunction(
     }
 
     // No tool results, we're done
-    if (toolResults === undefined || toolResults.length === 0) {
+    if (currentIterationToolResults.length === 0) {
       endSteps = true;
     }
 
@@ -526,7 +525,6 @@ export async function agentStreamFunction(
       if (!parseResult.success) {
         // Reset and retry with fix prompt
         endSteps = false;
-        conversationMessages = llmResult.raw_output;
 
         const schemaJson = JSON.stringify(agentDef.outputSchema, null, 2);
         const fixPrompt =
@@ -542,11 +540,6 @@ export async function agentStreamFunction(
     }
 
     if (!endSteps) {
-      // Set conversation for next LLM call
-      if (!checkedStructuredOutput) {
-        conversationMessages = llmResult.raw_output;
-      }
-
       agentStep++;
     }
   }

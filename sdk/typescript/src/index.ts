@@ -255,3 +255,48 @@ export {
   isOtelAvailable,
   type OtelConfig,
 } from './features/index.js';
+
+// Tools - Ask user
+export { createAskUserTool } from './tools/ask-user.js';
+
+// Tools - Web search
+export {
+  createWebSearchTool,
+  type WebSearchToolConfig,
+  type WebSearchResult,
+  type WebSearchResultItem,
+  type WebSearchOptions,
+  type WebSearchFunction,
+  type TavilySearchConfig,
+} from './tools/web-search.js';
+
+// Execution - Sandbox tools
+export {
+  sandboxTools,
+  type SandboxToolsResult,
+  DockerEnvironment,
+  evaluateAllowlist,
+  assertSafePath,
+  truncateOutput,
+  isBinary,
+  parseGrepOutput,
+  stripAnsi,
+  createExecTool,
+  createReadTool,
+  createWriteTool,
+  createEditTool,
+  createGlobTool,
+  createGrepTool,
+  type ExecutionEnvironment,
+  type ExecOptions,
+  type ExecResult,
+  type GlobOptions,
+  type GrepOptions,
+  type GrepMatch,
+  type EnvironmentInfo,
+  type DockerEnvironmentConfig,
+  type E2BEnvironmentConfig,
+  type LocalEnvironmentConfig,
+  type ExecToolConfig,
+  type SandboxToolsConfig,
+} from './execution/index.js';

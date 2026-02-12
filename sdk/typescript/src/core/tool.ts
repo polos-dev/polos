@@ -57,6 +57,8 @@ export interface DefineToolConfig<TInput = unknown, TOutput = unknown, TState = 
     | HookObject<TInput, TState>
     | (HookHandler<TInput, TState> | HookObject<TInput, TState>)[]
     | undefined;
+  /** Whether to auto-register in the global workflow registry (default: true) */
+  autoRegister?: boolean | undefined;
 }
 
 // ── ToolWorkflow ─────────────────────────────────────────────────────
@@ -145,7 +147,8 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
       onStart: config.onStart,
       onEnd: config.onEnd,
     },
-    handler as WorkflowHandler<TInput, TState, TOutput>
+    handler as WorkflowHandler<TInput, TState, TOutput>,
+    config.autoRegister === undefined ? undefined : { autoRegister: config.autoRegister }
   );
 
   // Extend with tool-specific fields

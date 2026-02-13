@@ -28,6 +28,6 @@ Always respond with structured output indicating:
     tools=[charge_stripe, send_confirmation_email],
     output_schema=OrderAgentOutput,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=10)),
+        max_steps(MaxStepsConfig(count=10)),
     ],
 )

@@ -356,6 +356,11 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
 | Thinking Agent | [Python](./python-examples/05-thinking-agent) | [TypeScript](./typescript-examples/05-thinking-agent) | Chain-of-thought reasoning |
 | Guardrails | [Python](./python-examples/06-guardrails) | [TypeScript](./typescript-examples/06-guardrails) | Input/output validation |
 | Multi-Agent Coordination | [Python](./python-examples/14-router-coordinator) | [TypeScript](./typescript-examples/14-router-coordinator) | Workflow orchestrating multiple agents |
+| Order Processing | [Python](./python-examples/17-order-processing) | [TypeScript](./typescript-examples/17-order-processing) | Human-in-the-loop fraud review |
+| Sandbox Tools | [Python](./python-examples/18-sandbox-tools) | [TypeScript](./typescript-examples/18-sandbox-tools) | Code execution in an isolated Docker container |
+| Exec Security | [Python](./python-examples/19-exec-security) | [TypeScript](./typescript-examples/19-exec-security) | Allowlist-based command approval |
+| Web Search Agent | [Python](./python-examples/20-web-search-agent) | [TypeScript](./typescript-examples/20-web-search-agent) | Research agent with Tavily web search |
+| Local Sandbox | [Python](./python-examples/21-local-sandbox) | [TypeScript](./typescript-examples/21-local-sandbox) | Sandbox tools running on the host machine |
 
 ### Workflows
 
@@ -374,6 +379,12 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
 |---------|--------|------------|-------------|
 | Event-Triggered | [Python](./python-examples/15-event-triggered) | [TypeScript](./typescript-examples/15-event-triggered) | Pub/sub event-driven workflows |
 | Scheduled Workflows | [Python](./python-examples/16-scheduled-workflow) | [TypeScript](./typescript-examples/16-scheduled-workflow) | Cron-based scheduling |
+
+### Human-in-the-Loop
+
+| Example | Python | TypeScript | Description |
+|---------|--------|------------|-------------|
+| Approval Page | [Python](./python-examples/22-approval-page) | [TypeScript](./typescript-examples/22-approval-page) | Web UI for workflow approval with suspend/resume |
 
 ---
 

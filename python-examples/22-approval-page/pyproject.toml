@@ -1,0 +1,14 @@
+[project]
+name = "polos-approval-page"
+version = "0.1.0"
+description = "Approval page example: workflow suspends and shows a web UI link for the user to approve/reject"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[anthropic]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

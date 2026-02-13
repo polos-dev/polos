@@ -30,7 +30,7 @@ Use these tools to help answer user questions.""",
     on_tool_start=[log_tool_start],
     on_tool_end=[log_tool_end],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -44,7 +44,7 @@ simple_logged_agent = Agent(
     on_start=[log_start],
     on_end=[log_end],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -57,6 +57,6 @@ validated_agent = Agent(
     system_prompt="""You are a helpful assistant.""",
     on_start=[validate_input],  # Will reject empty or overly long prompts
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )

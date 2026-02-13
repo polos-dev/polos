@@ -1,0 +1,14 @@
+[project]
+name = "polos-local-sandbox"
+version = "0.1.0"
+description = "Agent with sandbox tools running locally on the host (no Docker)"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[anthropic]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

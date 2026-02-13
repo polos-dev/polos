@@ -24,7 +24,7 @@ SUGGESTED CORRECTIONS:
 
 If no issues found, say "No grammar issues found."
 """,
-    stop_conditions=[max_steps(MaxStepsConfig(limit=3))],
+    stop_conditions=[max_steps(MaxStepsConfig(count=3))],
 )
 
 
@@ -49,7 +49,7 @@ SUGGESTIONS:
 
 If the tone is consistent and appropriate, say "Tone is consistent and appropriate."
 """,
-    stop_conditions=[max_steps(MaxStepsConfig(limit=3))],
+    stop_conditions=[max_steps(MaxStepsConfig(count=3))],
 )
 
 
@@ -76,7 +76,7 @@ LOGICAL ISSUES:
 
 If content appears accurate and logical, say "Content appears factually sound."
 """,
-    stop_conditions=[max_steps(MaxStepsConfig(limit=3))],
+    stop_conditions=[max_steps(MaxStepsConfig(count=3))],
 )
 
 
@@ -96,7 +96,7 @@ Your job is to:
 
 Output ONLY the final edited text. Do not include explanations or commentary.
 """,
-    stop_conditions=[max_steps(MaxStepsConfig(limit=3))],
+    stop_conditions=[max_steps(MaxStepsConfig(count=3))],
 )
 
 
@@ -112,5 +112,5 @@ blog_generator_agent = Agent(
 
 Write the blog post directly without any preamble or meta-commentary.
 """,
-    stop_conditions=[max_steps(MaxStepsConfig(limit=3))],
+    stop_conditions=[max_steps(MaxStepsConfig(count=3))],
 )

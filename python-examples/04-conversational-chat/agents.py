@@ -18,6 +18,6 @@ Be conversational and helpful.
 When using tools, briefly explain what you're doing.""",
     tools=[get_current_time, get_weather, calculator],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=10)),
+        max_steps(MaxStepsConfig(count=10)),
     ],
 )

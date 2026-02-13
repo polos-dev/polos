@@ -30,7 +30,7 @@ Always show your work and explain your reasoning clearly.
 Use phrases like "Let me think...", "This means...", "Therefore..." to guide through your thought process.""",
     output_schema=ReasoningOutput,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=20)),
+        max_steps(MaxStepsConfig(count=20)),
     ],
 )
 
@@ -52,7 +52,7 @@ For each problem:
 Be thorough but clear. Show all work.""",
     output_schema=ReasoningOutput,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=20)),
+        max_steps(MaxStepsConfig(count=20)),
     ],
 )
 
@@ -73,6 +73,6 @@ logic_solver = Agent(
 Think systematically and show your logical deductions.""",
     output_schema=ReasoningOutput,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=20)),
+        max_steps(MaxStepsConfig(count=20)),
     ],
 )

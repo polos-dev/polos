@@ -14,7 +14,7 @@ provide a comprehensive review with rating, pros, cons, and recommendation.
 Always respond with structured data matching the required format.""",
     output_schema=MovieReview,  # Pydantic model for structured output
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -29,7 +29,7 @@ provide detailed instructions including ingredients, prep time, and cooking tips
 Always respond with structured data matching the required format.""",
     output_schema=RecipeOutput,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -44,6 +44,6 @@ and provide sentiment, confidence score, detected emotions, and key phrases.
 Always respond with structured data matching the required format.""",
     output_schema=SentimentAnalysis,
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )

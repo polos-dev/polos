@@ -12,6 +12,6 @@ storyteller = Agent(
 tell an engaging, vivid story with descriptions and dialogue.
 Keep stories between 200-400 words unless asked for a different length.""",
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )

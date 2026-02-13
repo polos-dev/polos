@@ -22,7 +22,7 @@ safe_assistant = Agent(
         enforce_response_length,  # Limit response length
     ],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -39,7 +39,7 @@ and other content as requested.""",
         enforce_response_length,
     ],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )
 
@@ -56,6 +56,6 @@ simple_agent = Agent(
         "Do not generate content that could be harmful",
     ],
     stop_conditions=[
-        max_steps(MaxStepsConfig(limit=5)),
+        max_steps(MaxStepsConfig(count=5)),
     ],
 )

@@ -1,0 +1,15 @@
+[project]
+name = "polos-web-search-agent"
+version = "0.1.0"
+description = "Research agent using web search and ask-user tools"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[anthropic]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]
+

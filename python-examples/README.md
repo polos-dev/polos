@@ -31,6 +31,10 @@ Each folder contains an independently executable example with its own `pyproject
 | [07-lifecycle-hooks](./07-lifecycle-hooks) | Agent lifecycle hooks (on_start, on_end, on_tool_call) |
 | [14-router-coordinator](./14-router-coordinator) | Multi-agent coordination with workflow orchestration |
 | [17-order-processing](./17-order-processing) | Order processing with human-in-the-loop fraud review (**used in the README demo**) |
+| [18-sandbox-tools](./18-sandbox-tools) | Code execution agent with sandbox tools in Docker |
+| [19-exec-security](./19-exec-security) | Exec allowlist security with command approval |
+| [20-web-search-agent](./20-web-search-agent) | Research agent with Tavily web search and ask-user |
+| [21-local-sandbox](./21-local-sandbox) | Sandbox tools running locally on the host machine |
 
 ### Workflows
 
@@ -43,6 +47,12 @@ Each folder contains an independently executable example with its own `pyproject
 | [12-shared-queues](./12-shared-queues) | Queue-based concurrency control |
 | [13-parallel-review](./13-parallel-review) | Parallel workflow execution and fan-out/fan-in |
 | [14-router-coordinator](./14-router-coordinator) | Multi-agent coordination with workflow orchestration |
+
+### Human-in-the-Loop
+
+| Example | Description |
+|---------|-------------|
+| [22-approval-page](./22-approval-page) | Web UI approval page with suspend/resume |
 
 ### Events & Scheduling
 

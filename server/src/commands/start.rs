@@ -125,7 +125,7 @@ async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
     let child = Command::new(&binary_path)
         .env("POLOS_LOCAL_MODE", "true")
         .env("DATABASE_URL", &config.database_url)
-        .env("BIND_ADDRESS", &bind_address)
+        .env("POLOS_BIND_ADDRESS", &bind_address)
         .env("CORS_ORIGIN", &cors_origin)
         .env("HMAC_SECRET", &hmac_secret)
         .stdout(Stdio::from(stdout_log))

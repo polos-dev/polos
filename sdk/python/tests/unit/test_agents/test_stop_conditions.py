@@ -221,20 +221,20 @@ class TestMaxStepsStopCondition:
         assert result is False  # 2 < 5
 
     def test_max_steps_default_count(self):
-        """Test max_steps uses default count=5."""
-        config = MaxStepsConfig()  # Uses default count=5
+        """Test max_steps uses default count=20."""
+        config = MaxStepsConfig()  # Uses default count=20
         ctx = StopConditionContext(
-            steps=[
-                Step(step=1),
-                Step(step=2),
-                Step(step=3),
-                Step(step=4),
-                Step(step=5),
-            ]
+            steps=[Step(step=i) for i in range(1, 6)]
         )
         configured = max_steps(config)
         result = configured(ctx)
-        assert result is True  # 5 >= 5
+        assert result is False  # 5 < 20
+
+        ctx_at_limit = StopConditionContext(
+            steps=[Step(step=i) for i in range(1, 21)]
+        )
+        result = configured(ctx_at_limit)
+        assert result is True  # 20 >= 20
 
 
 class TestExecutedToolStopCondition:

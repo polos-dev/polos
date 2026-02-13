@@ -211,7 +211,7 @@ async def max_tokens(ctx: StopConditionContext, config: MaxTokensConfig) -> bool
 class MaxStepsConfig(BaseModel):
     """Configuration for max_steps stop condition."""
 
-    count: int = 5
+    count: int = 20
 
 
 @stop_condition

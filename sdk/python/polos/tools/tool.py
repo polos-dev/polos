@@ -2,7 +2,7 @@
 
 import inspect
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from pydantic import BaseModel
 
@@ -13,6 +13,73 @@ from ..runtime.queue import Queue
 
 if TYPE_CHECKING:
     from ..middleware.hook import Hook
+
+ToolApproval = Literal["always", "none"]
+
+
+def _wrap_with_approval(
+    wrapped_func: Callable,
+    tool_id: str,
+    input_schema_class: type[BaseModel] | None,
+) -> Callable:
+    """Wrap a tool handler with an approval gate.
+
+    When called, the wrapper suspends execution to request user approval
+    before running the actual handler.  Matches the TypeScript SDK's
+    ``defineTool`` ``approval: 'always'`` behaviour.
+    """
+
+    async def approval_wrapper(ctx: WorkflowContext, payload: dict[str, Any] | None):
+        approval_id = await ctx.step.uuid("_approval_id")
+
+        # Build input context for the form
+        input_context: Any = payload
+        if input_schema_class is not None and isinstance(payload, dict):
+            try:
+                input_context = input_schema_class.model_validate(payload).model_dump()
+            except Exception:
+                input_context = payload
+
+        response = await ctx.step.suspend(
+            f"approve_{tool_id}_{approval_id}",
+            {
+                "_form": {
+                    "title": f"Approve tool: {tool_id}",
+                    "description": f'The agent wants to use the "{tool_id}" tool.',
+                    "fields": [
+                        {
+                            "key": "approved",
+                            "type": "boolean",
+                            "label": "Approve this tool call?",
+                            "required": True,
+                            "default": False,
+                        },
+                        {
+                            "key": "feedback",
+                            "type": "textarea",
+                            "label": "Feedback for the agent (optional)",
+                            "description": "If rejecting, tell the agent what to do instead.",
+                            "required": False,
+                        },
+                    ],
+                    "context": {"tool": tool_id, "input": input_context},
+                },
+                "_source": "tool_approval",
+                "_tool": tool_id,
+            },
+        )
+
+        data = response.get("data", {}) if isinstance(response, dict) else {}
+        if data.get("approved") is not True:
+            feedback = data.get("feedback")
+            msg = f'Tool "{tool_id}" was rejected by the user.'
+            if feedback:
+                msg += f" Feedback: {feedback}"
+            raise RuntimeError(msg)
+
+        return await wrapped_func(ctx, payload)
+
+    return approval_wrapper
 
 
 class Tool(Workflow):
@@ -39,6 +106,7 @@ class Tool(Workflow):
         queue: str | Queue | dict[str, Any] | None = None,
         on_start: Union[str, list[str], "Hook", list["Hook"]] | None = None,
         on_end: Union[str, list[str], "Hook", list["Hook"]] | None = None,
+        approval: ToolApproval | None = None,
         **kwargs,
     ):
         """
@@ -52,8 +120,13 @@ class Tool(Workflow):
             queue: Optional queue configuration
             on_start: Optional lifecycle hook(s) to run before tool execution
             on_end: Optional lifecycle hook(s) to run after tool execution
+            approval: Optional approval mode ('always' requires user approval before execution)
             **kwargs: Additional workflow configuration
         """
+        self._approval = approval
+        # Store input schema class for validation (set by decorator)
+        self._input_schema_class: type[BaseModel] | None = None
+
         # Parse queue configuration
         queue_name = self._parse_queue_name(queue)
         queue_concurrency_limit = self._parse_queue_concurrency(queue)
@@ -70,6 +143,10 @@ class Tool(Workflow):
             on_end=on_end,
         )
 
+        # Wrap handler with approval gate if configured
+        if approval == "always" and func is not None:
+            self.func = _wrap_with_approval(self.func, id, self._input_schema_class)
+
         # Register tool in global registry (so it can be found by agents)
         _WORKFLOW_REGISTRY[id] = self
 
@@ -79,8 +156,6 @@ class Tool(Workflow):
         if parameters is None:
             parameters = {"type": "object", "properties": {}}
         self._tool_parameters = parameters
-        # Store input schema class for validation (set by decorator)
-        self._input_schema_class: type[BaseModel] | None = None
 
     def _default_execute(self, ctx: WorkflowContext, payload: BaseModel | None):
         """
@@ -247,6 +322,7 @@ def tool(
     queue: str | Queue | dict[str, Any] | None = None,
     on_start: Union[str, list[str], "Workflow", list["Workflow"]] | None = None,
     on_end: Union[str, list[str], "Workflow", list["Workflow"]] | None = None,
+    approval: ToolApproval | None = None,
     **kwargs,
 ):
     """
@@ -262,6 +338,7 @@ def tool(
         queue: Optional queue configuration
         on_start: Optional lifecycle hook(s) to run before tool execution
         on_end: Optional lifecycle hook(s) to run after tool execution
+        approval: Optional approval mode ('always' requires user approval before execution)
         **kwargs: Additional workflow configuration
 
     Example:
@@ -302,6 +379,7 @@ def tool(
             queue=queue,
             on_start=on_start,
             on_end=on_end,
+            approval=approval,
             **kwargs,
         )
 

@@ -245,7 +245,7 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
         maxOutputTokens: config.maxOutputTokens,
       },
       input,
-      streaming: streamingFlag ?? true,
+      streaming: streamingFlag ?? false,
       conversation_id: conversationIdValue,
     };
 

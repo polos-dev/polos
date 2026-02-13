@@ -29,6 +29,24 @@ from .core.workflow import (
     get_workflow,
     workflow,
 )
+from .execution import (
+    DockerEnvironment,
+    DockerEnvironmentConfig,
+    E2BEnvironmentConfig,
+    EnvironmentInfo,
+    ExecOptions,
+    ExecResult,
+    ExecToolConfig,
+    ExecutionEnvironment,
+    GlobOptions,
+    GrepMatch,
+    GrepOptions,
+    LocalEnvironment,
+    LocalEnvironmentConfig,
+    SandboxToolsConfig,
+    SandboxToolsResult,
+    sandbox_tools,
+)
 from .features import events, schedules
 from .features.events import BatchEventPayload, EventPayload
 from .features.schedules import SchedulePayload
@@ -38,7 +56,16 @@ from .runtime.batch import batch_agent_invoke, batch_invoke
 from .runtime.client import ExecutionHandle, PolosClient
 from .runtime.queue import Queue, queue
 from .runtime.worker import Worker
-from .tools.tool import Tool, tool
+from .tools.ask_user import AskUserField, AskUserFieldOption, AskUserInput, create_ask_user_tool
+from .tools.tool import Tool, ToolApproval, tool
+from .tools.web_search import (
+    WebSearchFunction,
+    WebSearchOptions,
+    WebSearchResult,
+    WebSearchResultItem,
+    WebSearchToolConfig,
+    create_web_search_tool,
+)
 from .types.types import (
     AgentConfig,
     BatchStepResult,
@@ -76,6 +103,7 @@ __all__ = [
     "StopConditionContext",
     "tool",
     "Tool",
+    "ToolApproval",
     "hook",
     "HookContext",
     "HookResult",
@@ -102,4 +130,32 @@ __all__ = [
     "WorkflowTimeoutError",
     "StepExecutionError",
     "BatchWorkflowInput",
+    # Execution framework
+    "sandbox_tools",
+    "SandboxToolsResult",
+    "SandboxToolsConfig",
+    "ExecutionEnvironment",
+    "DockerEnvironment",
+    "LocalEnvironment",
+    "DockerEnvironmentConfig",
+    "E2BEnvironmentConfig",
+    "LocalEnvironmentConfig",
+    "ExecToolConfig",
+    "ExecOptions",
+    "ExecResult",
+    "GlobOptions",
+    "GrepOptions",
+    "GrepMatch",
+    "EnvironmentInfo",
+    # Tools
+    "create_ask_user_tool",
+    "AskUserInput",
+    "AskUserField",
+    "AskUserFieldOption",
+    "create_web_search_tool",
+    "WebSearchToolConfig",
+    "WebSearchResult",
+    "WebSearchResultItem",
+    "WebSearchOptions",
+    "WebSearchFunction",
 ]

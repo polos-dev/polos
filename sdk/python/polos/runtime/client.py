@@ -455,13 +455,16 @@ class PolosClient:
             # Note: If called from within a workflow, the orchestrator has already
             # set the parent to waiting
             # invoke_and_wait() will raise WaitException to pause the parent if needed
+            #
+            # For top-level invocations, root_workflow_id and root_execution_id
+            # are not provided -- default to this workflow/execution since it IS the root.
             return ExecutionHandle(
                 id=execution_id_value,
                 workflow_id=workflow_id,
                 created_at=created_at,
                 parent_execution_id=parent_execution_id,
-                root_workflow_id=root_workflow_id,
-                root_execution_id=root_execution_id,
+                root_workflow_id=root_workflow_id or workflow_id,
+                root_execution_id=root_execution_id or execution_id_value,
                 session_id=session_id,
                 user_id=user_id,
                 step_key=step_key,
@@ -560,8 +563,8 @@ class PolosClient:
                         workflow_id=workflow_id,
                         created_at=created_at,
                         parent_execution_id=parent_execution_id,
-                        root_workflow_id=root_workflow_id,
-                        root_execution_id=root_execution_id,
+                        root_workflow_id=root_workflow_id or workflow_id,
+                        root_execution_id=root_execution_id or execution_id,
                         session_id=session_id,
                         user_id=user_id,
                         step_key=step_key,

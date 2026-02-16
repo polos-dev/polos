@@ -20,6 +20,7 @@ Environment variables:
 import asyncio
 import json
 import os
+import sys
 import uuid
 
 from dotenv import load_dotenv
@@ -59,10 +60,24 @@ def ask_yes_no(prompt: str) -> bool:
 
 
 async def suspend_events(client: PolosClient, handle):
-    """Yield suspend events from the workflow stream."""
+    """Yield suspend events from the workflow stream.
+
+    Also streams text_delta and tool_call events to show agent activity
+    in real time between approval prompts.
+    """
     async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
-        if event.event_type and event.event_type.startswith("suspend_"):
-            step_key = event.event_type[len("suspend_"):]
+        event_type = event.event_type
+
+        if event_type == "text_delta":
+            content = event.data.get("content") if isinstance(event.data, dict) else None
+            if isinstance(content, str):
+                print(content, end="", flush=True)
+        elif event_type == "tool_call":
+            tool_call = event.data.get("tool_call", {}) if isinstance(event.data, dict) else {}
+            tool_name = tool_call.get("function", {}).get("name", "unknown")
+            print(f"\n  [Using {tool_name}...]")
+        elif event_type and event_type.startswith("suspend_"):
+            step_key = event_type[len("suspend_"):]
             yield {"step_key": step_key, "data": event.data}
 
 

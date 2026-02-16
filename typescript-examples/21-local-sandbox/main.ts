@@ -62,14 +62,31 @@ interface SuspendEvent {
  * Uses a single persistent stream so that concurrent suspend events
  * (e.g., from batched tool calls) are never missed. Closing and
  * reopening the stream would lose events emitted between calls.
+ *
+ * Also streams text_delta and tool_call events to show agent activity
+ * in real time between approval prompts.
  */
 async function* suspendEvents(
   client: PolosClient,
   handle: ExecutionHandle,
 ): AsyncGenerator<SuspendEvent> {
   for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
-    if (event.eventType?.startsWith('suspend_')) {
-      const stepKey = event.eventType.slice('suspend_'.length);
+    const eventType = event.eventType;
+
+    if (eventType === 'text_delta') {
+      const content = (event.data as Record<string, unknown>)['content'];
+      if (typeof content === 'string') {
+        process.stdout.write(content);
+      }
+    } else if (eventType === 'tool_call') {
+      const toolCall = (event.data as Record<string, unknown>)['tool_call'] as
+        | Record<string, unknown>
+        | undefined;
+      const fn = toolCall?.['function'] as Record<string, unknown> | undefined;
+      const toolName = fn?.['name'] ?? 'unknown';
+      console.log(`\n  [Using ${String(toolName)}...]`);
+    } else if (eventType?.startsWith('suspend_')) {
+      const stepKey = eventType.slice('suspend_'.length);
       yield { stepKey, data: event.data as Record<string, unknown> };
     }
   }

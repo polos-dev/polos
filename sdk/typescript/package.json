@@ -1,6 +1,6 @@
 {
   "name": "@polos/sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Polos SDK for building durable AI agents and workflows in TypeScript",
   "keywords": [
     "ai",

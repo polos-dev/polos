@@ -30,17 +30,51 @@ export function isAnthropicModel(model: LanguageModel): boolean {
 }
 
 /**
+ * Remove all existing cache control markers from the args object (in-place).
+ *
+ * Must be called before applying fresh breakpoints so that stale markers
+ * from previous agent loop iterations don't accumulate and exceed
+ * Anthropic's 4-block limit.
+ */
+function stripAnthropicCacheControl(args: Record<string, unknown>): void {
+  // Strip from system prompt
+  const system = args['system'];
+  if (system && typeof system === 'object' && 'providerOptions' in system) {
+    delete (system as Record<string, unknown>)['providerOptions'];
+  }
+
+  // Strip from tools
+  const tools = args['tools'] as Record<string, Record<string, unknown>> | undefined;
+  if (tools) {
+    for (const name of Object.keys(tools)) {
+      delete tools[name]['providerOptions'];
+    }
+  }
+
+  // Strip from messages
+  const messages = args['messages'] as Record<string, unknown>[] | undefined;
+  if (messages) {
+    for (const msg of messages) {
+      delete msg['providerOptions'];
+    }
+  }
+}
+
+/**
  * Add Anthropic prompt-caching breakpoints to the args object (in-place).
  *
  * Marks the system prompt, the last tool, and the last message with
  * `providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } }`
  * so the @ai-sdk/anthropic provider can enable prompt caching.
+ * Strips any existing markers first to stay within the 4-block limit.
  */
 export function applyAnthropicCacheControl(
   args: Record<string, unknown>,
   model: LanguageModel
 ): void {
   if (!isAnthropicModel(model)) return;
+
+  stripAnthropicCacheControl(args);
 
   // 1. System prompt: convert string to SystemModelMessage with cache control
   if (typeof args['system'] === 'string') {

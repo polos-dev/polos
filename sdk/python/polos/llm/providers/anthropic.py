@@ -12,12 +12,49 @@ logger = logging.getLogger(__name__)
 ANTHROPIC_CACHE_CONTROL = {"type": "ephemeral"}
 
 
+def _strip_cache_control(request_params: dict[str, Any]) -> None:
+    """Remove all existing cache_control markers from request params (in-place).
+
+    Must be called before applying fresh breakpoints so that stale markers
+    from previous agent loop iterations don't accumulate and exceed
+    Anthropic's 4-block limit.
+    """
+    # Strip from system prompt blocks
+    system = request_params.get("system")
+    if isinstance(system, list):
+        for block in system:
+            if isinstance(block, dict):
+                block.pop("cache_control", None)
+
+    # Strip from tools
+    tools = request_params.get("tools")
+    if isinstance(tools, list):
+        for tool in tools:
+            if isinstance(tool, dict):
+                tool.pop("cache_control", None)
+
+    # Strip from message content blocks
+    messages = request_params.get("messages")
+    if isinstance(messages, list):
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        block.pop("cache_control", None)
+
+
 def _apply_cache_control(request_params: dict[str, Any]) -> None:
     """Add Anthropic prompt caching breakpoints to request params (in-place).
 
     Marks the system prompt, the last tool, and the last message with
     cache_control so Anthropic can cache the static prefix across calls.
+    Strips any existing markers first to stay within the 4-block limit.
     """
+    _strip_cache_control(request_params)
+
     # 1. System prompt: convert string to content block list with cache control
     system = request_params.get("system")
     if isinstance(system, str):

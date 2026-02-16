@@ -65,36 +65,29 @@ pub async fn get_approval(
         }));
     }
 
-    // Construct event topic using this execution's workflow_id (this is the root)
+    // Construct event topic and look up the specific suspend event
     let topic = format!("workflow/{}/{}", execution.workflow_id, execution_id_uuid);
+    let suspend_event_type = format!("suspend_{}", step_key);
 
-    let events = state
+    let suspend_event = state
         .db
-        .get_events(&topic, &project_id, None, None, 100)
+        .get_event_by_type(&topic, &suspend_event_type, &project_id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to get events for topic {}: {}", topic, e);
+            tracing::error!(
+                "Failed to get suspend event for topic={}, event_type={}: {}",
+                topic,
+                suspend_event_type,
+                e
+            );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-
-    // Find the suspend event matching this step_key
-    let suspend_event_type = format!("suspend_{}", step_key);
-    let suspend_data = events
-        .iter()
-        .rev() // Most recent first
-        .find(|e| {
-            e.event_type
-                .as_ref()
-                .map(|t| t == &suspend_event_type)
-                .unwrap_or(false)
-        })
-        .map(|e| e.data.clone());
 
     Ok(Json(ApprovalResponse {
         execution_id,
         step_key,
         status: execution.status,
-        data: suspend_data,
+        data: suspend_event.map(|e| e.data),
     }))
 }
 

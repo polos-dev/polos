@@ -396,4 +396,37 @@ impl Database {
             })
             .collect())
     }
+
+    /// Find the most recent event matching a specific topic and event_type.
+    pub async fn get_event_by_type(
+        &self,
+        topic: &str,
+        event_type: &str,
+        project_id: &Uuid,
+    ) -> anyhow::Result<Option<Event>> {
+        let row = sqlx::query(
+            "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
+             FROM events
+             WHERE topic = $1 AND event_type = $2 AND status = 'valid' AND project_id = $3
+             ORDER BY sequence_id DESC
+             LIMIT 1"
+        )
+        .bind(topic)
+        .bind(event_type)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row: PgRow| Event {
+            id: row.get("id"),
+            sequence_id: row.get("sequence_id"),
+            topic: row.get("topic"),
+            event_type: row.get("event_type"),
+            data: row.get("data"),
+            status: row.get("status"),
+            execution_id: row.get("execution_id"),
+            attempt_number: row.get("attempt_number"),
+            created_at: row.get("created_at"),
+        }))
+    }
 }

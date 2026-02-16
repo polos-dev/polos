@@ -1,10 +1,67 @@
 """Anthropic provider implementation."""
 
 import json
+import logging
 import os
 from typing import Any
 
 from .base import LLMProvider, LLMResponse, register_provider
+
+logger = logging.getLogger(__name__)
+
+ANTHROPIC_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def _apply_cache_control(request_params: dict[str, Any]) -> None:
+    """Add Anthropic prompt caching breakpoints to request params (in-place).
+
+    Marks the system prompt, the last tool, and the last message with
+    cache_control so Anthropic can cache the static prefix across calls.
+    """
+    # 1. System prompt: convert string to content block list with cache control
+    system = request_params.get("system")
+    if isinstance(system, str):
+        request_params["system"] = [
+            {"type": "text", "text": system, "cache_control": ANTHROPIC_CACHE_CONTROL}
+        ]
+    elif isinstance(system, list) and system:
+        # Already a list of content blocks — mark the last one
+        system[-1] = {**system[-1], "cache_control": ANTHROPIC_CACHE_CONTROL}
+
+    # 2. Tools: mark the last tool
+    tools = request_params.get("tools")
+    if tools and isinstance(tools, list) and len(tools) > 0:
+        tools[-1] = {**tools[-1], "cache_control": ANTHROPIC_CACHE_CONTROL}
+
+    # 3. Messages: mark the last content block of the last message
+    messages = request_params.get("messages")
+    if messages and isinstance(messages, list) and len(messages) > 0:
+        last_msg = messages[-1]
+        content = last_msg.get("content") if isinstance(last_msg, dict) else None
+        if isinstance(content, str):
+            # Convert string content to content block list with cache control
+            messages[-1] = {
+                **last_msg,
+                "content": [
+                    {"type": "text", "text": content, "cache_control": ANTHROPIC_CACHE_CONTROL}
+                ],
+            }
+        elif isinstance(content, list) and len(content) > 0:
+            # Mark the last content block
+            content[-1] = {**content[-1], "cache_control": ANTHROPIC_CACHE_CONTROL}
+
+
+def _extract_cache_usage(usage_data: Any) -> dict[str, int]:
+    """Extract cache token fields from Anthropic usage data."""
+    result: dict[str, int] = {}
+    if usage_data:
+        cache_read = getattr(usage_data, "cache_read_input_tokens", None)
+        if cache_read is not None:
+            result["cache_read_input_tokens"] = cache_read
+        cache_creation = getattr(usage_data, "cache_creation_input_tokens", None)
+        if cache_creation is not None:
+            result["cache_creation_input_tokens"] = cache_creation
+    return result
 
 
 @register_provider("anthropic")
@@ -149,6 +206,10 @@ class AnthropicProvider(LLMProvider):
 
         # Add any additional kwargs
         request_params.update(kwargs)
+
+        # Apply prompt caching breakpoints
+        _apply_cache_control(request_params)
+
         try:
             # Use the SDK's Messages API
             response = await self.client.messages.create(**request_params)
@@ -202,6 +263,7 @@ class AnthropicProvider(LLMProvider):
                 "total_tokens": (usage_data.input_tokens + usage_data.output_tokens)
                 if usage_data
                 else 0,
+                **_extract_cache_usage(usage_data),
             }
 
             # Extract model and stop_reason from response
@@ -344,6 +406,10 @@ class AnthropicProvider(LLMProvider):
 
         # Add any additional kwargs
         request_params.update(kwargs)
+
+        # Apply prompt caching breakpoints
+        _apply_cache_control(request_params)
+
         try:
             # Use the SDK's Messages API with streaming
             stream = await self.client.messages.create(**request_params)
@@ -512,6 +578,14 @@ class AnthropicProvider(LLMProvider):
                                     usage["input_tokens"] = usage_data.get("input_tokens")
                                 if usage_data.get("output_tokens"):
                                     usage["output_tokens"] = usage_data.get("output_tokens")
+                                if usage_data.get("cache_read_input_tokens") is not None:
+                                    usage["cache_read_input_tokens"] = usage_data.get(
+                                        "cache_read_input_tokens"
+                                    )
+                                if usage_data.get("cache_creation_input_tokens") is not None:
+                                    usage["cache_creation_input_tokens"] = usage_data.get(
+                                        "cache_creation_input_tokens"
+                                    )
 
                 elif event_type == "message_stop":
                     # Stream complete - final event

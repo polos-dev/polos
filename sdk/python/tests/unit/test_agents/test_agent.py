@@ -613,3 +613,116 @@ class TestAgent:
         # Test with invalid type
         with pytest.raises(TypeError, match="Invalid guardrails type"):
             agent._normalize_guardrails(123)  # type: ignore
+
+    def test_agent_stream_to_workflow_default_false(self):
+        """Test Agent stream_to_workflow defaults to False."""
+        agent = Agent(id="test-agent", model="gpt-4", provider="openai")
+        assert agent.stream_to_workflow is False
+
+    def test_agent_stream_to_workflow_true(self):
+        """Test Agent stream_to_workflow can be set to True."""
+        agent = Agent(
+            id="test-agent",
+            model="gpt-4",
+            provider="openai",
+            stream_to_workflow=True,
+        )
+        assert agent.stream_to_workflow is True
+
+
+class TestAgentStreamToWorkflow:
+    """Tests for stream_to_workflow streaming flag resolution in _agent_execute."""
+
+    @pytest.mark.asyncio
+    async def test_stream_to_workflow_false_payload_streaming_false(self):
+        """Default agent: streaming=False in payload → streaming=False passed to stream function."""
+        agent = Agent(id="test-agent-stw-1", model="gpt-4", provider="openai")
+
+        mock_ctx = MagicMock()
+        mock_ctx.execution_id = "exec-123"
+        mock_ctx.session_id = "sess-123"
+        mock_ctx.user_id = "user-123"
+        mock_ctx.step.uuid = AsyncMock(return_value="conv-123")
+
+        with patch(
+            "polos.agents.stream._agent_stream_function", new_callable=AsyncMock
+        ) as mock_stream:
+            mock_stream.return_value = {"result": "ok"}
+
+            await agent._agent_execute(mock_ctx, {"input": "hello", "streaming": False})
+
+            call_args = mock_stream.call_args[0]
+            assert call_args[1]["streaming"] is False
+
+    @pytest.mark.asyncio
+    async def test_stream_to_workflow_true_payload_streaming_false(self):
+        """Agent with stream_to_workflow=True: streaming=False in payload → streaming=True."""
+        agent = Agent(
+            id="test-agent-stw-2",
+            model="gpt-4",
+            provider="openai",
+            stream_to_workflow=True,
+        )
+
+        mock_ctx = MagicMock()
+        mock_ctx.execution_id = "exec-123"
+        mock_ctx.session_id = "sess-123"
+        mock_ctx.user_id = "user-123"
+        mock_ctx.step.uuid = AsyncMock(return_value="conv-123")
+
+        with patch(
+            "polos.agents.stream._agent_stream_function", new_callable=AsyncMock
+        ) as mock_stream:
+            mock_stream.return_value = {"result": "ok"}
+
+            await agent._agent_execute(mock_ctx, {"input": "hello", "streaming": False})
+
+            call_args = mock_stream.call_args[0]
+            assert call_args[1]["streaming"] is True
+
+    @pytest.mark.asyncio
+    async def test_stream_to_workflow_true_payload_streaming_true(self):
+        """Agent with stream_to_workflow=True + payload streaming=True → streaming=True."""
+        agent = Agent(
+            id="test-agent-stw-3",
+            model="gpt-4",
+            provider="openai",
+            stream_to_workflow=True,
+        )
+
+        mock_ctx = MagicMock()
+        mock_ctx.execution_id = "exec-123"
+        mock_ctx.session_id = "sess-123"
+        mock_ctx.user_id = "user-123"
+        mock_ctx.step.uuid = AsyncMock(return_value="conv-123")
+
+        with patch(
+            "polos.agents.stream._agent_stream_function", new_callable=AsyncMock
+        ) as mock_stream:
+            mock_stream.return_value = {"result": "ok"}
+
+            await agent._agent_execute(mock_ctx, {"input": "hello", "streaming": True})
+
+            call_args = mock_stream.call_args[0]
+            assert call_args[1]["streaming"] is True
+
+    @pytest.mark.asyncio
+    async def test_stream_to_workflow_false_payload_streaming_true(self):
+        """Default agent + payload streaming=True → streaming=True (unchanged)."""
+        agent = Agent(id="test-agent-stw-4", model="gpt-4", provider="openai")
+
+        mock_ctx = MagicMock()
+        mock_ctx.execution_id = "exec-123"
+        mock_ctx.session_id = "sess-123"
+        mock_ctx.user_id = "user-123"
+        mock_ctx.step.uuid = AsyncMock(return_value="conv-123")
+
+        with patch(
+            "polos.agents.stream._agent_stream_function", new_callable=AsyncMock
+        ) as mock_stream:
+            mock_stream.return_value = {"result": "ok"}
+
+            await agent._agent_execute(mock_ctx, {"input": "hello", "streaming": True})
+
+            call_args = mock_stream.call_args[0]
+            assert call_args[1]["streaming"] is True

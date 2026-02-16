@@ -41,8 +41,7 @@ async def _request_approval(
             "_form": {
                 "title": "Approve command execution",
                 "description": (
-                    f"The agent wants to run a shell command in the "
-                    f"{env_info.type} environment."
+                    f"The agent wants to run a shell command in the {env_info.type} environment."
                 ),
                 "fields": [
                     {

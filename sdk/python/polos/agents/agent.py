@@ -386,6 +386,7 @@ class Agent(Workflow):
         guardrails: Callable | str | list[Callable | str] | None = None,
         guardrail_max_retries: int = 2,
         conversation_history: int = 10,  # Number of messages to keep
+        stream_to_workflow: bool = False,
     ):
         # Parse queue configuration (same as task decorator)
         queue_name: str | None = None
@@ -441,6 +442,9 @@ class Agent(Workflow):
 
         # Conversation history
         self.conversation_history = conversation_history
+
+        # Stream to workflow topic for all invocations
+        self.stream_to_workflow = stream_to_workflow
 
         # Convert Pydantic model to JSON schema if provided
         self._output_json_schema, self._output_schema_name = convert_output_schema(
@@ -505,7 +509,7 @@ class Agent(Workflow):
             )
 
         input_data = payload.get("input")
-        streaming = payload.get("streaming", False)  # Whether to stream or return final result
+        streaming = payload.get("streaming", False) or self.stream_to_workflow
         provider_kwargs = payload.get(
             "provider_kwargs", {}
         )  # Additional kwargs to pass to provider

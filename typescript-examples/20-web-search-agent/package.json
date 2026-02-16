@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.0",
-    "@polos/sdk": "^0.1.2",
+    "@polos/sdk": "latest",
     "dotenv": "^16.0.0",
     "zod": "^3.23.0"
   },

@@ -9,7 +9,7 @@
     "main": "tsx main.ts"
   },
   "dependencies": {
-    "@polos/sdk": "^0.1.1",
+    "@polos/sdk": "latest",
     "dotenv": "^16.0.0"
   },
   "devDependencies": {

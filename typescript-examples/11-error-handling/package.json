@@ -9,7 +9,7 @@
     "start": "tsx main.ts"
   },
   "dependencies": {
-    "@polos/sdk": "file:../../sdk/typescript",
+    "@polos/sdk": "latest",
     "dotenv": "^16.4.0"
   },
   "devDependencies": {

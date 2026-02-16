@@ -344,11 +344,6 @@ export const TraceDetailPage: React.FC = () => {
               </Button>
               <h1 className="text-base font-semibold flex items-center">
                 {trace.root_span_name || trace.trace_id}
-                {trace.error_count > 0 && (
-                  <Badge variant="destructive" className="ml-2 text-xs">
-                    Error
-                  </Badge>
-                )}
                 {trace.status && (
                   <Badge
                     variant="outline"

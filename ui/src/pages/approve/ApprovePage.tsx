@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { api } from '@/lib/api';
 import { DynamicField, type FormField } from './DynamicField';
 import { ContextPanel } from './ContextPanel';
@@ -101,7 +102,7 @@ export function ApprovePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-lg space-y-6">
+      <div className="w-3/4 max-w-5xl space-y-6">
         {/* Header */}
         <div className="flex flex-col items-center gap-1">
           <p className="text-xs text-gray-400">Powered by</p>
@@ -225,7 +226,9 @@ function FormState({
             </h2>
           )}
           {form?.description && (
-            <p className="text-sm text-gray-500 mt-1">{form.description}</p>
+            <div className="text-sm text-gray-500 mt-1 prose prose-sm prose-gray max-w-none">
+              <ReactMarkdown>{form.description}</ReactMarkdown>
+            </div>
           )}
           {!form?.title && !rawData && (
             <h2 className="text-lg font-semibold text-gray-900">

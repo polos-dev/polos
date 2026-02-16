@@ -31,8 +31,8 @@ export class DuplicateWorkflowError extends Error {
  */
 export interface WorkflowRegistry {
   /**
-   * Register a workflow.
-   * @throws DuplicateWorkflowError if workflow ID is already registered
+   * Register a workflow. If a workflow with the same ID is already
+   * registered, it is silently replaced.
    */
   register(workflow: Workflow): void;
 
@@ -76,9 +76,6 @@ export function createWorkflowRegistry(): WorkflowRegistry {
 
   return {
     register(workflow: Workflow): void {
-      if (workflows.has(workflow.id)) {
-        throw new DuplicateWorkflowError(workflow.id);
-      }
       workflows.set(workflow.id, workflow);
     },
 

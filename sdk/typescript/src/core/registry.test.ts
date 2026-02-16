@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import {
   createWorkflowRegistry,
-  DuplicateWorkflowError,
   WorkflowNotFoundError,
   type WorkflowRegistry,
 } from './registry.js';
@@ -38,18 +37,13 @@ describe('createWorkflowRegistry', () => {
     assert.strictEqual(registry.has('wf-2'), false);
   });
 
-  it('throws DuplicateWorkflowError on duplicate registration', () => {
+  it('replaces silently on duplicate registration', () => {
     const wf1 = makeWorkflow('dup');
     const wf2 = makeWorkflow('dup');
     registry.register(wf1);
-    assert.throws(
-      () => registry.register(wf2),
-      (err: unknown) => {
-        assert.ok(err instanceof DuplicateWorkflowError);
-        assert.strictEqual(err.workflowId, 'dup');
-        return true;
-      }
-    );
+    registry.register(wf2);
+    assert.strictEqual(registry.get('dup'), wf2);
+    assert.strictEqual(registry.getAll().length, 1);
   });
 
   it('throws WorkflowNotFoundError for non-existent workflow', () => {

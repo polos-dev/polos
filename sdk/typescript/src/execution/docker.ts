@@ -41,6 +41,14 @@ function spawnCommand(
   options?: { timeout?: number | undefined; stdin?: string | undefined }
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (!settled) {
+        settled = true;
+        fn();
+      }
+    };
+
     const proc = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     let stdout = '';
@@ -55,6 +63,14 @@ function spawnCommand(
       stderr += data.toString();
     });
 
+    // Guard against stream errors leaving the promise unresolved
+    proc.stdin.on('error', () => {
+      // Ignore stdin errors — the process may have exited before we finished writing.
+      // The 'close' event will still fire and resolve the promise.
+    });
+    proc.stdout.on('error', () => { /* noop */ });
+    proc.stderr.on('error', () => { /* noop */ });
+
     const timeoutMs = (options?.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
     const timer = setTimeout(() => {
       killed = true;
@@ -63,26 +79,31 @@ function spawnCommand(
 
     proc.on('close', (code) => {
       clearTimeout(timer);
-      if (killed) {
-        resolve({
-          exitCode: 137,
-          stdout,
-          stderr: stderr + '\n[Process killed: timeout exceeded]',
-        });
-      } else {
-        resolve({ exitCode: code ?? 1, stdout, stderr });
-      }
+      settle(() => {
+        if (killed) {
+          resolve({
+            exitCode: 137,
+            stdout,
+            stderr: stderr + '\n[Process killed: timeout exceeded]',
+          });
+        } else {
+          resolve({ exitCode: code ?? 1, stdout, stderr });
+        }
+      });
     });
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      reject(err);
+      settle(() => { reject(err); });
     });
 
     if (options?.stdin) {
-      proc.stdin.write(options.stdin);
+      proc.stdin.write(options.stdin, () => {
+        proc.stdin.end();
+      });
+    } else {
+      proc.stdin.end();
     }
-    proc.stdin.end();
   });
 }
 
@@ -157,7 +178,9 @@ export class DockerEnvironment implements ExecutionEnvironment {
   async exec(command: string, opts?: ExecOptions): Promise<ExecResult> {
     this.assertInitialized();
 
-    const args = ['exec', '-i'];
+    // Only use -i (interactive/keep-stdin-open) when stdin data is provided.
+    // Without stdin data, -i can cause docker exec to hang waiting for EOF.
+    const args = opts?.stdin ? ['exec', '-i'] : ['exec'];
 
     // Set working directory
     const cwd = opts?.cwd ?? this.containerWorkdir;

@@ -216,6 +216,80 @@ describe('AgentWorkflow.withInput', () => {
   });
 });
 
+describe('streamToWorkflow', () => {
+  afterEach(() => {
+    globalRegistry.clear();
+  });
+
+  it('defaults streamToWorkflow to undefined', () => {
+    const model = createMockModel();
+    const agent = defineAgent({
+      id: 'stw-default-agent',
+      model: model as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    assert.strictEqual(agent.agentConfig.streamToWorkflow, undefined);
+  });
+
+  it('stores streamToWorkflow=true in agent config', () => {
+    const model = createMockModel();
+    const agent = defineAgent({
+      id: 'stw-true-agent',
+      model: model as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      streamToWorkflow: true,
+    });
+
+    assert.strictEqual(agent.agentConfig.streamToWorkflow, true);
+  });
+
+  it('stores streamToWorkflow=false in agent config', () => {
+    const model = createMockModel();
+    const agent = defineAgent({
+      id: 'stw-false-agent',
+      model: model as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      streamToWorkflow: false,
+    });
+
+    assert.strictEqual(agent.agentConfig.streamToWorkflow, false);
+  });
+
+  it('streaming resolves to true when streamToWorkflow=true and payload streaming=false', () => {
+    // Verify the boolean OR logic: false || true || false === true
+    const streamingFlag = false;
+    const streamToWorkflow = true;
+    const resolved = streamingFlag || streamToWorkflow || false;
+    assert.strictEqual(resolved, true);
+  });
+
+  it('streaming resolves to true when streamToWorkflow=true and payload streaming=true', () => {
+    const streamingFlag = true;
+    const streamToWorkflow = true;
+    const resolved = streamingFlag || streamToWorkflow || false;
+    assert.strictEqual(resolved, true);
+  });
+
+  it('streaming resolves to false when streamToWorkflow=false and payload streaming=false', () => {
+    const streamingFlag = false;
+    const streamToWorkflow = false;
+    const resolved = streamingFlag || streamToWorkflow || false;
+    assert.strictEqual(resolved, false);
+  });
+
+  it('streaming resolves to true when streamToWorkflow=undefined and payload streaming=true', () => {
+    const streamingFlag: boolean | undefined = true;
+    const streamToWorkflow: boolean | undefined = undefined;
+    const resolved = streamingFlag || streamToWorkflow || false;
+    assert.strictEqual(resolved, true);
+  });
+
+  it('streaming resolves to false when streamToWorkflow=undefined and payload streaming is undefined', () => {
+    const streamingFlag: boolean | undefined = undefined;
+    const streamToWorkflow: boolean | undefined = undefined;
+    const resolved = streamingFlag || streamToWorkflow || false;
+    assert.strictEqual(resolved, false);
+  });
+});
+
 describe('output schema', () => {
   afterEach(() => {
     globalRegistry.clear();

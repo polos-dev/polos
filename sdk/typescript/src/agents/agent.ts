@@ -81,6 +81,8 @@ export interface DefineAgentConfig {
   guardrailMaxRetries?: number | undefined;
   /** Number of conversation history messages to retain (default: 10) */
   conversationHistory?: number | undefined;
+  /** Publish text_delta and tool_call events to the workflow topic for all invocations */
+  streamToWorkflow?: boolean | undefined;
 }
 
 /**
@@ -245,7 +247,7 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
         maxOutputTokens: config.maxOutputTokens,
       },
       input,
-      streaming: streamingFlag ?? false,
+      streaming: streamingFlag ?? config.streamToWorkflow ?? false,
       conversation_id: conversationIdValue,
     };
 

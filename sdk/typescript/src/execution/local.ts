@@ -41,6 +41,14 @@ function spawnLocal(
   }
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (!settled) {
+        settled = true;
+        fn();
+      }
+    };
+
     const proc = spawn('sh', ['-c', command], {
       cwd: options.cwd,
       env: options.env ? { ...process.env, ...options.env } : undefined,
@@ -59,6 +67,11 @@ function spawnLocal(
       stderr += data.toString();
     });
 
+    // Guard against stream errors leaving the promise unresolved
+    proc.stdin.on('error', () => { /* noop */ });
+    proc.stdout.on('error', () => { /* noop */ });
+    proc.stderr.on('error', () => { /* noop */ });
+
     const timeoutMs = (options.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
     const timer = setTimeout(() => {
       killed = true;
@@ -67,26 +80,31 @@ function spawnLocal(
 
     proc.on('close', (code) => {
       clearTimeout(timer);
-      if (killed) {
-        resolve({
-          exitCode: 137,
-          stdout,
-          stderr: stderr + '\n[Process killed: timeout exceeded]',
-        });
-      } else {
-        resolve({ exitCode: code ?? 1, stdout, stderr });
-      }
+      settle(() => {
+        if (killed) {
+          resolve({
+            exitCode: 137,
+            stdout,
+            stderr: stderr + '\n[Process killed: timeout exceeded]',
+          });
+        } else {
+          resolve({ exitCode: code ?? 1, stdout, stderr });
+        }
+      });
     });
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      reject(err);
+      settle(() => { reject(err); });
     });
 
     if (options.stdin) {
-      proc.stdin.write(options.stdin);
+      proc.stdin.write(options.stdin, () => {
+        proc.stdin.end();
+      });
+    } else {
+      proc.stdin.end();
     }
-    proc.stdin.end();
   });
 }
 

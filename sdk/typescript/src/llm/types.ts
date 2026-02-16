@@ -38,6 +38,8 @@ export interface LLMUsage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cache_read_input_tokens?: number | undefined;
+  cache_creation_input_tokens?: number | undefined;
 }
 
 /**
@@ -244,14 +246,25 @@ export function convertVercelUsageToPython(usage: {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens?: number | undefined;
+  inputTokenDetails?: {
+    cacheReadTokens?: number | undefined;
+    cacheWriteTokens?: number | undefined;
+  };
 }): LLMUsage {
   const input = usage.inputTokens ?? 0;
   const output = usage.outputTokens ?? 0;
-  return {
+  const result: LLMUsage = {
     input_tokens: input,
     output_tokens: output,
     total_tokens: usage.totalTokens ?? input + output,
   };
+  if (usage.inputTokenDetails?.cacheReadTokens != null) {
+    result.cache_read_input_tokens = usage.inputTokenDetails.cacheReadTokens;
+  }
+  if (usage.inputTokenDetails?.cacheWriteTokens != null) {
+    result.cache_creation_input_tokens = usage.inputTokenDetails.cacheWriteTokens;
+  }
+  return result;
 }
 
 /**

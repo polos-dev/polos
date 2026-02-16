@@ -132,6 +132,8 @@ export async function agentStreamFunction(
   let finalInputTokens = 0;
   let finalOutputTokens = 0;
   let finalTotalTokens = 0;
+  let finalCacheReadInputTokens = 0;
+  let finalCacheCreationInputTokens = 0;
   let lastLlmResultContent: string | null = null;
   const allToolResults: ToolResultInfo[] = [];
   const steps: StepInfo[] = [];
@@ -300,6 +302,12 @@ export async function agentStreamFunction(
       finalInputTokens += llmResult.usage.input_tokens;
       finalOutputTokens += llmResult.usage.output_tokens;
       finalTotalTokens += llmResult.usage.total_tokens;
+      if (llmResult.usage.cache_read_input_tokens) {
+        finalCacheReadInputTokens += llmResult.usage.cache_read_input_tokens;
+      }
+      if (llmResult.usage.cache_creation_input_tokens) {
+        finalCacheCreationInputTokens += llmResult.usage.cache_creation_input_tokens;
+      }
     }
 
     lastLlmResultContent = llmResult.content;
@@ -604,6 +612,10 @@ export async function agentStreamFunction(
       input_tokens: finalInputTokens,
       output_tokens: finalOutputTokens,
       total_tokens: finalTotalTokens,
+      ...(finalCacheReadInputTokens > 0 && { cache_read_input_tokens: finalCacheReadInputTokens }),
+      ...(finalCacheCreationInputTokens > 0 && {
+        cache_creation_input_tokens: finalCacheCreationInputTokens,
+      }),
     },
   };
 }

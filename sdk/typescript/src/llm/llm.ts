@@ -16,7 +16,66 @@ import {
   convertVercelUsageToPython,
   convertFinishReason,
   getModelId,
+  getModelProvider,
 } from './types.js';
+
+/** Cache breakpoint marker for Anthropic prompt caching. */
+export const ANTHROPIC_CACHE_BREAKPOINT = {
+  anthropic: { cacheControl: { type: 'ephemeral' as const } },
+};
+
+/** Check whether a LanguageModel is an Anthropic model. */
+export function isAnthropicModel(model: LanguageModel): boolean {
+  return getModelProvider(model).startsWith('anthropic');
+}
+
+/**
+ * Add Anthropic prompt-caching breakpoints to the args object (in-place).
+ *
+ * Marks the system prompt, the last tool, and the last message with
+ * `providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } }`
+ * so the @ai-sdk/anthropic provider can enable prompt caching.
+ */
+export function applyAnthropicCacheControl(
+  args: Record<string, unknown>,
+  model: LanguageModel
+): void {
+  if (!isAnthropicModel(model)) return;
+
+  // 1. System prompt: convert string to SystemModelMessage with cache control
+  if (typeof args['system'] === 'string') {
+    args['system'] = {
+      role: 'system',
+      content: args['system'],
+      providerOptions: ANTHROPIC_CACHE_BREAKPOINT,
+    };
+  }
+
+  // 2. Tools: add cache control to the last tool
+  const tools = args['tools'] as Record<string, Record<string, unknown>> | undefined;
+  if (tools) {
+    const toolNames = Object.keys(tools);
+    if (toolNames.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const lastToolName = toolNames[toolNames.length - 1]!;
+      tools[lastToolName] = {
+        ...tools[lastToolName],
+        providerOptions: ANTHROPIC_CACHE_BREAKPOINT,
+      };
+    }
+  }
+
+  // 3. Last message: add cache control to the last message
+  const messages = args['messages'] as Record<string, unknown>[] | undefined;
+  if (messages && messages.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const lastMsg = messages[messages.length - 1]!;
+    messages[messages.length - 1] = {
+      ...lastMsg,
+      providerOptions: ANTHROPIC_CACHE_BREAKPOINT,
+    };
+  }
+}
 
 /**
  * Build args object for generateText/streamText, only including defined properties
@@ -37,6 +96,7 @@ function buildGenerateArgs(
   if (options.outputSchema) {
     args['experimental_output'] = Output.object({ schema: options.outputSchema as ZodSchema });
   }
+  applyAnthropicCacheControl(args, model);
   return args;
 }
 
@@ -105,6 +165,10 @@ export class LLM {
           inputTokens: number | undefined;
           outputTokens: number | undefined;
           totalTokens?: number | undefined;
+          inputTokenDetails?: {
+            cacheReadTokens?: number | undefined;
+            cacheWriteTokens?: number | undefined;
+          };
         }
       | undefined;
     let finishReason: string | undefined;

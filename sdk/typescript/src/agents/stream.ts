@@ -302,10 +302,10 @@ export async function agentStreamFunction(
       finalInputTokens += llmResult.usage.input_tokens;
       finalOutputTokens += llmResult.usage.output_tokens;
       finalTotalTokens += llmResult.usage.total_tokens;
-      if (llmResult.usage.cache_read_input_tokens) {
+      if (llmResult.usage.cache_read_input_tokens != null) {
         finalCacheReadInputTokens += llmResult.usage.cache_read_input_tokens;
       }
-      if (llmResult.usage.cache_creation_input_tokens) {
+      if (llmResult.usage.cache_creation_input_tokens != null) {
         finalCacheCreationInputTokens += llmResult.usage.cache_creation_input_tokens;
       }
     }

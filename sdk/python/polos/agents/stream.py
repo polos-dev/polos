@@ -244,9 +244,9 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             final_input_tokens += usage_dict.get("input_tokens", 0)
             final_output_tokens += usage_dict.get("output_tokens", 0)
             final_total_tokens += usage_dict.get("total_tokens", 0)
-            if usage_dict.get("cache_read_input_tokens"):
+            if usage_dict.get("cache_read_input_tokens") is not None:
                 final_cache_read_input_tokens += usage_dict["cache_read_input_tokens"]
-            if usage_dict.get("cache_creation_input_tokens"):
+            if usage_dict.get("cache_creation_input_tokens") is not None:
                 final_cache_creation_input_tokens += usage_dict["cache_creation_input_tokens"]
 
         last_llm_result_content = llm_result.get("content")
@@ -621,6 +621,8 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
         input_tokens=usage_dict.get("input_tokens", 0),
         output_tokens=usage_dict.get("output_tokens", 0),
         total_tokens=usage_dict.get("total_tokens", 0),
+        cache_read_input_tokens=usage_dict.get("cache_read_input_tokens"),
+        cache_creation_input_tokens=usage_dict.get("cache_creation_input_tokens"),
     )
 
     agent_result = AgentResult(

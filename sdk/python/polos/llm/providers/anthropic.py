@@ -293,14 +293,22 @@ class AnthropicProvider(LLMProvider):
                     tool_calls.append(tool_call_data)
 
             # Extract usage information
+            # Anthropic's input_tokens only counts non-cached tokens.
+            # Total input = input_tokens + cache_read + cache_creation.
             usage_data = response.usage
+            cache_usage = _extract_cache_usage(usage_data)
+            raw_input = usage_data.input_tokens if usage_data else 0
+            total_input = (
+                raw_input
+                + cache_usage.get("cache_read_input_tokens", 0)
+                + cache_usage.get("cache_creation_input_tokens", 0)
+            )
+            output = usage_data.output_tokens if usage_data else 0
             usage = {
-                "input_tokens": usage_data.input_tokens if usage_data else 0,
-                "output_tokens": usage_data.output_tokens if usage_data else 0,
-                "total_tokens": (usage_data.input_tokens + usage_data.output_tokens)
-                if usage_data
-                else 0,
-                **_extract_cache_usage(usage_data),
+                "input_tokens": total_input,
+                "output_tokens": output,
+                "total_tokens": total_input + output,
+                **cache_usage,
             }
 
             # Extract model and stop_reason from response
@@ -478,6 +486,7 @@ class AnthropicProvider(LLMProvider):
                     else json.dumps(event)
                 )
 
+
                 if event_type == "content_block_start":
                     # Content block starting - could be text or tool_use
                     if event.get("content_block"):
@@ -597,38 +606,43 @@ class AnthropicProvider(LLMProvider):
                         accumulated_signature = ""
 
                 elif event_type in ["message_start", "message_delta"]:
-                    # Message delta - contains stop_reason and usage
-                    message = None
                     if event_type == "message_start":
                         message = event.get("message")
+                        if message:
+                            response_model = message.get("model") or response_model
+                            stop_reason = message.get("stop_reason") or stop_reason
+                        usage_data = (message or {}).get("usage")
                     else:
-                        message = event.get("delta")
+                        delta = event.get("delta")
+                        if delta:
+                            stop_reason = delta.get("stop_reason") or stop_reason
+                        # usage lives at the top level for message_delta, not inside delta
+                        usage_data = event.get("usage")
 
-                    if message:
-                        response_model = message.get("model") or response_model  # Update if present
-                        stop_reason = message.get("stop_reason") or stop_reason  # Update if present
-
-                        if message.get("usage"):
-                            usage_data = message.get("usage")
-                            if usage_data:
-                                if usage_data.get("input_tokens"):
-                                    usage["input_tokens"] = usage_data.get("input_tokens")
-                                if usage_data.get("output_tokens"):
-                                    usage["output_tokens"] = usage_data.get("output_tokens")
-                                if usage_data.get("cache_read_input_tokens") is not None:
-                                    usage["cache_read_input_tokens"] = usage_data.get(
-                                        "cache_read_input_tokens"
-                                    )
-                                if usage_data.get("cache_creation_input_tokens") is not None:
-                                    usage["cache_creation_input_tokens"] = usage_data.get(
-                                        "cache_creation_input_tokens"
-                                    )
+                    if usage_data:
+                        if usage_data.get("input_tokens") is not None:
+                            usage["input_tokens"] = usage_data["input_tokens"]
+                        if usage_data.get("output_tokens") is not None:
+                            usage["output_tokens"] = usage_data["output_tokens"]
+                        if usage_data.get("cache_read_input_tokens") is not None:
+                            usage["cache_read_input_tokens"] = usage_data[
+                                "cache_read_input_tokens"
+                            ]
+                        if usage_data.get("cache_creation_input_tokens") is not None:
+                            usage["cache_creation_input_tokens"] = usage_data[
+                                "cache_creation_input_tokens"
+                            ]
 
                 elif event_type == "message_stop":
                     # Stream complete - final event
-                    usage["total_tokens"] = usage.get("input_tokens", 0) + usage.get(
-                        "output_tokens", 0
-                    )
+                    # Anthropic's input_tokens only counts non-cached tokens.
+                    # Total input = input_tokens + cache_read + cache_creation.
+                    raw_input = usage.get("input_tokens", 0)
+                    cache_read = usage.get("cache_read_input_tokens", 0)
+                    cache_creation = usage.get("cache_creation_input_tokens", 0)
+                    total_input = raw_input + cache_read + cache_creation
+                    usage["input_tokens"] = total_input
+                    usage["total_tokens"] = total_input + usage.get("output_tokens", 0)
                     processed_messages.append(
                         {
                             "role": "assistant",

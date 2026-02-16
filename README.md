@@ -3,14 +3,14 @@
 </p>
 
 <p align="center">
-  <strong>Durable execution platform for AI agents</strong>
+  <strong>The runtime for agents that do real work</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/polos-dev/polos">
     <img src="https://img.shields.io/github/stars/polos-dev/polos?style=social" alt="GitHub Stars">
   </a>
-  <a href="https://docs.polos.dev">
+  <a href="https://polos.dev/docs">
     <img src="https://img.shields.io/badge/docs-polos.dev-0891B2?style=flat-square&logo=read-the-docs&logoColor=white" alt="Documentation">
   </a>
   <a href="https://discord.gg/ZAxHKMPwFG">
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  AI agents that survive crashes, resume mid-execution, and pause for human approval - with zero manual checkpointing, retry logic, or queue management.
+  Sandboxed execution. Agents that reach you. Durable workflows.
 </p>
 
 <p align="center">
@@ -28,112 +28,237 @@
 
 ---
 
-Polos is a durable execution platform for AI agents. It provides the stateful infrastructure required to run long-running, autonomous agents reliably at scale, including a **built-in event system** for agent coordination, so you don't need to bolt on Kafka or RabbitMQ.
+AI agents break the rules of traditional software. They're **async by nature** - running while you sleep, but still needing you to approve, confirm, or provide a credential. They're **autonomous by design** - you say "fix the bug" and they write code, run commands, delete files. That power is the point. And the risk.
 
-Write it all in plain Python or TypeScript. No DAGs to define, no graph syntax to learn. Use loops, conditionals, and function calls naturally while Polos handles durability, reliability and scaling automatically.
+Most frameworks ignore this. Polos is built for it.
+
+100% open source. Write it all in plain Python or TypeScript. No DAGs to define, no graph syntax to learn.
+
+```typescript
+import { defineAgent, sandboxTools } from "@polos/sdk";
+import { anthropic } from "@ai-sdk/anthropic";
+
+// Create a sandboxed environment — agents get exec, read, write,
+// edit, glob, and grep tools automatically.
+const sandbox = sandboxTools({
+  env: 'docker',
+  docker: {
+    image: 'node:20-slim',
+    workspaceDir: './workspace',
+    memory: '2g',
+  },
+});
+
+// Give the agent sandbox tools — it can now run commands,
+// read/write files, and explore the codebase autonomously.
+const codingAgent = defineAgent({
+  id: 'coding_agent',
+  model: anthropic('claude-opus-4-5'),
+  systemPrompt: 'You are a coding assistant. The repo is at /workspace.',
+  tools: [...sandbox], // exec, read, write, edit, glob, grep
+});
+```
+
+---
+
+## What You Get With Polos
+
+### Secure Sandbox
+
+Agents run in isolated environments - Docker, E2B, or cloud VMs. Built-in tools for shell, file system, and web search. Full power. Zero risk to your systems.
+
+### Agents That Reach You
+
+Agents reach you - not the other way around. Stripe-like approval pages that collect input, not just yes/no. Slack, SMS, email - you're at dinner, phone buzzes, one tap, done.
+
+### Durable Execution
+
+State persists - agents resume exactly where they left off. Automatic retries on failure. 60-80% cost savings via prompt caching. Built-in observability for every step, every approval, every tool call. Concurrency control across multiple agents - no API rate limit chaos.
+
+---
+
+## See It In Action
+
+Watch a coding agent built with Polos - sandboxed execution, tool calls, and real-time observability.
+
+[Watch the demo video](https://www.veed.io/embed/7491f507-2b84-4954-b8b1-4ffa69322a91)
+
+---
+
+## Quick Start
+
+### 1. Install Polos Server
+
+```bash
+curl -fsSL https://install.polos.dev/install.sh | bash
+polos-server start
+```
+
+Copy the project ID displayed when you start the server. You'll need it in the next steps.
+
+### 2. Install the SDK
+
+**Python**
+```bash
+pip install polos-sdk
+```
+
+**TypeScript**
+```bash
+npm install @polos/sdk
+```
+
+### 3. Create a coding agent
 
 **Python**
 ```python
-from polos import Agent, workflow, WorkflowContext
+# agents.py
+from polos import Agent, sandbox_tools, SandboxToolsConfig, LocalEnvironmentConfig
 
-order_agent = Agent(
-    provider="openai",
-    model="gpt-4o",
-    tools=[check_inventory, calculate_shipping]
+sandbox_tools = sandbox_tools(SandboxToolsConfig(
+    env="local",
+    local=LocalEnvironmentConfig(cwd="./workspace", path_restriction="./workspace"),
+))
+
+coding_agent = Agent(
+    id="coding_agent",
+    provider="anthropic",
+    model="claude-sonnet-4-5",
+    system_prompt="You are a coding agent. Your workspace is at ./workspace.",
+    tools=sandbox_tools,
 )
+```
 
-@workflow(trigger_on_event="order/new")
-async def process_order(ctx: WorkflowContext, order: ProcessOrderInput):
-    # Agent validates order and checks inventory
-    validation = await ctx.step.agent_invoke_and_wait(
-        "validate_order",
-        order_agent.with_input(f"Validate this order: {order}")
-    )
+```python
+# worker.py
+from polos import PolosClient, Worker
+from agents import coding_agent, sandbox_tools
 
-    if not validation.result.valid:
-        return ProcessOrderOutput(status="invalid", reason=validation.result.reason)
+client = PolosClient(project_id="your-project-id")
+worker = Worker(client=client, agents=[coding_agent], tools=list(sandbox_tools))
 
-    # High-value orders need approval - suspend until human decides
-    if order.amount > 1000:
-        decision = await ctx.step.suspend(
-            "approval",
-            data={"id": order.id, "amount": order.amount, "items": order.items}
-        )
-        if not decision.data["approved"]:
-            return ProcessOrderOutput(status="rejected")
-
-    # Charge customer (exactly-once guarantee)
-    payment = await ctx.step.run("charge", charge_stripe, order)
-
-    # Wait for warehouse pickup (could be hours or days)
-    await ctx.step.wait_for_event("wait_pickup", topic=f"warehouse.pickup/{order.id}")
-
-    # Send shipping notification
-    await ctx.step.run("notify", send_shipping_email, order)
-
-    return ProcessOrderOutput(status="completed", payment_id=payment.id)
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(worker.run())
 ```
 
 **TypeScript**
 ```typescript
-import { defineAgent, defineWorkflow } from "@polos/sdk";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
+// agents.ts
+import { defineAgent, sandboxTools } from "@polos/sdk";
+import { anthropic } from "@ai-sdk/anthropic";
 
-const orderAgent = defineAgent({
-  id: "order-agent",
-  model: openai("gpt-4o"),
-  tools: [checkInventory, calculateShipping],
+export const sandboxTools = sandboxTools({
+  env: "local",
+  local: { cwd: "./workspace", pathRestriction: "./workspace" },
 });
 
-const processOrder = defineWorkflow(
-  {
-    id: "process-order",
-    triggerOnEvent: "order/new",
-    payloadSchema: z.object({
-      id: z.string(),
-      amount: z.number(),
-      items: z.array(z.string()),
-    }),
-  },
-  async (ctx, order) => {
-    // Agent validates order and checks inventory
-    const validation = await ctx.step.agentInvokeAndWait(
-      "validate_order",
-      orderAgent.withInput(`Validate this order: ${JSON.stringify(order)}`)
-    );
-
-    if (!validation.result.valid) {
-      return { status: "invalid", reason: validation.result.reason };
-    }
-
-    // High-value orders need approval - suspend until human decides
-    if (order.amount > 1000) {
-      const decision = await ctx.step.suspend("approval", {
-        data: { id: order.id, amount: order.amount, items: order.items },
-      });
-      if (!decision.data.approved) {
-        return { status: "rejected" };
-      }
-    }
-
-    // Charge customer (exactly-once guarantee)
-    const payment = await ctx.step.run("charge", () => chargeStripe(order));
-
-    // Wait for warehouse pickup (could be hours or days)
-    await ctx.step.waitForEvent("wait_pickup", {
-      topic: `warehouse.pickup/${order.id}`,
-    });
-
-    // Send shipping notification
-    await ctx.step.run("notify", () => sendShippingEmail(order));
-
-    return { status: "completed", paymentId: payment.id };
-  }
-);
+export const codingAgent = defineAgent({
+  id: "coding_agent",
+  model: anthropic("claude-sonnet-4-5"),
+  systemPrompt: "You are a coding agent. Your workspace is at ./workspace.",
+  tools: [...sandboxTools],
+});
 ```
 
-This workflow survives crashes, resumes mid-execution, and pauses for approval - automatically.
+```typescript
+// worker.ts
+import { PolosClient, Worker } from "@polos/sdk";
+import { codingAgent, sandboxTools } from "./agents.js";
+
+const client = new PolosClient({ projectId: "your-project-id" });
+const worker = new Worker({ client, agents: [codingAgent], tools: [...sandboxTools] });
+
+await worker.run();
+```
+
+### 4. Invoke the agent
+
+Local sandbox tools suspend for approval before running commands or writing files. The client streams workflow events, prompts you in the terminal, and resumes the agent.
+
+**Python**
+```python
+# main.py
+import asyncio
+from polos import PolosClient
+from polos.features import events
+from agents import coding_agent
+
+async def main():
+    client = PolosClient(project_id="your-project-id")
+    handle = await client.invoke(coding_agent.id, {
+        "input": "Create hello.js that prints 'Hello, world!' and run it.",
+        "streaming": True,
+    })
+
+    # Stream events — approve each exec/write/edit when the agent suspends
+    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+        if event.event_type and event.event_type.startswith("suspend_"):
+            step_key = event.event_type[len("suspend_"):]
+            form = event.data.get("_form", {})
+            context = form.get("context", {})
+            print(f"\n  Agent wants to: {context.get('command') or context.get('tool', step_key)}")
+            approved = input("  Approve? (y/n): ").strip().lower() == "y"
+            await client.resume(handle.root_workflow_id, handle.id, step_key, {"approved": approved})
+
+    execution = await client.get_execution(handle.id)
+    print(f"\nResult: {execution.get('result')}")
+
+asyncio.run(main())
+```
+
+**TypeScript**
+```typescript
+// main.ts
+import { PolosClient } from "@polos/sdk";
+import { codingAgent } from "./agents.js";
+import * as readline from "node:readline/promises";
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const client = new PolosClient({ projectId: "your-project-id" });
+const handle = await client.invoke(codingAgent.id, {
+  input: "Create hello.js that prints 'Hello, world!' and run it.",
+  streaming: true,
+});
+
+// Stream events — approve each exec/write/edit when the agent suspends
+for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+  if (event.eventType?.startsWith("suspend_")) {
+    const stepKey = event.eventType.slice("suspend_".length);
+    const context = (event.data as any)?._form?.context ?? {};
+    console.log(`\n  Agent wants to: ${context.command ?? context.tool ?? stepKey}`);
+    const answer = await rl.question("  Approve? (y/n): ");
+    const approved = answer.trim().toLowerCase() === "y";
+    await client.resume(handle.rootWorkflowId, handle.id, stepKey, { approved });
+  }
+}
+
+const execution = await client.getExecution(handle.id);
+console.log(`\nResult: ${typeof execution.result === "string" ? execution.result : JSON.stringify(execution.result)}`);
+rl.close();
+```
+
+### 5. Run it
+
+```bash
+# Terminal 1: Start the worker
+python worker.py    # or: npx tsx worker.ts
+
+# Terminal 2: Invoke the agent
+python main.py      # or: npx tsx main.ts
+```
+
+See the full example for [Python](./python-examples/21-local-sandbox) or [TypeScript](./typescript-examples/21-local-sandbox) with richer approval UIs and more.
+
+### 6. See it in action
+
+Open the Polos UI to see your agent's execution trace, tool calls, and reasoning:
+
+<p align="center">
+  <img src=".github/assets/observability.png" alt="Polos Observability UI" width="800">
+</p>
+
+📖 **[Full Quick Start Guide →](https://polos.dev/docs/quickstart)**
 
 ---
 
@@ -145,37 +270,9 @@ This workflow survives crashes, resumes mid-execution, and pauses for approval -
 
 Polos consists of three components:
 
-- **Orchestrator**: Manages execution state, handles retries, and coordinates workers
+- **Orchestrator**: Written in Rust. Manages execution state, handles retries, and coordinates workers
 - **Worker**: Runs your agents and workflows, connects to the orchestrator
 - **SDK**: Python and TypeScript libraries for defining agents, workflows, and tools
-
----
-
-## See It In Action
-
-Imagine a workflow that charges a customer, then pauses for a human fraud review. In most frameworks, a server restart during that 24-hour wait would lose the state - or worse, re-run the charge on reboot. Polos guarantees exactly-once durable execution.
-
-<br />
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/4607d70e-b078-4b8e-ad2e-a28bd1820a3f" width="800" controls></video>
-</p>
-
-**Timeline of what's happening:**
-
-1. `charge_stripe` runs → Polos checkpoints the execution result
-
-2. Workflow suspends for fraud review → Worker resources freed
-
-3. Worker 1 crashes during the wait
-
-4. Fraud team approves → Signal sent to orchestrator
-
-5. Worker 2 resumes on a different machine → Stripe is **not** called again, result replayed from the log guaranteeing exactly-once execution
-
-6. Confirmation email sent → workflow completes
-
-Polos handles failures, rescheduling, and checkpointing. You just focus on business logic.
 
 ---
 
@@ -183,6 +280,8 @@ Polos handles failures, rescheduling, and checkpointing. You just focus on busin
 
 | Feature | Description |
 |---------|-------------|
+| **🔒 Sandboxed Execution** | Agents run in isolated Docker containers, E2B, or cloud VMs. Built-in tools for shell, files, and web search - full autonomy with zero risk. |
+| **📲 Agents That Reach You** | Approval pages, Slack, SMS, email. Agents notify you when they need input. One tap from your phone. Done. |
 | **🧠 Durable State** | Your agent survives crashes with call stack and local variables intact. Step 18 of 20 fails? Resume from step 18. No wasted LLM calls. |
 | **🚦 Global Concurrency** | System-wide rate limiting with queues and concurrency keys. Prevent one rogue agent from exhausting your entire OpenAI quota. |
 | **🤝 Human-in-the-Loop** | Native support for pausing execution. Wait hours or days for user approval and resume with full context. Paused agents consume zero compute. |
@@ -246,103 +345,6 @@ No DAGs. No graph syntax. Just Python or TypeScript.
 
 ---
 
-## Quick Start
-
-### 1. Install Polos Server
-
-```bash
-curl -fsSL https://install.polos.dev/install.sh | bash
-polos-server start
-```
-
-Copy the project ID displayed when you start the server. You'll need it in the next steps.
-
-### 2. Install the SDK
-
-**Python**
-```bash
-pip install polos-sdk
-```
-
-**TypeScript**
-```bash
-npm install @polos/sdk
-```
-
-### 3. Create your first agent
-
-**Python**
-```python
-# worker.py
-from polos import Agent, Worker, PolosClient
-
-weather_agent = Agent(
-    id="weather_agent",
-    provider="openai",
-    model="gpt-4o-mini",
-    system_prompt="You are a helpful weather assistant.",
-    tools=[get_weather],
-)
-
-client = PolosClient(project_id="your-project-id")
-worker = Worker(client=client, agents=[weather_agent])
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(worker.run())
-```
-
-**TypeScript**
-```typescript
-// worker.ts
-import { defineAgent, PolosClient, Worker } from "@polos/sdk";
-import { openai } from "@ai-sdk/openai";
-
-const weatherAgent = defineAgent({
-  id: "weather-agent",
-  model: openai("gpt-4o-mini"),
-  systemPrompt: "You are a helpful weather assistant.",
-  tools: [getWeather],
-});
-
-const client = new PolosClient({ projectId: "your-project-id" });
-const worker = new Worker({ client, agents: [weatherAgent] });
-
-await worker.run();
-```
-
-### 4. Run your agent
-
-**Python**
-```bash
-# Terminal 1: Start the worker
-python worker.py
-
-# Terminal 2: Invoke the agent
-python main.py
-```
-
-**TypeScript**
-```bash
-# Terminal 1: Start the worker
-npx tsx worker.ts
-
-# Terminal 2: Invoke the agent
-npx tsx main.ts
-```
-
-### 5. See it in action
-
-Open the Polos UI to see your agent's execution trace, tool calls, and reasoning:
-
-<p align="center">
-  <img src=".github/assets/observability.png" alt="Polos Observability UI" width="800">
-</p>
-
-📖 **[Full Quick Start Guide →](https://docs.polos.dev/quickstart)**
-
----
-
 ## Examples
 
 ### Agents
@@ -392,7 +394,7 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
 
 Polos captures the result of every side effect - tool calls, API responses, time delays as a durable log.
 If your process dies, Polos replays the workflow from the log, returning previously-recorded results instead of re-executing them.
-Your agent’s exact local variables and call stack are restored in milliseconds.
+Your agent's exact local variables and call stack are restored in milliseconds.
 
 **Completed steps are never re-executed - so you never pay for an LLM call twice.**
 
@@ -400,14 +402,14 @@ Your agent’s exact local variables and call stack are restored in milliseconds
 
 ## Documentation
 
-For detailed documentation, visit **[docs.polos.dev](https://docs.polos.dev)**
+For detailed documentation, visit **[polos.dev/docs](https://polos.dev/docs)**
 
-- 📖 [Quick Start Guide](https://docs.polos.dev/quickstart)
-- 🤖 [Building Agents](https://docs.polos.dev/agents/overview)
-- ⚙️ [Workflow Patterns](https://docs.polos.dev/workflows/overview)
-- 📡 [Events](https://docs.polos.dev/workflows/event-triggered-workflows)
-- ⏰ [Scheduling](https://docs.polos.dev/workflows/scheduled-workflows)
-- 🔍 [Observability](https://docs.polos.dev/observability/tracing)
+- 📖 [Quick Start Guide](https://polos.dev/docs/quickstart)
+- 🤖 [Building Agents](https://polos.dev/docs/agents/overview)
+- ⚙️ [Workflow Patterns](https://polos.dev/docs/workflows/overview)
+- 📡 [Events](https://polos.dev/docs/workflows/event-triggered-workflows)
+- ⏰ [Scheduling](https://polos.dev/docs/workflows/scheduled-workflows)
+- 🔍 [Observability](https://polos.dev/docs/observability/tracing)
 
 ---
 
@@ -417,7 +419,7 @@ Join our community to get help, share ideas, and stay updated:
 
 - ⭐ [Star us on GitHub](https://github.com/polos-dev/polos)
 - 💬 [Join our Discord](https://discord.gg/ZAxHKMPwFG)
-- 📖 [Read the Docs](https://docs.polos.dev)
+- 📖 [Read the Docs](https://polos.dev/docs)
 
 ---
 

@@ -26,6 +26,7 @@ import { StepExecutionError, WaitError, isWaitError } from '../core/step.js';
 import type { WorkflowHandle, WorkflowStatus } from '../core/workflow.js';
 import type { OrchestratorClient } from './orchestrator-client.js';
 import type { ExecutionContext, StepOutput, BatchWorkflowEntry } from './orchestrator-types.js';
+import type { Channel, SuspendNotification } from '../channels/channel.js';
 import { executeHookChain } from '../middleware/hook-executor.js';
 import { normalizeHooks } from '../middleware/hook.js';
 import { initializeState, validateState, serializeState } from '../core/state.js';
@@ -71,6 +72,8 @@ export interface ExecuteWorkflowOptions {
   workerId: string;
   /** Abort signal for cancellation */
   abortSignal?: AbortSignal | undefined;
+  /** Notification channels for suspend events */
+  channels?: Channel[] | undefined;
 }
 
 /**
@@ -161,7 +164,8 @@ function createOrchestratorStepHelper(
   cachedSteps: Map<string, StepOutput>,
   execCtx: StepExecutionContext,
   workerId: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  channels?: Channel[]
 ): StepHelper {
   // --- Abort check ---
   const checkAborted = (): void => {
@@ -886,6 +890,59 @@ function createOrchestratorStepHelper(
         workerId
       );
 
+      // Notify channels — after state is persisted, before pausing execution
+      if (channels?.length) {
+        const eventRecord = eventData as Record<string, unknown>;
+        const formData = eventRecord['_form'] as Record<string, unknown> | undefined;
+        const notifyConfig = eventRecord['_notify'] as Record<string, unknown> | undefined;
+
+        // _notify.channels filters the already-resolved set
+        const allowedChannels = notifyConfig?.['channels'] as string[] | undefined;
+        const activeChannels = allowedChannels
+          ? channels.filter((ch) => allowedChannels.includes(ch.id))
+          : channels;
+
+        if (activeChannels.length > 0) {
+          const titleVal = formData?.['title'] as string | undefined;
+          const notifyMessage = notifyConfig?.['message'] as string | undefined;
+          const formDescription = formData?.['description'] as string | undefined;
+          const descriptionVal = notifyMessage ?? formDescription;
+          const sourceVal = eventRecord['_source'] as string | undefined;
+          const toolVal = eventRecord['_tool'] as string | undefined;
+          const contextVal = formData?.['context'] as Record<string, unknown> | undefined;
+          const expiresAtVal = (formData?.['expiresAt'] ?? formData?.['expires_at']) as
+            string | undefined;
+
+          const notification: SuspendNotification = {
+            workflowId: execCtx.rootWorkflowId,
+            executionId: execCtx.rootExecutionId,
+            stepKey: key,
+            approvalUrl,
+          };
+          if (titleVal !== undefined) notification.title = titleVal;
+          if (descriptionVal !== undefined) notification.description = descriptionVal;
+          if (sourceVal !== undefined) notification.source = sourceVal;
+          if (toolVal !== undefined) notification.tool = toolVal;
+          if (contextVal !== undefined) notification.context = contextVal;
+          if (expiresAtVal !== undefined) notification.expiresAt = expiresAtVal;
+
+          // Fire all notifications concurrently — failures logged, never block suspend
+          await Promise.allSettled(
+            activeChannels.map(async (ch) => {
+              try {
+                const overrides = notifyConfig?.[ch.id] as Record<string, unknown> | undefined;
+                const n = overrides !== undefined
+                  ? { ...notification, channelOverrides: overrides }
+                  : notification;
+                await ch.notify(n);
+              } catch (err) {
+                logger.warn(`Channel ${ch.id} notification failed`, { error: String(err) });
+              }
+            })
+          );
+        }
+      }
+
       throw new WaitError(`Waiting for resume event: ${topic}`, { topic });
     },
 
@@ -1078,7 +1135,7 @@ function createOrchestratorStepHelper(
  * 9. Returns (result, finalState)
  */
 export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<ExecutionResult> {
-  const { workflow, payload, context, orchestratorClient, workerId, abortSignal } = options;
+  const { workflow, payload, context, orchestratorClient, workerId, abortSignal, channels } = options;
 
   let state: Record<string, unknown> = {};
   let validatedPayload = payload;
@@ -1134,7 +1191,8 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         otelTraceparent: context.otelTraceparent,
       },
       workerId,
-      abortSignal
+      abortSignal,
+      channels
     );
 
     // Create workflow context

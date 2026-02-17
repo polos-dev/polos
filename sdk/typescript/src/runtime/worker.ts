@@ -10,6 +10,7 @@
 import type { Workflow } from '../core/workflow.js';
 import { isToolWorkflow, type ToolWorkflow } from '../core/tool.js';
 import { isAgentWorkflow, type AgentWorkflow } from '../agents/agent.js';
+import type { Channel } from '../channels/channel.js';
 import { globalRegistry } from '../core/registry.js';
 import { StepExecutionError } from '../core/step.js';
 import type {
@@ -55,6 +56,8 @@ export interface WorkerConfig {
   localMode?: boolean | undefined;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number | undefined;
+  /** Default notification channels for suspend events (e.g., Slack, Discord) */
+  channels?: Channel[] | undefined;
 }
 
 /**
@@ -92,6 +95,7 @@ export class Worker {
   private readonly config: WorkerConfig;
   private readonly orchestratorClient: OrchestratorClient;
   private readonly workflowRegistry = new Map<string, Workflow>();
+  private readonly channels: Channel[];
   private readonly maxConcurrentWorkflows: number;
   private readonly workerServerUrl: string;
   private readonly port: number;
@@ -105,6 +109,7 @@ export class Worker {
 
   constructor(config: WorkerConfig) {
     this.config = config;
+    this.channels = config.channels ?? [];
     this.maxConcurrentWorkflows = config.maxConcurrentWorkflows ?? 100;
     this.workerServerUrl =
       config.workerServerUrl ?? `http://localhost:${String(config.port ?? 8000)}`;
@@ -751,6 +756,7 @@ export class Worker {
         orchestratorClient: this.orchestratorClient,
         workerId: this.getWorkerIdOrThrow(),
         abortSignal: abortController.signal,
+        channels: this.channels,
       });
 
       // Handle result

@@ -302,3 +302,11 @@ export {
   type ExecToolConfig,
   type SandboxToolsConfig,
 } from './execution/index.js';
+
+// Channels
+export {
+  SlackChannel,
+  type SlackChannelConfig,
+  type Channel,
+  type SuspendNotification,
+} from './channels/index.js';

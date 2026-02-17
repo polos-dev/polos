@@ -47,7 +47,7 @@ function stripAnthropicCacheControl(args: Record<string, unknown>): void {
   const tools = args['tools'] as Record<string, Record<string, unknown>> | undefined;
   if (tools) {
     for (const name of Object.keys(tools)) {
-      delete tools[name]['providerOptions'];
+      delete tools[name]?.['providerOptions'];
     }
   }
 

@@ -66,13 +66,23 @@ impl Database {
         Ok(())
     }
 
-    // Update worker heartbeat
+    // Update worker heartbeat and reconcile execution count
     pub async fn update_worker_heartbeat(&self, worker_id: &Uuid) -> anyhow::Result<()> {
-        sqlx::query("UPDATE workers SET last_heartbeat = $1 WHERE id = $2")
-            .bind(Utc::now())
-            .bind(worker_id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE workers
+             SET last_heartbeat = $1,
+                 current_execution_count = (
+                     SELECT COUNT(*)
+                     FROM workflow_executions
+                     WHERE assigned_to_worker = $2
+                       AND status IN ('claimed', 'running')
+                 )
+             WHERE id = $2",
+        )
+        .bind(Utc::now())
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }

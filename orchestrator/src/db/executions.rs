@@ -80,11 +80,11 @@ impl Database {
                 if let Some(step_key_value) = step_key {
                     // Get parent's parent_execution_id, and root_execution_id
                     let parent_row = sqlx::query(
-            "SELECT parent_execution_id, root_execution_id FROM workflow_executions WHERE id = $1",
-          )
-          .bind(parent_id)
-          .fetch_optional(&mut *tx)
-          .await?;
+                        "SELECT parent_execution_id, root_execution_id FROM workflow_executions WHERE id = $1",
+                    )
+                    .bind(parent_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
 
                     if let Some(parent_row) = parent_row {
                         let parent_parent_execution_id: Option<Uuid> =
@@ -93,30 +93,42 @@ impl Database {
                             parent_row.get("root_execution_id");
                         let effective_root_id = parent_root_execution_id.unwrap_or(parent_id);
 
-                        // Update parent execution status to waiting
-                        sqlx::query(
-                            "UPDATE workflow_executions SET status = 'waiting' WHERE id = $1",
+                        // Update parent execution status to waiting and free the worker slot
+                        let waiting_row = sqlx::query(
+                            "UPDATE workflow_executions SET status = 'waiting' WHERE id = $1 RETURNING assigned_to_worker",
                         )
                         .bind(parent_id)
-                        .execute(&mut *tx)
+                        .fetch_one(&mut *tx)
                         .await?;
+
+                        // Decrement worker's execution count since waiting doesn't use a slot
+                        if let Some(worker_id) =
+                            waiting_row.get::<Option<Uuid>, _>("assigned_to_worker")
+                        {
+                            sqlx::query(
+                                "UPDATE workers SET current_execution_count = GREATEST(0, current_execution_count - 1) WHERE id = $1"
+                            )
+                            .bind(worker_id)
+                            .execute(&mut *tx)
+                            .await?;
+                        }
 
                         // Insert wait step for parent using step_key
                         sqlx::query(
-              "INSERT INTO wait_steps (execution_id, parent_execution_id, root_execution_id, step_key, wait_until, wait_type, project_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT (execution_id, step_key) DO UPDATE
-               SET wait_until = $5, wait_type = $6"
-            )
-            .bind(parent_id)
-            .bind(parent_parent_execution_id) // The parent's parent (or None if parent is root)
-            .bind(effective_root_id)
-            .bind(step_key_value)
-            .bind(None::<DateTime<Utc>>) // No time-based wait
-            .bind("subworkflow")
-            .bind(project_id)
-            .execute(&mut *tx)
-            .await?;
+                            "INSERT INTO wait_steps (execution_id, parent_execution_id, root_execution_id, step_key, wait_until, wait_type, project_id)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            ON CONFLICT (execution_id, step_key) DO UPDATE
+                            SET wait_until = $5, wait_type = $6"
+                        )
+                        .bind(parent_id)
+                        .bind(parent_parent_execution_id) // The parent's parent (or None if parent is root)
+                        .bind(effective_root_id)
+                        .bind(step_key_value)
+                        .bind(None::<DateTime<Utc>>) // No time-based wait
+                        .bind("subworkflow")
+                        .bind(project_id)
+                        .execute(&mut *tx)
+                        .await?;
                     }
                 }
             }
@@ -242,11 +254,23 @@ impl Database {
                     let effective_root_id = parent_root_execution_id.unwrap_or(parent_id);
                     let parent_project_id: Uuid = parent_row.get("project_id");
 
-                    // Update parent status to waiting once
-                    sqlx::query("UPDATE workflow_executions SET status = 'waiting' WHERE id = $1")
+                    // Update parent status to waiting once and free the worker slot
+                    let waiting_row = sqlx::query("UPDATE workflow_executions SET status = 'waiting' WHERE id = $1 RETURNING assigned_to_worker")
                         .bind(parent_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+
+                    // Decrement worker's execution count since waiting doesn't use a slot
+                    if let Some(worker_id) =
+                        waiting_row.get::<Option<Uuid>, _>("assigned_to_worker")
+                    {
+                        sqlx::query(
+                            "UPDATE workers SET current_execution_count = GREATEST(0, current_execution_count - 1) WHERE id = $1"
+                        )
+                        .bind(worker_id)
                         .execute(&mut *tx)
                         .await?;
+                    }
 
                     // Since step_key is common for all workflows in batch, we only create one wait_step entry
                     // Store execution_ids array in metadata to preserve ordering

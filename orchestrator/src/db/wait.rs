@@ -30,11 +30,21 @@ impl Database {
             let root_execution_id: Option<Uuid> = exec_row.get("root_execution_id");
             let effective_root_id = root_execution_id.unwrap_or(*execution_id);
 
-            // Set execution to waiting state
-            sqlx::query("UPDATE workflow_executions SET status = 'waiting' WHERE id = $1")
+            // Set execution to waiting state and free the worker slot
+            let waiting_row = sqlx::query("UPDATE workflow_executions SET status = 'waiting' WHERE id = $1 RETURNING assigned_to_worker")
                 .bind(execution_id)
+                .fetch_one(&mut *tx)
+                .await?;
+
+            // Decrement worker's execution count since waiting doesn't use a slot
+            if let Some(worker_id) = waiting_row.get::<Option<Uuid>, _>("assigned_to_worker") {
+                sqlx::query(
+                    "UPDATE workers SET current_execution_count = GREATEST(0, current_execution_count - 1) WHERE id = $1"
+                )
+                .bind(worker_id)
                 .execute(&mut *tx)
                 .await?;
+            }
 
             // Get project_id from execution (inline to avoid acquiring a separate pool connection mid-tx)
             let wait_project_id: Uuid =
@@ -45,22 +55,22 @@ impl Database {
 
             // Insert wait step
             sqlx::query(
-        "INSERT INTO wait_steps (execution_id, parent_execution_id, root_execution_id, step_key, wait_until, wait_type, wait_topic, expires_at, project_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (execution_id, step_key) DO UPDATE
-         SET wait_until = $5, wait_type = $6, wait_topic = $7, expires_at = $8"
-      )
-      .bind(execution_id)
-      .bind(parent_execution_id)
-      .bind(effective_root_id)
-      .bind(step_key)
-      .bind(wait_until)
-      .bind(wait_type)
-      .bind(wait_topic)
-      .bind(expires_at)
-      .bind(wait_project_id)
-      .execute(&mut *tx)
-      .await?;
+                "INSERT INTO wait_steps (execution_id, parent_execution_id, root_execution_id, step_key, wait_until, wait_type, wait_topic, expires_at, project_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT (execution_id, step_key) DO UPDATE
+                SET wait_until = $5, wait_type = $6, wait_topic = $7, expires_at = $8"
+            )
+            .bind(execution_id)
+            .bind(parent_execution_id)
+            .bind(effective_root_id)
+            .bind(step_key)
+            .bind(wait_until)
+            .bind(wait_type)
+            .bind(wait_topic)
+            .bind(expires_at)
+            .bind(wait_project_id)
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;

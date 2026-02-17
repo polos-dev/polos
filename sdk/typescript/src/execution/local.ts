@@ -68,9 +68,15 @@ function spawnLocal(
     });
 
     // Guard against stream errors leaving the promise unresolved
-    proc.stdin.on('error', () => { /* noop */ });
-    proc.stdout.on('error', () => { /* noop */ });
-    proc.stderr.on('error', () => { /* noop */ });
+    proc.stdin.on('error', () => {
+      /* noop */
+    });
+    proc.stdout.on('error', () => {
+      /* noop */
+    });
+    proc.stderr.on('error', () => {
+      /* noop */
+    });
 
     const timeoutMs = (options.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
     const timer = setTimeout(() => {
@@ -95,7 +101,9 @@ function spawnLocal(
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      settle(() => { reject(err); });
+      settle(() => {
+        reject(err);
+      });
     });
 
     if (options.stdin) {

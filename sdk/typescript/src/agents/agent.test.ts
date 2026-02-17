@@ -171,7 +171,6 @@ describe('AgentWorkflow.withInput', () => {
     });
 
     const config = agent.withInput('Hello, agent!', {
-      conversationId: 'conv-1',
       sessionId: 'sess-1',
       userId: 'user-1',
       streaming: true,
@@ -183,7 +182,6 @@ describe('AgentWorkflow.withInput', () => {
     assert.ok(config instanceof AgentRunConfig);
     assert.strictEqual(config.agent, agent);
     assert.strictEqual(config.input, 'Hello, agent!');
-    assert.strictEqual(config.conversationId, 'conv-1');
     assert.strictEqual(config.sessionId, 'sess-1');
     assert.strictEqual(config.userId, 'user-1');
     assert.strictEqual(config.streaming, true);

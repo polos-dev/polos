@@ -21,6 +21,21 @@ interface ChatMessage {
   toolName?: string;
 }
 
+/**
+ * Extract renderable text from a message content field that may be a string,
+ * an array of content parts (text, tool-call, tool-result), or an object.
+ */
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text)
+      .join('');
+  }
+  return '';
+}
+
 export const AgentRunPage: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
@@ -37,7 +52,7 @@ export const AgentRunPage: React.FC = () => {
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [executionId, setExecutionId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -95,26 +110,26 @@ export const AgentRunPage: React.FC = () => {
         20
       );
 
-      // Filter runs: if multiple runs have the same conversation_id, keep only the latest one
-      const runsByConversationId = new Map<string, WorkflowRunSummary>();
+      // Filter runs: if multiple runs have the same session_id, keep only the latest one
+      const runsBySessionId = new Map<string, WorkflowRunSummary>();
 
       for (const run of runs) {
-        const convId = run.result?.conversation_id;
+        const sid = run.session_id;
 
-        if (convId) {
-          // If we already have a run for this conversation_id, compare created_at and keep the latest
-          const existingRun = runsByConversationId.get(convId);
+        if (sid) {
+          // If we already have a run for this session_id, compare created_at and keep the latest
+          const existingRun = runsBySessionId.get(sid);
           if (
             !existingRun ||
             new Date(run.created_at) > new Date(existingRun.created_at)
           ) {
-            runsByConversationId.set(convId, run);
+            runsBySessionId.set(sid, run);
           }
         }
       }
 
       // Convert map back to array and sort by created_at (newest first)
-      const filteredRuns = Array.from(runsByConversationId.values()).sort(
+      const filteredRuns = Array.from(runsBySessionId.values()).sort(
         (a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -137,12 +152,12 @@ export const AgentRunPage: React.FC = () => {
   const handleRunClick = (run: WorkflowRunSummary) => {
     setSelectedRun(run);
     setError(null);
-    // Extract conversation_id from the run's result to continue the conversation
-    const convId = run.result?.conversation_id;
-    if (convId) {
-      setConversationId(convId);
+    // Extract session_id from the run to continue the session
+    const sid = run.session_id;
+    if (sid) {
+      setSessionId(sid);
     } else {
-      setConversationId(null);
+      setSessionId(null);
     }
     setInputMessage('');
     setExecutionId(null);
@@ -152,9 +167,9 @@ export const AgentRunPage: React.FC = () => {
     setSelectedRun(null);
     setError(null);
     setChatMessages([]);
-    // Generate a new UUID for conversation_id
-    const newConversationId = crypto.randomUUID();
-    setConversationId(newConversationId);
+    // Generate a new session ID
+    const newSessionId = `chat-${Date.now()}`;
+    setSessionId(newSessionId);
     setExecutionId(null);
     setInputMessage('');
   };
@@ -162,7 +177,7 @@ export const AgentRunPage: React.FC = () => {
   const handleSendMessage = async () => {
     if (
       !inputMessage.trim() ||
-      !conversationId ||
+      !sessionId ||
       !selectedProjectId ||
       !agentId ||
       isSending
@@ -198,12 +213,13 @@ export const AgentRunPage: React.FC = () => {
     setChatMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      // Invoke agent run with input, conversation_id, and streaming=true
-      const response = await api.runWorkflow(selectedProjectId, agentId, {
-        input: message,
-        conversation_id: conversationId,
-        streaming: true,
-      });
+      // Invoke agent run with input and streaming, session_id passed as top-level option
+      const response = await api.runWorkflow(
+        selectedProjectId,
+        agentId,
+        { input: message, streaming: true },
+        { sessionId, deploymentId: deploymentId || undefined }
+      );
 
       const execId = response.execution_id;
       setExecutionId(execId);
@@ -296,29 +312,29 @@ export const AgentRunPage: React.FC = () => {
     }
   };
 
-  // Fetch conversation history when selectedRun changes and has a conversation_id, or when conversationId is set for new conversations
+  // Fetch session memory when selectedRun changes and has a session_id, or when sessionId is set for new sessions
   useEffect(() => {
     const fetchConversation = async () => {
-      // If a run is selected, use its conversation_id
+      // If a run is selected, use its session_id
       if (selectedRun) {
         if (!selectedProjectId) {
           setChatMessages([]);
           return;
         }
 
-        // Extract conversation_id from result
-        const convId = selectedRun.result?.conversation_id;
-        if (!convId) {
+        // Extract session_id from the run
+        const sid = selectedRun.session_id;
+        if (!sid) {
           setChatMessages([]);
-          setConversationId(null);
+          setSessionId(null);
           return;
         }
 
-        setConversationId(convId);
+        setSessionId(sid);
       }
 
-      // Fetch conversation if we have a conversation_id
-      if (!conversationId || !selectedProjectId) {
+      // Fetch session memory if we have a session_id
+      if (!sessionId || !selectedProjectId) {
         if (!selectedRun) {
           setChatMessages([]);
         }
@@ -327,27 +343,25 @@ export const AgentRunPage: React.FC = () => {
 
       try {
         setIsLoadingConversation(true);
-        if (!agentId) {
-          setChatMessages([]);
-          return;
-        }
-        const messages = await api.getConversationHistory(
+        const sessionMemory = await api.getSessionMemory(
           selectedProjectId,
-          conversationId,
-          agentId,
-          agent?.deployment_id
+          sessionId
         );
 
-        // Convert API messages to ChatMessage format
-        const formattedMessages: ChatMessage[] = messages.map((msg: any) => ({
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
-          content: msg.content || '',
-          timestamp: msg.created_at || new Date().toISOString(),
-        }));
+        // Convert API messages to ChatMessage format, filtering out empty messages
+        // (e.g. tool-call/tool-result messages with no text content)
+        const messages = sessionMemory.messages || [];
+        const formattedMessages: ChatMessage[] = messages
+          .map((msg: any) => ({
+            role: msg.role === 'assistant' ? 'assistant' : 'user',
+            content: extractTextContent(msg.content),
+            timestamp: msg.created_at || new Date().toISOString(),
+          }))
+          .filter((msg) => msg.content.length > 0) as ChatMessage[];
 
         setChatMessages(formattedMessages);
       } catch (err) {
-        console.error('Failed to fetch conversation history:', err);
+        console.error('Failed to fetch session memory:', err);
         setChatMessages([]);
       } finally {
         setIsLoadingConversation(false);
@@ -355,7 +369,7 @@ export const AgentRunPage: React.FC = () => {
     };
 
     fetchConversation();
-  }, [selectedRun, selectedProjectId, conversationId, agentId, agent]);
+  }, [selectedRun, selectedProjectId, sessionId]);
 
   // Cleanup stream on unmount
   useEffect(() => {
@@ -372,47 +386,36 @@ export const AgentRunPage: React.FC = () => {
     if (status === 'completed' || status === 'failed') {
       // Only handle non-streaming workflows here
       // Streaming workflows are handled in the stream event handlers
-      if (!streamCleanup && conversationId && selectedProjectId && agentId) {
-        // Refresh conversation history for both new and existing conversations
+      if (!streamCleanup && sessionId && selectedProjectId) {
+        // Refresh session memory for both new and existing sessions
         setIsLoadingConversation(true);
         api
-          .getConversationHistory(
-            selectedProjectId,
-            conversationId,
-            agentId,
-            agent?.deployment_id
-          )
-          .then((messages) => {
-            const formattedMessages: ChatMessage[] = messages.map(
-              (msg: any) => ({
+          .getSessionMemory(selectedProjectId, sessionId)
+          .then((sessionMemory) => {
+            const messages = sessionMemory.messages || [];
+            const formattedMessages: ChatMessage[] = messages
+              .map((msg: any) => ({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: msg.content || '',
+                content: extractTextContent(msg.content),
                 timestamp: msg.created_at || new Date().toISOString(),
-              })
-            );
+              }))
+              .filter((msg) => msg.content.length > 0) as ChatMessage[];
             setChatMessages(formattedMessages);
           })
           .catch((err) => {
-            console.error('Failed to refresh conversation:', err);
+            console.error('Failed to refresh session memory:', err);
           })
           .finally(() => {
             setIsLoadingConversation(false);
             setIsSending(false);
           });
 
-        // Always refresh the runs list to get the latest run (including new conversations)
+        // Always refresh the runs list to get the latest run (including new sessions)
         fetchAgentRuns();
       }
       setExecutionId(null);
     }
-  }, [
-    status,
-    conversationId,
-    selectedProjectId,
-    fetchAgentRuns,
-    agentId,
-    agent,
-  ]);
+  }, [status, sessionId, selectedProjectId, fetchAgentRuns]);
 
   if (isLoading) {
     return (
@@ -568,7 +571,7 @@ export const AgentRunPage: React.FC = () => {
               ) : chatMessages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-gray-500">
-                    {conversationId
+                    {sessionId
                       ? 'Start typing a message...'
                       : 'Click "New Run" to start a conversation'}
                   </div>
@@ -734,7 +737,7 @@ export const AgentRunPage: React.FC = () => {
                 ))
               )}
             </div>
-            {conversationId && (
+            {sessionId && (
               <div className="border-t border-gray-200 p-4 bg-white">
                 <div className="flex gap-2 items-end">
                   <textarea
@@ -753,7 +756,7 @@ export const AgentRunPage: React.FC = () => {
                       }
                     }}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[42px] max-h-[120px]"
-                    disabled={isSending || !conversationId}
+                    disabled={isSending || !sessionId}
                     rows={1}
                     style={{
                       height: 'auto',
@@ -768,9 +771,7 @@ export const AgentRunPage: React.FC = () => {
                   <Button
                     variant="default"
                     onClick={handleSendMessage}
-                    disabled={
-                      !inputMessage.trim() || isSending || !conversationId
-                    }
+                    disabled={!inputMessage.trim() || isSending || !sessionId}
                     className="bg-blue-500 hover:bg-blue-600 text-white"
                   >
                     {isSending ? 'Sending...' : 'Send'}

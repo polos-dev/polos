@@ -407,8 +407,16 @@ export const api = {
   async runWorkflow(
     projectId: string,
     workflowId: string,
-    payload: Record<string, any>
+    payload: Record<string, any>,
+    options?: { sessionId?: string; deploymentId?: string }
   ): Promise<any> {
+    const body: Record<string, any> = { payload };
+    if (options?.sessionId) {
+      body.session_id = options.sessionId;
+    }
+    if (options?.deploymentId) {
+      body.deployment_id = options.deploymentId;
+    }
     const response = await fetch(
       `${getApiBaseUrl()}/api/v1/workflows/${workflowId}/run`,
       {
@@ -419,7 +427,7 @@ export const api = {
           Accept: 'application/json',
           'X-Project-ID': projectId,
         },
-        body: JSON.stringify({ payload }),
+        body: JSON.stringify(body),
       }
     );
     if (!response.ok) {
@@ -650,21 +658,12 @@ export const api = {
     );
   },
 
-  async getConversationHistory(
+  async getSessionMemory(
     projectId: string,
-    conversationId: string,
-    agentId: string,
-    deploymentId?: string
-  ): Promise<any[]> {
-    const params = new URLSearchParams({
-      agent_id: agentId,
-    });
-    if (deploymentId) {
-      params.append('deployment_id', deploymentId);
-    }
-
+    sessionId: string
+  ): Promise<{ summary: string | null; messages: any[] }> {
     const response = await fetch(
-      `${getApiBaseUrl()}/api/v1/conversation/${encodeURIComponent(conversationId)}/get?${params.toString()}`,
+      `${getApiBaseUrl()}/internal/session/${encodeURIComponent(sessionId)}/memory`,
       {
         credentials: 'include',
         headers: {
@@ -676,13 +675,12 @@ export const api = {
     if (!response.ok) {
       const errorData = await response
         .json()
-        .catch(() => ({ error: 'Failed to fetch conversation history' }));
+        .catch(() => ({ error: 'Failed to fetch session memory' }));
       throw new Error(
         errorData.error || `HTTP error! status: ${response.status}`
       );
     }
-    const data = await response.json();
-    return data.messages || [];
+    return response.json();
   },
 
   // Trace functions

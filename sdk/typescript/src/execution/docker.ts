@@ -68,8 +68,12 @@ function spawnCommand(
       // Ignore stdin errors — the process may have exited before we finished writing.
       // The 'close' event will still fire and resolve the promise.
     });
-    proc.stdout.on('error', () => { /* noop */ });
-    proc.stderr.on('error', () => { /* noop */ });
+    proc.stdout.on('error', () => {
+      /* noop */
+    });
+    proc.stderr.on('error', () => {
+      /* noop */
+    });
 
     const timeoutMs = (options?.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000;
     const timer = setTimeout(() => {
@@ -94,7 +98,9 @@ function spawnCommand(
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      settle(() => { reject(err); });
+      settle(() => {
+        reject(err);
+      });
     });
 
     if (options?.stdin) {

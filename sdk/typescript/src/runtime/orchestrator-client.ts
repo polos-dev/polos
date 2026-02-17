@@ -31,6 +31,8 @@ import type {
   AddConversationHistoryRequest,
   GetConversationHistoryParams,
   ConversationMessage,
+  SessionMemoryResponse,
+  PutSessionMemoryRequest,
 } from './orchestrator-types.js';
 
 import type { StreamEvent } from '../types/events.js';
@@ -809,6 +811,31 @@ export class OrchestratorClient {
       `/api/v1/conversation/${encoded}/get?${queryParams.toString()}`
     );
     return response.messages ?? [];
+  }
+
+  // ==================== Session Memory ====================
+
+  /**
+   * Get session memory (summary + metadata).
+   * GET /internal/session/{sessionId}/memory
+   */
+  async getSessionMemory(sessionId: string): Promise<SessionMemoryResponse> {
+    const encoded = encodeURIComponent(sessionId);
+    return this.request<SessionMemoryResponse>('GET', `/internal/session/${encoded}/memory`);
+  }
+
+  /**
+   * Store session memory (summary + messages).
+   * PUT /internal/session/{sessionId}/memory
+   */
+  async putSessionMemory(sessionId: string, request: PutSessionMemoryRequest): Promise<void> {
+    const encoded = encodeURIComponent(sessionId);
+    await this.request<undefined>('PUT', `/internal/session/${encoded}/memory`, {
+      body: {
+        summary: request.summary,
+        messages: request.messages,
+      },
+    });
   }
 
   // ==================== Schedules ====================

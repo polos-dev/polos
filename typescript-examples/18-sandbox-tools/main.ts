@@ -17,7 +17,6 @@
  */
 
 import 'dotenv/config';
-import { randomUUID } from 'node:crypto';
 import { PolosClient } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
 import { codingAgent } from './agents.js';
@@ -74,11 +73,9 @@ async function main(): Promise<void> {
     'Then create a second file called fibonacci.js that computes the first 10 Fibonacci numbers ' +
     'and prints them. Run that too.';
 
-  const conversationId = randomUUID();
-
   console.log('Invoking coding agent...\n');
   const handle = await client.invoke(
-    codingAgent.id, { input: task, conversationId, streaming: true }
+    codingAgent.id, { input: task, streaming: true }
   );
   console.log(`Execution ID: ${handle.id}`);
   console.log('Streaming agent activity...\n');

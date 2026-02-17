@@ -5,7 +5,7 @@ This example demonstrates an interactive chat agent with tools, streaming respon
 ## Features
 
 - Interactive REPL-style chat loop with streaming responses
-- Conversation history maintained via `conversationId`
+- Conversation history maintained via `sessionId`
 - Three tools: current time, weather lookup, and calculator
 - Tool call indicators displayed inline during streaming
 

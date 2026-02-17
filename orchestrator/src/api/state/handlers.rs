@@ -7,7 +7,9 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::api::auth::helpers::authenticate_and_validate_execution_project;
+use crate::api::auth::helpers::{
+    authenticate_and_validate_execution_project, authenticate_api_v1_request,
+};
 use crate::api::common::{ErrorResponse, ProjectId};
 use crate::AppState;
 
@@ -49,7 +51,6 @@ pub async fn add_conversation_history(
     } else {
         // If no agent_run_id, get project_id from authenticated request
         // For API keys, extract from API key; for JWT, require X-Project-ID header
-        use crate::api::auth::helpers::authenticate_api_v1_request;
         let api_key_project_id =
             authenticate_api_v1_request(&state, &headers, &cookie_jar, "", true).await?;
         (None, api_key_project_id)
@@ -165,6 +166,77 @@ pub async fn get_conversation_history(
         Err(e) => {
             tracing::error!("Failed to get conversation history: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+// ── Session memory ───────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct GetSessionMemoryResponse {
+    pub summary: Option<String>,
+    pub messages: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+pub struct PutSessionMemoryRequest {
+    pub summary: Option<String>,
+    pub messages: serde_json::Value,
+}
+
+pub async fn get_session_memory(
+    State(state): State<Arc<AppState>>,
+    ProjectId(project_id): ProjectId,
+    Path(session_id): Path<String>,
+) -> Result<Json<GetSessionMemoryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.db.get_session_memory(&session_id, &project_id).await {
+        Ok(Some(row)) => Ok(Json(GetSessionMemoryResponse {
+            summary: row.summary,
+            messages: row.messages,
+        })),
+        Ok(None) => Ok(Json(GetSessionMemoryResponse {
+            summary: None,
+            messages: serde_json::json!([]),
+        })),
+        Err(e) => {
+            tracing::error!("Failed to get session memory: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to get session memory".to_string(),
+                    error_type: "INTERNAL_ERROR".to_string(),
+                }),
+            ))
+        }
+    }
+}
+
+pub async fn put_session_memory(
+    State(state): State<Arc<AppState>>,
+    ProjectId(project_id): ProjectId,
+    Path(session_id): Path<String>,
+    Json(req): Json<PutSessionMemoryRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    match state
+        .db
+        .put_session_memory(
+            &session_id,
+            &project_id,
+            req.summary.as_deref(),
+            &req.messages,
+        )
+        .await
+    {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(e) => {
+            tracing::error!("Failed to store session memory: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to store session memory".to_string(),
+                    error_type: "INTERNAL_ERROR".to_string(),
+                }),
+            ))
         }
     }
 }

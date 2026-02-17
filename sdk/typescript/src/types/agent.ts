@@ -150,9 +150,6 @@ export interface AgentConfig<TOutput = string, TState = unknown> {
   guardrails?: Guardrail[];
   /** Max retries when guardrail fails */
   guardrailMaxRetries?: number;
-
-  /** Number of messages to retain for context */
-  conversationHistory?: number;
 }
 
 /**

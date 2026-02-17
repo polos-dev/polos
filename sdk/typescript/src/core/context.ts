@@ -63,8 +63,6 @@ export interface AgentContext<TState = unknown> extends WorkflowContext<TState> 
   readonly temperature?: number | undefined;
   /** Maximum output tokens */
   readonly maxTokens?: number | undefined;
-  /** Conversation ID (mutable — set by agent handler, matching Python) */
-  conversationId?: string | undefined;
 }
 
 /**

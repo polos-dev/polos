@@ -15,7 +15,6 @@
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
-import { randomUUID } from 'node:crypto';
 import { PolosClient } from '@polos/sdk';
 import { chatAssistant } from './agents.js';
 
@@ -36,8 +35,9 @@ async function chatLoop() {
     apiKey: process.env['POLOS_API_KEY'] ?? '',
   });
 
-  // Generate a conversation ID to maintain conversation context
-  const conversationId = randomUUID();
+  // Session ID groups all turns in this chat session — compaction
+  // automatically summarises older messages so context is never lost.
+  const sessionId = `chat-${Date.now()}`;
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -47,7 +47,7 @@ async function chatLoop() {
   console.log('='.repeat(60));
   console.log('Conversational Chat with Streaming');
   console.log('='.repeat(60));
-  console.log(`Conversation ID: ${conversationId}`);
+  console.log(`Session ID: ${sessionId}`);
   console.log("Type 'quit' or 'exit' to end the conversation.");
   console.log('='.repeat(60));
   console.log();
@@ -72,10 +72,11 @@ async function chatLoop() {
       process.stdout.write('Assistant: ');
 
       try {
-        const result = await chatAssistant.stream(client, {
-          input: userInput,
-          conversationId,
-        });
+        const result = await chatAssistant.stream(
+          client,
+          { input: userInput },
+          { sessionId },
+        );
 
         // Stream the response with tool call indicators
         for await (const event of result.events) {

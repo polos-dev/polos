@@ -1,0 +1,19 @@
+{
+  "name": "polos-slack-channel",
+  "version": "0.1.0",
+  "description": "Slack channel notifications when agents suspend for user input",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "worker": "tsx worker.ts"
+  },
+  "dependencies": {
+    "@polos/sdk": "latest",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

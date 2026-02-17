@@ -965,6 +965,11 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/conversation/:conversation_id/get",
             get(api::state::get_conversation_history),
         )
+        // Session memory endpoints
+        .route(
+            "/internal/session/:session_id/memory",
+            get(api::state::get_session_memory).put(api::state::put_session_memory),
+        )
         // Approval endpoints
         .route(
             "/api/v1/approvals/:execution_id/:step_key",

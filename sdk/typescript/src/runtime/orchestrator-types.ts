@@ -438,3 +438,19 @@ export interface ConversationMessage {
   role: string;
   content: unknown;
 }
+
+/**
+ * Response from GET /internal/session/{sessionId}/memory.
+ */
+export interface SessionMemoryResponse {
+  summary: string | null;
+  messages: ConversationMessage[];
+}
+
+/**
+ * Request body for PUT /internal/session/{sessionId}/memory.
+ */
+export interface PutSessionMemoryRequest {
+  summary: string | null;
+  messages: ConversationMessage[];
+}

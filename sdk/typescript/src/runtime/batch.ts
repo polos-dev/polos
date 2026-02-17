@@ -60,7 +60,6 @@ export async function batchAgentInvoke(
       input: config.input,
       streaming: config.streaming,
       session_id: config.sessionId,
-      conversation_id: config.conversationId,
       user_id: config.userId,
       ...config.kwargs,
     },

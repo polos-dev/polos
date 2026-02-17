@@ -36,7 +36,7 @@ export class SlackChannel implements Channel {
     if (!config.botToken.startsWith('xoxb-')) {
       throw new Error(
         'Invalid Slack bot token: must start with "xoxb-". ' +
-          'Use the Bot User OAuth Token from your Slack app\'s OAuth & Permissions page.'
+          "Use the Bot User OAuth Token from your Slack app's OAuth & Permissions page."
       );
     }
     this.config = config;
@@ -44,7 +44,7 @@ export class SlackChannel implements Channel {
 
   async notify(notification: SuspendNotification): Promise<void> {
     const overrides = notification.channelOverrides;
-    const channel = (overrides?.['channel'] as string) ?? this.config.defaultChannel;
+    const channel = (overrides?.['channel'] as string | undefined) ?? this.config.defaultChannel;
     const threadTs = overrides?.['thread_ts'] as string | undefined;
     const blocks = this.buildBlocks(notification);
     const text = notification.title ?? 'Agent needs your input';

@@ -30,6 +30,7 @@ import { AgentRunConfig } from '../core/step.js';
 import type { StopCondition } from './stop-conditions.js';
 import { agentStreamFunction } from './stream.js';
 import type { AgentStreamPayload, AgentStreamResult } from './stream.js';
+import type { CompactionConfig } from '../memory/types.js';
 import { StreamResult } from './stream-result.js';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -79,8 +80,8 @@ export interface DefineAgentConfig {
   guardrails?: (Guardrail | GuardrailHandler)[] | undefined;
   /** Maximum guardrail retries (default: 2) */
   guardrailMaxRetries?: number | undefined;
-  /** Number of conversation history messages to retain (default: 10) */
-  conversationHistory?: number | undefined;
+  /** Session compaction configuration — always enabled with sensible defaults */
+  compaction?: CompactionConfig | undefined;
   /** Publish text_delta and tool_call events to the workflow topic for all invocations */
   streamToWorkflow?: boolean | undefined;
 }
@@ -92,8 +93,6 @@ export interface DefineAgentConfig {
 export interface AgentRunPayload {
   /** Input for the agent (string message or message array) */
   input: string | Record<string, unknown>[];
-  /** Conversation ID for history tracking */
-  conversationId?: string | undefined;
 }
 
 /**
@@ -148,7 +147,6 @@ export interface AgentWorkflow extends Workflow {
   withInput(
     input: string | Record<string, unknown>[],
     options?: {
-      conversationId?: string;
       sessionId?: string;
       userId?: string;
       initialState?: Record<string, unknown>;
@@ -231,10 +229,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
     // Extract fields from payload (matching Python _agent_execute)
     const input = p['input'] as string | Record<string, unknown>[];
     const streamingFlag = p['streaming'] as boolean | undefined;
-    let conversationIdValue = p['conversation_id'] as string | undefined;
-
-    // Generate conversation_id if not provided
-    conversationIdValue ??= await ctx.step.uuid('generate_conversation_id');
 
     // Build the stream payload
     const streamPayload: AgentStreamPayload = {
@@ -248,7 +242,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
       },
       input,
       streaming: streamingFlag ?? config.streamToWorkflow ?? false,
-      conversation_id: conversationIdValue,
     };
 
     // Call the core agent stream function
@@ -260,7 +253,7 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
       agentHooks,
       guardrails,
       guardrailMaxRetries: config.guardrailMaxRetries ?? 2,
-      conversationHistory: config.conversationHistory ?? 10,
+      compaction: config.compaction ?? {},
       outputSchema: outputSchemaJson,
       outputZodSchema: config.outputSchema,
     });
@@ -298,7 +291,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
       const orchPayload: Record<string, unknown> = {
         input: payload.input,
         streaming: true,
-        ...(payload.conversationId !== undefined && { conversation_id: payload.conversationId }),
       };
 
       const invokeOpts: Record<string, unknown> = {};
@@ -323,7 +315,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
       const orchPayload: Record<string, unknown> = {
         input: payload.input,
         streaming: false,
-        ...(payload.conversationId !== undefined && { conversation_id: payload.conversationId }),
       };
 
       const invokeOpts: Record<string, unknown> = {};
@@ -341,7 +332,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
     withInput(
       input: string | Record<string, unknown>[],
       options?: {
-        conversationId?: string;
         sessionId?: string;
         userId?: string;
         initialState?: Record<string, unknown>;
@@ -354,7 +344,6 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
         agent: agentWorkflow,
         input,
         ...(options?.sessionId !== undefined && { sessionId: options.sessionId }),
-        ...(options?.conversationId !== undefined && { conversationId: options.conversationId }),
         ...(options?.userId !== undefined && { userId: options.userId }),
         ...(options?.streaming !== undefined && { streaming: options.streaming }),
         ...(options?.initialState !== undefined && { initialState: options.initialState }),

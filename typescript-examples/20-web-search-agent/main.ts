@@ -20,7 +20,6 @@
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { randomUUID } from 'node:crypto';
 import { PolosClient } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
 import { researchAgent } from './agents.js';
@@ -244,12 +243,10 @@ async function main(): Promise<void> {
   console.log();
   console.log('-'.repeat(60));
 
-  const conversationId = randomUUID();
-
   // Start the agent
   console.log('\nInvoking research agent...');
   const handle = await client.invoke(
-    researchAgent.id, { input: question, conversationId, streaming: true }
+    researchAgent.id, { input: question, streaming: true }
   );
   console.log(`Execution ID: ${handle.id}`);
   console.log('Streaming agent activity...\n');

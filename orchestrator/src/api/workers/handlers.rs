@@ -247,9 +247,10 @@ pub async fn try_dispatch_execution(state: &AppState) -> anyhow::Result<()> {
                     }
                     Err(err) => {
                         tracing::error!(
-                            "Failed to push work to worker {}: {}",
+                            "Failed to push work to worker {} for execution {}: {:?}",
                             worker.id,
-                            execution.id
+                            execution.id,
+                            err
                         );
                         // Rollback execution assignment with error
                         if let Err(e) = state

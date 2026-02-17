@@ -15,7 +15,6 @@
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
-import { randomUUID } from 'node:crypto';
 import { PolosClient } from '@polos/sdk';
 import type { AgentWorkflow } from '@polos/sdk';
 import { safeAssistant, contentGenerator, simpleAgent } from './agents.js';
@@ -89,13 +88,14 @@ async function chatLoop() {
   // Let user select agent
   let { agent, name: agentName } = await selectAgent(rl);
 
-  // Generate a conversation ID to maintain conversation context
-  let conversationId = randomUUID();
+  // Session ID groups all turns in this chat session — compaction
+  // automatically summarises older messages so context is never lost.
+  let sessionId = `chat-${Date.now()}`;
 
   console.log();
   console.log('='.repeat(60));
   console.log(`Chatting with: ${agentName}`);
-  console.log(`Conversation ID: ${conversationId}`);
+  console.log(`Session ID: ${sessionId}`);
   console.log('-'.repeat(60));
   console.log('Test prompts to try:');
   if (agentName === 'safe_assistant') {
@@ -136,19 +136,20 @@ async function chatLoop() {
         const selected = await selectAgent(rl);
         agent = selected.agent;
         agentName = selected.name;
-        conversationId = randomUUID();
+        sessionId = `chat-${Date.now()}`;
         console.log(`\nSwitched to: ${agentName}`);
-        console.log(`New conversation ID: ${conversationId}\n`);
+        console.log(`New session ID: ${sessionId}\n`);
         continue;
       }
 
       process.stdout.write('Assistant: ');
 
       try {
-        const result = await agent.stream(client, {
-          input: userInput,
-          conversationId,
-        });
+        const result = await agent.stream(
+          client,
+          { input: userInput },
+          { sessionId },
+        );
 
         // Stream the response with tool call indicators
         for await (const event of result.events) {

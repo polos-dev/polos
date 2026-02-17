@@ -184,8 +184,6 @@ export class AgentRunConfig {
   readonly input: string | Record<string, unknown>[];
   /** Session ID */
   readonly sessionId: string | undefined;
-  /** Conversation ID for history tracking */
-  readonly conversationId: string | undefined;
   /** User ID */
   readonly userId: string | undefined;
   /** Whether to stream the response */
@@ -201,7 +199,6 @@ export class AgentRunConfig {
     agent: Workflow;
     input: string | Record<string, unknown>[];
     sessionId?: string;
-    conversationId?: string;
     userId?: string;
     streaming?: boolean;
     initialState?: Record<string, unknown>;
@@ -211,7 +208,6 @@ export class AgentRunConfig {
     this.agent = options.agent;
     this.input = options.input;
     this.sessionId = options.sessionId;
-    this.conversationId = options.conversationId;
     this.userId = options.userId;
     this.streaming = options.streaming ?? false;
     this.initialState = options.initialState;
@@ -635,7 +631,6 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
         streaming: config.streaming,
         session_id: undefined as string | undefined,
         user_id: undefined as string | undefined,
-        conversation_id: config.conversationId,
         ...config.kwargs,
       };
       return this.invoke(key, config.agent, payload);
@@ -647,7 +642,6 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
         streaming: config.streaming,
         session_id: undefined as string | undefined,
         user_id: undefined as string | undefined,
-        conversation_id: config.conversationId,
         ...config.kwargs,
       };
       return this.invokeAndWait(key, config.agent, payload);
@@ -664,7 +658,6 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
           streaming: config.streaming,
           session_id: undefined as string | undefined,
           user_id: undefined as string | undefined,
-          conversation_id: config.conversationId,
           ...config.kwargs,
         },
         initialState: config.initialState,
@@ -684,7 +677,6 @@ export function createStepHelper(options: CreateStepHelperOptions): StepHelper {
           streaming: config.streaming,
           session_id: undefined as string | undefined,
           user_id: undefined as string | undefined,
-          conversation_id: config.conversationId,
           ...config.kwargs,
         },
         initialState: config.initialState,

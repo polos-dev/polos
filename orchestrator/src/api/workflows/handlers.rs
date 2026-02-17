@@ -59,6 +59,8 @@ pub struct WorkflowRunSummary {
     root_execution_id: Option<String>,
     /// Workflow ID
     workflow_id: String,
+    /// Session ID
+    session_id: Option<String>,
     /// Creation timestamp (RFC3339)
     created_at: String,
     /// Execution status
@@ -334,6 +336,7 @@ pub async fn get_workflow_runs(
             id: exec.id.to_string(),
             root_execution_id: exec.root_execution_id.map(|id| id.to_string()),
             workflow_id: exec.workflow_id,
+            session_id: exec.session_id,
             created_at: exec.created_at.to_rfc3339(),
             completed_at: exec.completed_at.map(|dt| dt.to_rfc3339()),
             status: exec.status,

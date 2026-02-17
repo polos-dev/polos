@@ -303,6 +303,19 @@ export {
   type SandboxToolsConfig,
 } from './execution/index.js';
 
+// Memory
+export {
+  type SessionMemory,
+  type CompactionConfig,
+  type NormalizedCompactionConfig,
+  type CompactionResult,
+  estimateTokens,
+  estimateMessageTokens,
+  estimateMessagesTokens,
+  compactIfNeeded,
+  buildSummaryMessages,
+} from './memory/index.js';
+
 // Channels
 export {
   SlackChannel,

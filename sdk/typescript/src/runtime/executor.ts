@@ -911,7 +911,8 @@ function createOrchestratorStepHelper(
           const toolVal = eventRecord['_tool'] as string | undefined;
           const contextVal = formData?.['context'] as Record<string, unknown> | undefined;
           const expiresAtVal = (formData?.['expiresAt'] ?? formData?.['expires_at']) as
-            string | undefined;
+            | string
+            | undefined;
 
           const notification: SuspendNotification = {
             workflowId: execCtx.rootWorkflowId,
@@ -931,9 +932,10 @@ function createOrchestratorStepHelper(
             activeChannels.map(async (ch) => {
               try {
                 const overrides = notifyConfig?.[ch.id] as Record<string, unknown> | undefined;
-                const n = overrides !== undefined
-                  ? { ...notification, channelOverrides: overrides }
-                  : notification;
+                const n =
+                  overrides !== undefined
+                    ? { ...notification, channelOverrides: overrides }
+                    : notification;
                 await ch.notify(n);
               } catch (err) {
                 logger.warn(`Channel ${ch.id} notification failed`, { error: String(err) });
@@ -997,7 +999,6 @@ function createOrchestratorStepHelper(
         streaming: config.streaming,
         session_id: execCtx.sessionId,
         user_id: execCtx.userId,
-        conversation_id: config.conversationId,
         ...config.kwargs,
       };
 
@@ -1019,7 +1020,6 @@ function createOrchestratorStepHelper(
         streaming: config.streaming,
         session_id: execCtx.sessionId,
         user_id: execCtx.userId,
-        conversation_id: config.conversationId,
         ...config.kwargs,
       };
 
@@ -1052,7 +1052,6 @@ function createOrchestratorStepHelper(
           streaming: config.streaming,
           session_id: execCtx.sessionId,
           user_id: execCtx.userId,
-          conversation_id: config.conversationId,
           ...config.kwargs,
         },
         initialState: config.initialState,
@@ -1076,7 +1075,6 @@ function createOrchestratorStepHelper(
           streaming: config.streaming,
           session_id: execCtx.sessionId,
           user_id: execCtx.userId,
-          conversation_id: config.conversationId,
           ...config.kwargs,
         },
         initialState: config.initialState,
@@ -1135,7 +1133,8 @@ function createOrchestratorStepHelper(
  * 9. Returns (result, finalState)
  */
 export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<ExecutionResult> {
-  const { workflow, payload, context, orchestratorClient, workerId, abortSignal, channels } = options;
+  const { workflow, payload, context, orchestratorClient, workerId, abortSignal, channels } =
+    options;
 
   let state: Record<string, unknown> = {};
   let validatedPayload = payload;
@@ -1201,11 +1200,6 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     if (workflowType === 'agent') {
       // Build AgentContext for agents
       const agentWf = workflow as AgentWorkflow;
-      const conversationId =
-        typeof validatedPayload === 'object' && validatedPayload !== null
-          ? ((validatedPayload as Record<string, unknown>)['conversation_id'] as string | undefined)
-          : undefined;
-
       const agentCtx: AgentContext<Record<string, unknown>> = {
         workflowId: workflow.id,
         executionId: context.executionId,
@@ -1229,7 +1223,6 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         tools: agentWf.tools,
         temperature: agentWf.agentConfig.temperature,
         maxTokens: agentWf.agentConfig.maxOutputTokens,
-        conversationId,
       };
       ctx = agentCtx;
     } else {

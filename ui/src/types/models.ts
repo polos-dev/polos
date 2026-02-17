@@ -156,6 +156,7 @@ export interface WorkflowRunSummary {
   id: string;
   root_execution_id: string;
   workflow_id: string;
+  session_id?: string;
   created_at: string;
   completed_at: string;
   status: string;

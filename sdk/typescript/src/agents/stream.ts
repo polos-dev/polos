@@ -29,6 +29,9 @@ import type {
 import { maxSteps as maxStepsFn } from './stop-conditions.js';
 import type { LlmToolDefinition } from '../core/tool.js';
 import { createLogger } from '../utils/logger.js';
+import type { CompactionConfig, NormalizedCompactionConfig } from '../memory/types.js';
+import type { ConversationMessage } from '../runtime/orchestrator-types.js';
+import { compactIfNeeded, buildSummaryMessages, isSummaryPair } from '../memory/compaction.js';
 
 const logger = createLogger({ name: 'agent-stream' });
 
@@ -54,7 +57,6 @@ export interface AgentStreamPayload {
   agent_config: AgentStreamConfig;
   input: string | Record<string, unknown>[];
   streaming: boolean;
-  conversation_id?: string | undefined;
 }
 
 /**
@@ -73,7 +75,8 @@ export interface AgentDefinition {
   };
   guardrails: Guardrail[];
   guardrailMaxRetries: number;
-  conversationHistory: number;
+  /** Session compaction configuration — always enabled */
+  compaction: CompactionConfig;
   outputSchema?: unknown;
   /** Original Zod schema for Vercel AI SDK structured output (Output.object()) */
   outputZodSchema?: unknown;
@@ -85,7 +88,6 @@ export interface AgentDefinition {
  */
 export interface AgentStreamResult {
   agent_run_id: string;
-  conversation_id: string | undefined;
   result: unknown;
   result_schema: string | null;
   tool_results: ToolResultInfo[];
@@ -126,7 +128,6 @@ export async function agentStreamFunction(
   const agentConfig = payload.agent_config;
   const streaming = payload.streaming;
   const inputData = payload.input;
-  const conversationId = payload.conversation_id;
 
   // Result accumulator
   let finalInputTokens = 0;
@@ -140,36 +141,49 @@ export async function agentStreamFunction(
   let endSteps = false;
   let checkedStructuredOutput = false;
 
-  // Retrieve conversation history if enabled
-  let cachedHistoryMessages: { role: string; content: unknown }[] | null = null;
-  if (agentDef.conversationHistory > 0 && conversationId) {
-    const execCtx = getExecutionContext();
-    if (execCtx?.orchestratorClient) {
-      try {
-        const historyRecords = await execCtx.orchestratorClient.getConversationHistory(
-          conversationId,
-          {
-            agentId: agentDef.id,
-            deploymentId: ctx.deploymentId,
-            limit: agentDef.conversationHistory,
-          }
-        );
-        cachedHistoryMessages = historyRecords.map((record) => ({
-          role: record.role,
-          content: record.content,
-        }));
-      } catch (err) {
-        logger.warn('Failed to retrieve conversation history', { error: String(err) });
-      }
-    }
-  }
+  // ── Session compaction setup ──────────────────────────────────────
+  // Normalize CompactionConfig -> NormalizedCompactionConfig
+  let currentSummary: string | null = null;
 
-  // Build conversation messages
+  const normalizedCompaction: NormalizedCompactionConfig = {
+    maxConversationTokens: agentDef.compaction.maxConversationTokens ?? 80000,
+    maxSummaryTokens: agentDef.compaction.maxSummaryTokens ?? 20000,
+    minRecentMessages: agentDef.compaction.minRecentMessages ?? 2,
+    compactionModel: agentDef.compaction.compactionModel ?? agentDef.llm.model,
+    enabled: agentDef.compaction.enabled ?? true,
+  };
+
+  // Build conversation messages — load prior session state first, then append current input
   let conversationMessages: unknown[] = [];
 
-  // Prepend cached conversation history if available
-  if (cachedHistoryMessages) {
-    conversationMessages.push(...cachedHistoryMessages);
+  // Load session memory (summary + uncompacted messages) if we have a sessionId
+  if (ctx.sessionId) {
+    const sessionId = ctx.sessionId;
+    const loaded = await ctx.step.run('load_session_memory', async () => {
+      const execCtx = getExecutionContext();
+      if (!execCtx?.orchestratorClient) return null;
+      try {
+        const sessionMemory = await execCtx.orchestratorClient.getSessionMemory(sessionId);
+        return {
+          summary: sessionMemory.summary ?? null,
+          messages: sessionMemory.messages,
+        };
+      } catch (err) {
+        logger.warn('Failed to retrieve session memory', { error: String(err) });
+        return null;
+      }
+    });
+
+    if (loaded) {
+      if (loaded.summary) {
+        currentSummary = loaded.summary;
+        const [summaryUser, summaryAssistant] = buildSummaryMessages(currentSummary);
+        conversationMessages.push(summaryUser, summaryAssistant);
+      }
+      if (loaded.messages.length > 0) {
+        conversationMessages.push(...loaded.messages);
+      }
+    }
   }
 
   // Add current input to conversation
@@ -235,6 +249,23 @@ export async function agentStreamFunction(
       if (!hookResult.success) {
         break;
       }
+    }
+
+    // Run compaction if needed (before LLM call)
+    try {
+      const compactionResult = await compactIfNeeded(
+        conversationMessages as ConversationMessage[],
+        currentSummary,
+        normalizedCompaction
+      );
+      if (compactionResult.compacted) {
+        conversationMessages = compactionResult.messages;
+        currentSummary = compactionResult.summary;
+      }
+    } catch (err) {
+      logger.warn('Compaction failed, continuing with uncompacted messages', {
+        error: String(err),
+      });
     }
 
     // Get guardrails from agent
@@ -556,46 +587,35 @@ export async function agentStreamFunction(
     }
   }
 
-  // Store conversation history if enabled
-  if (conversationId) {
+  // Store session memory (summary + uncompacted messages)
+  if (ctx.sessionId) {
+    const sessionId = ctx.sessionId;
     const execCtx = getExecutionContext();
     const orchestratorClient = execCtx?.orchestratorClient;
     if (orchestratorClient) {
       try {
-        // Store user message
+        // Strip the summary pair from the front — only store real conversation messages
+        const allMessages = conversationMessages as ConversationMessage[];
+        const messagesStart = allMessages.length >= 2 && isSummaryPair(allMessages, 0) ? 2 : 0;
+        const messagesToStore = allMessages.slice(messagesStart);
+
+        const summaryToStore = currentSummary;
         await ctx.step.run(
-          'add_conversation_history_user',
+          'store_session_memory',
           async () => {
-            await orchestratorClient.addConversationHistory(conversationId, {
-              agentId: agentDef.id,
-              role: 'user',
-              content: inputData,
-              agentRunId: agentRunId,
-              conversationHistoryLimit: agentDef.conversationHistory,
+            await orchestratorClient.putSessionMemory(sessionId, {
+              summary: summaryToStore,
+              messages: messagesToStore,
             });
           },
-          { input: { role: 'user', content: inputData } }
-        );
-
-        // Store assistant response
-        if (lastLlmResultContent) {
-          const assistantContent = lastLlmResultContent;
-          await ctx.step.run(
-            'add_conversation_history_assistant',
-            async () => {
-              await orchestratorClient.addConversationHistory(conversationId, {
-                agentId: agentDef.id,
-                role: 'assistant',
-                content: assistantContent,
-                agentRunId: agentRunId,
-                conversationHistoryLimit: agentDef.conversationHistory,
-              });
+          {
+            input: {
+              messageCount: messagesToStore.length,
             },
-            { input: { role: 'assistant', content: assistantContent } }
-          );
-        }
+          }
+        );
       } catch (err) {
-        logger.warn('Failed to store conversation history', { error: String(err) });
+        logger.warn('Failed to store session memory', { error: String(err) });
       }
     }
   }
@@ -603,7 +623,6 @@ export async function agentStreamFunction(
   // Return AgentResult
   return {
     agent_run_id: agentRunId,
-    conversation_id: conversationId,
     result: lastLlmResultContent,
     result_schema: null,
     tool_results: allToolResults,

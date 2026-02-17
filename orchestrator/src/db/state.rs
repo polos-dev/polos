@@ -128,4 +128,64 @@ impl Database {
         messages.reverse();
         Ok(messages)
     }
+
+    // Session memory methods
+
+    pub async fn get_session_memory(
+        &self,
+        session_id: &str,
+        project_id: &Uuid,
+    ) -> anyhow::Result<Option<SessionMemoryRow>> {
+        let mut tx = self.pool.begin().await?;
+        crate::db::common::set_project_id_in_tx(&mut tx, project_id, false).await?;
+
+        let row = sqlx::query(
+            "SELECT session_id, summary, messages, updated_at
+             FROM session_memory
+             WHERE session_id = $1 AND project_id = $2",
+        )
+        .bind(session_id)
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(row.map(|r| SessionMemoryRow {
+            summary: r.get("summary"),
+            messages: r.get("messages"),
+        }))
+    }
+
+    pub async fn put_session_memory(
+        &self,
+        session_id: &str,
+        project_id: &Uuid,
+        summary: Option<&str>,
+        messages: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let mut tx = self.pool.begin().await?;
+        crate::db::common::set_project_id_in_tx(&mut tx, project_id, false).await?;
+
+        sqlx::query(
+            "INSERT INTO session_memory (session_id, project_id, summary, messages, updated_at)
+             VALUES ($1, $2, $3, $4, now())
+             ON CONFLICT (session_id, project_id)
+             DO UPDATE SET summary = $3, messages = $4, updated_at = now()",
+        )
+        .bind(session_id)
+        .bind(project_id)
+        .bind(summary)
+        .bind(messages)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+}
+
+pub struct SessionMemoryRow {
+    pub summary: Option<String>,
+    pub messages: serde_json::Value,
 }

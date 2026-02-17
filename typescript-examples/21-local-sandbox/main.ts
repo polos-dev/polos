@@ -23,7 +23,6 @@ import { stdin as input, stdout as output } from 'node:process';
 import { PolosClient } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
 import { codingAgent } from './agents.js';
-import { randomUUID } from 'node:crypto';
 
 const rl = readline.createInterface({ input, output });
 
@@ -256,11 +255,9 @@ async function main(): Promise<void> {
   console.log(`  Task: ${task}\n`);
   console.log('-'.repeat(60));
 
-  const conversationId = randomUUID();
-
   console.log('\nInvoking agent...');
   const handle = await client.invoke(
-    codingAgent.id, { input: task, conversationId, streaming: true }
+    codingAgent.id, { input: task, streaming: true }
   );
   console.log(`Execution ID: ${handle.id}`);
   console.log('Waiting for agent activity...\n');

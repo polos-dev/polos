@@ -151,7 +151,10 @@ class DockerEnvironment(ExecutionEnvironment):
     async def exec(self, command: str, opts: ExecOptions | None = None) -> ExecResult:
         self._assert_initialized()
 
-        args = ["exec", "-i"]
+        # Only use -i (interactive/keep-stdin-open) when stdin data is provided.
+        # Without stdin data, -i can cause docker exec to hang waiting for EOF.
+        stdin = opts.stdin if opts else None
+        args = ["exec", "-i"] if stdin else ["exec"]
 
         # Set working directory
         cwd = (opts.cwd if opts and opts.cwd else None) or self._container_workdir
@@ -171,7 +174,7 @@ class DockerEnvironment(ExecutionEnvironment):
             "docker",
             args,
             timeout=timeout,
-            stdin=opts.stdin if opts else None,
+            stdin=stdin,
         )
 
         duration_ms = int((time.monotonic() - start) * 1000)

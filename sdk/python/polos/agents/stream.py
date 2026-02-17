@@ -131,19 +131,9 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
     checked_structured_output = False
 
     # Check for max_steps limit unless overridden by explicit max_steps stop condition
-    # Check if any stop condition is max_steps (configured callable from max_steps())
-    from .stop_conditions import max_steps as max_steps_fn
-
     has_max_steps_condition = False
     for sc in stop_conditions:
-        # Check if it's a configured callable from max_steps()
-        if hasattr(sc, "__stop_condition_fn__"):
-            # It's a configured callable - check if it's from max_steps
-            if sc.__stop_condition_fn__ is max_steps_fn:
-                has_max_steps_condition = True
-                break
-        # Also check if it's the max_steps function itself (unlikely but possible)
-        elif sc is max_steps_fn:
+        if getattr(sc, "__stop_condition_name__", None) == "max_steps":
             has_max_steps_condition = True
             break
 

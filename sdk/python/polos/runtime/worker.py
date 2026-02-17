@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from ..agents.agent import Agent
+from ..core.step import ExecutionCancelledError
 from ..core.workflow import _WORKFLOW_REGISTRY, StepExecutionError, Workflow
 from ..features.wait import WaitException
 from ..tools.tool import Tool
@@ -183,6 +184,8 @@ class Worker:
         self.active_executions: set = set()
         # Store tasks for each execution (for manual cancellation)
         self.execution_tasks: dict[str, asyncio.Task] = {}
+        # Store cancel events for cooperative cancellation
+        self.execution_cancel_events: dict[str, asyncio.Event] = {}
         self.execution_tasks_lock = asyncio.Lock()
 
         # Build workflow registry
@@ -839,10 +842,16 @@ class Worker:
 
             context["created_at"] = created_at
 
+            # Create cancel event for cooperative cancellation
+            # (mirrors TypeScript's AbortController pattern)
+            cancel_event = asyncio.Event()
+            context["cancel_event"] = cancel_event
+
             # Create task for workflow execution and store it for cancellation
             workflow_task = asyncio.create_task(workflow._execute(context, payload))
             async with self.execution_tasks_lock:
                 self.execution_tasks[execution_id] = workflow_task
+                self.execution_cancel_events[execution_id] = cancel_event
 
             # Check for timeout
             timeout_task = None
@@ -857,6 +866,7 @@ class Worker:
                             task = self.execution_tasks.get(execution_id)
                             if task and not task.done():
                                 # Timeout reached, cancel the execution
+                                cancel_event.set()
                                 task.cancel()
                                 logger.warning(
                                     "Execution %s timed out after %d seconds",
@@ -872,11 +882,11 @@ class Worker:
             try:
                 # Execute workflow
                 result, final_state = await workflow_task
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, ExecutionCancelledError):
                 # Execution was cancelled (either manually or due to timeout)
                 logger.info("Execution %s was cancelled", execution_id)
                 await self._handle_cancellation(execution_id, workflow_id, context)
-                raise
+                return
             finally:
                 # Clean up
                 if timeout_task:
@@ -888,6 +898,7 @@ class Worker:
 
                 async with self.execution_tasks_lock:
                     self.execution_tasks.pop(execution_id, None)
+                    self.execution_cancel_events.pop(execution_id, None)
 
             # Prepare result for reporting:
             # - If it's a Pydantic model, convert to dict via model_dump(mode="json") and
@@ -922,6 +933,14 @@ class Worker:
             # The orchestrator will resume the execution when the sub-workflow completes
             # Do not report this as a failure - it's the normal wait mechanism
             logger.debug("Workflow paused for waiting: %s", e)
+            return
+
+        except ExecutionCancelledError:
+            # Cooperative cancellation detected (cancel_event was set).
+            # Already handled above in the (asyncio.CancelledError, ExecutionCancelledError)
+            # catch, but handle it here too in case it propagates from a different path.
+            logger.info("Execution %s was cancelled (cooperative)", execution_id)
+            await self._handle_cancellation(execution_id, workflow_id, context)
             return
 
         except Exception as error:
@@ -1151,7 +1170,11 @@ class Worker:
             task = self.execution_tasks.get(execution_id)
             if task and not task.done():
                 logger.debug("Cancelling task %s", task)
-                # Cancel the task
+                # Set cancel event for cooperative cancellation (checked at step entry points)
+                cancel_event = self.execution_cancel_events.get(execution_id)
+                if cancel_event:
+                    cancel_event.set()
+                # Also cancel the asyncio task for immediate interruption
                 task.cancel()
                 logger.info("Cancellation requested for execution %s", execution_id)
                 return True

@@ -249,6 +249,7 @@ class Workflow:
         root_workflow_id = context.get("root_workflow_id")
         otel_traceparent = context.get("otel_traceparent")
         otel_span_id = context.get("otel_span_id")
+        cancel_event = context.get("cancel_event")
 
         # Ensure execution_id is a string
         if execution_id:
@@ -304,6 +305,7 @@ class Workflow:
                 otel_span_id=otel_span_id,
                 state_schema=self.state_schema,
                 initial_state=initial_state,
+                cancel_event=cancel_event,
             )
         else:
             # Create WorkflowContext for regular workflows or tools
@@ -327,6 +329,7 @@ class Workflow:
                 otel_span_id=otel_span_id,
                 state_schema=self.state_schema,
                 initial_state=initial_state,
+                cancel_event=cancel_event,
             )
 
         # Convert dict payload to Pydantic model if needed

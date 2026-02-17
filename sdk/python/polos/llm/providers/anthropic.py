@@ -486,7 +486,6 @@ class AnthropicProvider(LLMProvider):
                     else json.dumps(event)
                 )
 
-
                 if event_type == "content_block_start":
                     # Content block starting - could be text or tool_use
                     if event.get("content_block"):
@@ -625,9 +624,7 @@ class AnthropicProvider(LLMProvider):
                         if usage_data.get("output_tokens") is not None:
                             usage["output_tokens"] = usage_data["output_tokens"]
                         if usage_data.get("cache_read_input_tokens") is not None:
-                            usage["cache_read_input_tokens"] = usage_data[
-                                "cache_read_input_tokens"
-                            ]
+                            usage["cache_read_input_tokens"] = usage_data["cache_read_input_tokens"]
                         if usage_data.get("cache_creation_input_tokens") is not None:
                             usage["cache_creation_input_tokens"] = usage_data[
                                 "cache_creation_input_tokens"

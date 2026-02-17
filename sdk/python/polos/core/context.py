@@ -1,5 +1,6 @@
 """Context classes for workflow and agent execution."""
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -33,6 +34,7 @@ class WorkflowContext:
         otel_span_id: str | None = None,
         state_schema: type[BaseModel] | None = None,
         initial_state: dict[str, Any] | None = None,
+        cancel_event: asyncio.Event | None = None,
     ):
         self.workflow_id = workflow_id
         self.execution_id = execution_id
@@ -47,6 +49,7 @@ class WorkflowContext:
         self.workflow_type = workflow_type
         self.otel_traceparent = otel_traceparent
         self.otel_span_id = otel_span_id
+        self.cancel_event = cancel_event
 
         # Initialize typed workflow state if state_schema is provided
         if state_schema:
@@ -103,6 +106,7 @@ class AgentContext(WorkflowContext):
         otel_span_id: str | None = None,
         state_schema: type[BaseModel] | None = None,
         initial_state: dict[str, Any] | None = None,
+        cancel_event: asyncio.Event | None = None,
     ):
         # Call parent with required parameters
         super().__init__(
@@ -121,6 +125,7 @@ class AgentContext(WorkflowContext):
             otel_span_id=otel_span_id,
             state_schema=state_schema,
             initial_state=initial_state,
+            cancel_event=cancel_event,
         )
         self.agent_id = agent_id
         self.model = model

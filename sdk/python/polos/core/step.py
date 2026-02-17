@@ -42,6 +42,13 @@ from .workflow import (
 logger = logging.getLogger(__name__)
 
 
+class ExecutionCancelledError(Exception):
+    """Raised when an execution has been cancelled via cooperative cancellation."""
+
+    def __init__(self, message: str = "Execution cancelled"):
+        super().__init__(message)
+
+
 class Step:
     """Step execution helper - provides durable execution primitives.
 
@@ -56,6 +63,16 @@ class Step:
             ctx: The workflow execution context
         """
         self.ctx = ctx
+
+    def _check_cancelled(self) -> None:
+        """Check if the execution has been cancelled.
+
+        Mirrors TypeScript's checkAborted() pattern - called at the entry
+        of every step method to ensure prompt cancellation even if
+        asyncio.CancelledError was caught/swallowed by a library.
+        """
+        if self.ctx.cancel_event and self.ctx.cancel_event.is_set():
+            raise ExecutionCancelledError()
 
     async def _check_existing_step(self, step_key: str) -> dict[str, Any] | None:
         """
@@ -249,6 +266,8 @@ class Step:
         Raises:
             StepExecutionError: If function fails after all retries
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -415,6 +434,8 @@ class Step:
             days: Optional days to wait
             weeks: Optional weeks to wait
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -479,6 +500,8 @@ class Step:
             step_key: Step key identifier (must be unique per execution)
             timestamp: Timestamp to wait until
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -557,6 +580,8 @@ class Step:
         Returns:
             EventPayload: Event payload with sequence_id, topic, event_type, data, and created_at
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -614,6 +639,8 @@ class Step:
             data: Event data
             event_type: Optional event type
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -668,6 +695,8 @@ class Step:
         Returns:
             Event data from the resume event
         """
+        self._check_cancelled()
+
         # Check for existing step output
         existing_step = await self._check_existing_step(step_key)
         if existing_step:
@@ -771,6 +800,8 @@ class Step:
             A tuple containing [ExecutionHandle of the sub-workflow,
             True if the step output was found, False otherwise]
         """
+        self._check_cancelled()
+
         # Get workflow ID
         if isinstance(workflow, Workflow):
             workflow_id = workflow.id
@@ -852,6 +883,8 @@ class Step:
         Returns:
             ExecutionHandle of the sub-workflow
         """
+        self._check_cancelled()
+
         # Note: step_finish will be emitted by the orchestrator when it saves the step output
         result, found = await self._invoke(
             step_key,
@@ -892,6 +925,8 @@ class Step:
         Returns:
             Any: Result of the child workflow
         """
+        self._check_cancelled()
+
         result, found = await self._invoke(
             step_key,
             workflow,
@@ -927,6 +962,8 @@ class Step:
         Returns:
             List of ExecutionHandle objects for the submitted workflows
         """
+        self._check_cancelled()
+
         if not workflows:
             return []
 
@@ -1015,6 +1052,8 @@ class Step:
         Returns:
             List of BatchStepResult objects, one for each workflow
         """
+        self._check_cancelled()
+
         if not workflows:
             return []
 
@@ -1117,6 +1156,8 @@ class Step:
             step_key: Step key identifier (must be unique per execution)
             config: AgentRunConfig instance
         """
+        self._check_cancelled()
+
         from ..agents.agent import AgentRunConfig  # Local import to avoid circular dependency
 
         if not isinstance(config, AgentRunConfig):
@@ -1162,6 +1203,8 @@ class Step:
             step_key: Step key identifier (must be unique per execution)
             config: AgentRunConfig instance
         """
+        self._check_cancelled()
+
         from ..agents.agent import AgentRunConfig  # Local import to avoid circular dependency
 
         if not isinstance(config, AgentRunConfig):
@@ -1215,6 +1258,8 @@ class Step:
         This is designed to be used with Agent.with_input(), which returns
         AgentRunConfig instances.
         """
+        self._check_cancelled()
+
         from ..agents.agent import AgentRunConfig  # Local import to avoid circular dependency
 
         workflows: list[BatchWorkflowInput] = []
@@ -1255,6 +1300,8 @@ class Step:
         AgentRunConfig instances. The results are returned as BatchStepResult,
         where each .result is the AgentResult from the corresponding agent.
         """
+        self._check_cancelled()
+
         from ..agents.agent import AgentRunConfig  # Local import to avoid circular dependency
 
         workflows: list[BatchWorkflowInput] = []

@@ -34,13 +34,13 @@ async def chat_loop():
         api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
     )
 
-    # Generate a conversation ID to maintain conversation context
-    conversation_id = str(uuid.uuid4())
+    # Generate a session ID to maintain conversation context
+    session_id = str(uuid.uuid4())
 
     print("=" * 60)
     print("Conversational Chat with Streaming")
     print("=" * 60)
-    print(f"Conversation ID: {conversation_id}")
+    print(f"Session ID: {session_id}")
     print("Type 'quit' or 'exit' to end the conversation.")
     print("=" * 60)
     print()
@@ -60,14 +60,14 @@ async def chat_loop():
             print("Goodbye!")
             break
 
-        # Invoke agent with streaming, using conversation_id for conversation context
+        # Invoke agent with streaming, using session_id for conversation context
         print("Assistant: ", end="", flush=True)
 
         try:
             result = await chat_assistant.stream(
                 client,
                 user_input,
-                conversation_id=conversation_id
+                session_id=session_id
             )
 
             # Stream the response with tool call indicators

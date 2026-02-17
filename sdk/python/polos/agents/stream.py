@@ -10,6 +10,9 @@ from pydantic import BaseModel
 from ..core.context import AgentContext
 from ..core.workflow import _WORKFLOW_REGISTRY
 from ..llm import _llm_generate, _llm_stream
+from ..memory.compaction import build_summary_messages, compact_if_needed
+from ..memory.session_memory import get_session_memory, put_session_memory
+from ..memory.types import CompactionConfig, NormalizedCompactionConfig
 from ..middleware.hook import HookAction, HookContext
 from ..middleware.hook_executor import execute_hooks
 from ..types.types import (
@@ -22,9 +25,43 @@ from ..types.types import (
     Usage,
 )
 from ..utils.serializer import json_serialize, serialize
-from .conversation_history import add_conversation_history, get_conversation_history
 
 logger = logging.getLogger(__name__)
+
+
+def _append_normalized_assistant(session_messages: list[dict], llm_result: dict) -> None:
+    """Extract assistant response from llm_result and append normalized messages."""
+    content = llm_result.get("content")
+    tool_calls = llm_result.get("tool_calls") or []
+
+    if content:
+        session_messages.append({"role": "assistant", "content": content})
+
+    for tc in tool_calls:
+        fn = tc.get("function", {})
+        session_messages.append(
+            {
+                "type": "function_call",
+                "name": fn.get("name", ""),
+                "call_id": tc.get("call_id", ""),
+                "arguments": fn.get("arguments", "{}"),
+            }
+        )
+
+    if not content and not tool_calls:
+        session_messages.append({"role": "assistant", "content": ""})
+
+
+def _append_normalized_tool_results(session_messages: list[dict], tool_results: list[dict]) -> None:
+    """Append normalized tool result messages."""
+    for tr in tool_results:
+        session_messages.append(
+            {
+                "type": "function_call_output",
+                "call_id": tr.get("call_id", ""),
+                "output": tr.get("output", ""),
+            }
+        )
 
 
 async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +97,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
 
     result = {
         "agent_run_id": agent_run_id,
-        "conversation_id": ctx.conversation_id,
         "result": None,
         "tool_results": [],
         "total_steps": 0,
@@ -79,39 +115,55 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
     if input_data is None:
         raise ValueError("Input is required in payload")
 
-    # Retrieve conversation history if enabled (cache it to avoid repeated DB reads)
-    cached_history_messages = None
-    if agent and agent.conversation_history > 0 and ctx.conversation_id:
-        history_records = await get_conversation_history(
-            conversation_id=ctx.conversation_id,
-            agent_id=ctx.agent_id,
-            deployment_id=ctx.deployment_id,
-            limit=agent.conversation_history,
-        )
-        # Convert history records to message format
-        # History records have: id, session_id, agent_id, role, content, created_at, agent_run_id
-        cached_history_messages = []
-        for record in history_records:
-            # content is already JSON-serializable (string or dict/list for structured content)
-            cached_history_messages.append(
-                {
-                    "role": record.get("role"),
-                    "content": record.get("content"),
-                }
-            )
+    # Session compaction setup
+    current_summary = None
+    compaction_config = agent.compaction if agent else CompactionConfig()
+    normalized_compaction = NormalizedCompactionConfig(
+        max_conversation_tokens=compaction_config.max_conversation_tokens or 80000,
+        max_summary_tokens=compaction_config.max_summary_tokens or 20000,
+        min_recent_messages=compaction_config.min_recent_messages or 2,
+        enabled=compaction_config.enabled if compaction_config.enabled is not None else True,
+    )
 
-    # Build conversation history (for successive LLM calls)
+    # Build conversation messages — load prior session state first, then append current input
     conversation_messages = []
+    # session_messages tracks normalized messages for session memory storage.
+    # conversation_messages is fed to the LLM (may contain provider-specific format).
+    session_messages: list[dict] = []
 
-    # Prepend cached conversation history if available
-    if cached_history_messages:
-        conversation_messages.extend(cached_history_messages)
+    # Load session memory (summary + uncompacted messages) if we have a sessionId
+    if ctx.session_id:
+        session_id = ctx.session_id
+
+        async def _load_session_memory():
+            try:
+                session_memory = await get_session_memory(session_id)
+                return {
+                    "summary": session_memory.summary,
+                    "messages": session_memory.messages,
+                }
+            except Exception as err:
+                logger.warning("Failed to retrieve session memory: %s", err)
+                return None
+
+        loaded = await ctx.step.run("load_session_memory", _load_session_memory)
+
+        if loaded:
+            if loaded.get("summary"):
+                current_summary = loaded["summary"]
+                summary_msgs = build_summary_messages(current_summary)
+                conversation_messages.extend(summary_msgs)
+            if loaded.get("messages"):
+                conversation_messages.extend(loaded["messages"])
+                session_messages.extend(loaded["messages"])
 
     # Add current input to conversation
     if isinstance(input_data, str):
         conversation_messages.append({"role": "user", "content": input_data})
+        session_messages.append({"role": "user", "content": input_data})
     elif isinstance(input_data, list):
         conversation_messages.extend(input_data)
+        session_messages.extend(input_data)
 
     # Loop: LLM call -> tool execution -> LLM call with results
     agent_step = 1
@@ -173,6 +225,26 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
 
                 raise StepExecutionError(hook_result.error_message or "Hook execution failed")
 
+        # Run compaction if needed (before LLM call)
+        if normalized_compaction.enabled:
+            try:
+                compaction_result = await compact_if_needed(
+                    conversation_messages,
+                    current_summary,
+                    normalized_compaction,
+                    ctx,
+                    agent_config,
+                    step_key_prefix=f"compaction:{agent_step}",
+                )
+                if compaction_result.compacted:
+                    conversation_messages = compaction_result.messages
+                    session_messages = []
+                    for msg in compaction_result.messages:
+                        _append_normalized_assistant(session_messages, msg)
+                    current_summary = compaction_result.summary
+            except Exception as err:
+                logger.warning("Compaction failed, continuing with uncompacted messages: %s", err)
+
         # Get guardrails from agent
         guardrails = agent.guardrails if agent else None
         guardrail_max_retries = (
@@ -228,6 +300,9 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             )
 
         tool_results = None  # Reset tool results for next iteration
+
+        # Append normalized assistant response to session_messages
+        _append_normalized_assistant(session_messages, llm_result)
 
         usage_dict = llm_result.get("usage")
         if usage_dict:
@@ -409,6 +484,9 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
             # Set tool_results for next iteration
             tool_results = current_iteration_tool_results
 
+            # Append normalized tool results to session_messages
+            _append_normalized_tool_results(session_messages, current_iteration_tool_results)
+
         # Convert tool_calls to ToolCall objects
         tool_calls_list = []
         for tc in tool_calls:
@@ -526,7 +604,10 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                     f"Please provide ONLY valid JSON that matches the schema, "
                     f"with no additional text or formatting."
                 )
-                conversation_messages.append({"role": "user", "content": fix_prompt})
+
+                fix_msg = {"role": "user", "content": fix_prompt}
+                conversation_messages.append(fix_msg)
+                session_messages.append(fix_msg)
 
         if not end_steps:
             # If it's a structured output correction step, we've already created
@@ -543,7 +624,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
     result.update(
         {
             "agent_run_id": agent_run_id,
-            "conversation_id": ctx.conversation_id,
             "result": last_llm_result_content,
             "tool_results": all_tool_results,
             "total_steps": agent_step,
@@ -572,34 +652,19 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
     else:
         parsed_result_schema = None
 
-    # Store conversation history if enabled
-    if agent and ctx.conversation_id:
-        # Store user message (input_data is already in a JSON-serializable format)
-        await ctx.step.run(
-            "add_conversation_history_user",
-            add_conversation_history,
-            ctx=ctx,
-            conversation_id=ctx.conversation_id,
-            agent_id=ctx.agent_id,
-            role="user",
-            content=input_data,
-            agent_run_id=str(agent_run_id),
-            conversation_history_limit=agent.conversation_history,
-        )
+    # Store session memory (summary + uncompacted messages)
+    if ctx.session_id:
+        session_id = ctx.session_id
+        try:
+            summary_to_store = current_summary
+            messages_to_store = session_messages
 
-        # Store assistant response
-        if last_llm_result_content:
-            await ctx.step.run(
-                "add_conversation_history_assistant",
-                add_conversation_history,
-                ctx=ctx,
-                conversation_id=ctx.conversation_id,
-                agent_id=ctx.agent_id,
-                role="assistant",
-                content=last_llm_result_content,
-                agent_run_id=str(agent_run_id),
-                conversation_history_limit=agent.conversation_history,
-            )
+            async def _store_session_memory():
+                await put_session_memory(session_id, summary_to_store, messages_to_store)
+
+            await ctx.step.run("store_session_memory", _store_session_memory)
+        except Exception as err:
+            logger.warning("Failed to store session memory: %s", err)
 
     # Return typed AgentResult for SDK callers
     raw_tool_results = result.get("tool_results", [])
@@ -617,7 +682,6 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
 
     agent_result = AgentResult(
         agent_run_id=str(result.get("agent_run_id")),
-        conversation_id=str(result.get("conversation_id")),
         result=parsed_result,
         result_schema=parsed_result_schema,
         tool_results=typed_tool_results,

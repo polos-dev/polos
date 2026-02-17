@@ -1170,7 +1170,7 @@ class Step:
             "streaming": config.streaming,
             "session_id": self.ctx.session_id,
             "user_id": self.ctx.user_id,
-            "conversation_id": config.conversation_id**config.kwargs,
+            **config.kwargs,
         }
 
         workflow_obj = get_workflow(config.agent.id)
@@ -1217,7 +1217,6 @@ class Step:
             "streaming": config.streaming,
             "session_id": self.ctx.session_id,
             "user_id": self.ctx.user_id,
-            "conversation_id": config.conversation_id,
             **config.kwargs,
         }
 
@@ -1274,7 +1273,6 @@ class Step:
                 "streaming": config.streaming,
                 "session_id": self.ctx.session_id,
                 "user_id": self.ctx.user_id,
-                "conversation_id": config.conversation_id,
                 **config.kwargs,
             }
             workflows.append(
@@ -1316,7 +1314,6 @@ class Step:
                 "streaming": config.streaming,
                 "session_id": self.ctx.session_id,
                 "user_id": self.ctx.user_id,
-                "conversation_id": config.conversation_id,
                 **config.kwargs,
             }
             workflows.append(

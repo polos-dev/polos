@@ -91,7 +91,6 @@ class AgentResult(BaseModel):
     """Final result returned from an agent stream/run execution."""
 
     agent_run_id: str
-    conversation_id: str | None = None
     result: Any | None = None
     result_schema: str | None = None
     tool_results: list[ToolResult] = []

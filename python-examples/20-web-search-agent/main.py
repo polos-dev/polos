@@ -214,12 +214,12 @@ async def main() -> None:
     print()
     print("-" * 60)
 
-    conversation_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
 
     # Start the agent
     print("\nInvoking research agent...")
     handle = await client.invoke(
-        research_agent.id, {"input": question, "conversationId": conversation_id, "streaming": True}
+        research_agent.id, {"input": question, "streaming": True}, session_id=session_id
     )
     print(f"Execution ID: {handle.id}")
     print("Streaming agent activity...\n")

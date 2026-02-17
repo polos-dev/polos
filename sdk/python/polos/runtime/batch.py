@@ -71,7 +71,6 @@ async def batch_agent_invoke(
             "input": config.input,
             "streaming": config.streaming,
             "session_id": config.session_id,
-            "conversation_id": config.conversation_id,
             "user_id": config.user_id,
             **config.kwargs,
         }

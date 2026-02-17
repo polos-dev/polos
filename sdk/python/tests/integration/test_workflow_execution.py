@@ -39,9 +39,7 @@ class TestWorkflowExecution:
             patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
             patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
             patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
-            patch(
-                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
-            ),
+            patch("polos.memory.session_memory.get_client_or_raise", return_value=mock_client),
             patch.object(
                 mock_client, "_submit_workflow", new_callable=AsyncMock, return_value=mock_handle
             ),
@@ -106,9 +104,7 @@ class TestWorkflowExecution:
             patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
             patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
             patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
-            patch(
-                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
-            ),
+            patch("polos.memory.session_memory.get_client_or_raise", return_value=mock_client),
             patch.object(
                 mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
@@ -265,9 +261,7 @@ class TestWorkflowExecution:
             patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
             patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
             patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
-            patch(
-                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
-            ),
+            patch("polos.memory.session_memory.get_client_or_raise", return_value=mock_client),
             patch.object(
                 mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),
@@ -327,9 +321,7 @@ class TestWorkflowExecution:
             patch("polos.runtime.client.get_client_or_raise", return_value=mock_client),
             patch("polos.features.wait.get_client_or_raise", return_value=mock_client),
             patch("polos.features.tracing.get_client_or_raise", return_value=mock_client),
-            patch(
-                "polos.agents.conversation_history.get_client_or_raise", return_value=mock_client
-            ),
+            patch("polos.memory.session_memory.get_client_or_raise", return_value=mock_client),
             patch.object(
                 mock_client, "_get_headers", return_value={"Authorization": "Bearer test-key"}
             ),

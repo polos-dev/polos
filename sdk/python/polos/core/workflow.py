@@ -280,8 +280,6 @@ class Workflow:
         from ..agents.agent import Agent
 
         if isinstance(self, Agent):
-            # Extract conversation_id from payload if provided
-            conversation_id = payload.get("conversation_id") if isinstance(payload, dict) else None
             # Create AgentContext for agents
             workflow_ctx = AgentContext(
                 agent_id=self.id,
@@ -298,7 +296,6 @@ class Workflow:
                 temperature=self.temperature,
                 max_tokens=self.max_output_tokens,
                 session_id=session_id,
-                conversation_id=conversation_id,
                 user_id=user_id,
                 created_at=created_at,
                 otel_traceparent=otel_traceparent,

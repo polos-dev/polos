@@ -26,13 +26,11 @@ class TestAgentRunConfig:
             agent=mock_agent,
             input="Hello",
             session_id="test-session",
-            conversation_id="test-conversation",
             user_id="test-user",
         )
         assert config.agent == mock_agent
         assert config.input == "Hello"
         assert config.session_id == "test-session"
-        assert config.conversation_id == "test-conversation"
         assert config.user_id == "test-user"
         assert config.streaming is False
         assert config.initial_state is None
@@ -559,15 +557,29 @@ class TestAgent:
         )
         assert len(agent.guardrails) == 1
 
-    def test_agent_with_conversation_history(self):
-        """Test Agent initialization with conversation_history."""
+    def test_agent_with_compaction(self):
+        """Test Agent initialization with compaction config."""
+        from polos.memory.types import CompactionConfig
+
         agent = Agent(
             id="test-agent",
             model="gpt-4",
             provider="openai",
-            conversation_history=20,
+            compaction=CompactionConfig(max_conversation_tokens=50000),
         )
-        assert agent.conversation_history == 20
+        assert agent.compaction.max_conversation_tokens == 50000
+
+    def test_agent_default_compaction(self):
+        """Test Agent initialization with default compaction config."""
+        from polos.memory.types import CompactionConfig
+
+        agent = Agent(
+            id="test-agent",
+            model="gpt-4",
+            provider="openai",
+        )
+        assert isinstance(agent.compaction, CompactionConfig)
+        assert agent.compaction.enabled is None
 
     def test_agent_invalid_stop_condition_raises(self):
         """Test Agent initialization with invalid stop condition raises TypeError."""

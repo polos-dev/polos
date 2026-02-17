@@ -12,4 +12,3 @@ dependencies = [
 dev = [
     "ruff>=0.1.0",
 ]
-

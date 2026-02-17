@@ -253,11 +253,11 @@ async def main() -> None:
     print(f"  Task: {task}\n")
     print("-" * 60)
 
-    conversation_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
 
     print("\nInvoking agent...")
     handle = await client.invoke(
-        coding_agent.id, {"input": task, "conversationId": conversation_id, "streaming": True}
+        coding_agent.id, {"input": task, "streaming": True}, session_id=session_id
     )
     print(f"Execution ID: {handle.id}")
     print("Waiting for agent activity...\n")

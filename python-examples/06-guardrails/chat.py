@@ -64,13 +64,13 @@ async def chat_loop():
     # Let user select agent
     agent, agent_name = select_agent()
 
-    # Generate a conversation ID to maintain conversation context
-    conversation_id = str(uuid.uuid4())
+    # Generate a session ID to maintain conversation context
+    session_id = str(uuid.uuid4())
 
     print()
     print("=" * 60)
     print(f"Chatting with: {agent_name}")
-    print(f"Conversation ID: {conversation_id}")
+    print(f"Session ID: {session_id}")
     print("-" * 60)
     print("Test prompts to try:")
     if agent_name == "safe_assistant":
@@ -106,9 +106,9 @@ async def chat_loop():
 
         if user_input.lower() == "switch":
             agent, agent_name = select_agent()
-            conversation_id = str(uuid.uuid4())
+            session_id = str(uuid.uuid4())
             print(f"\nSwitched to: {agent_name}")
-            print(f"New conversation ID: {conversation_id}\n")
+            print(f"New session ID: {session_id}\n")
             continue
 
         # Invoke agent with streaming
@@ -118,7 +118,7 @@ async def chat_loop():
             result = await agent.stream(
                 client,
                 user_input,
-                conversation_id=conversation_id
+                session_id=session_id
             )
 
             # Stream the response

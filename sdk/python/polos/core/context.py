@@ -99,7 +99,6 @@ class AgentContext(WorkflowContext):
         temperature: float | None = None,
         max_tokens: int | None = None,
         session_id: str | None = None,
-        conversation_id: str | None = None,
         user_id: str | None = None,
         created_at: datetime | None = None,
         otel_traceparent: str | None = None,
@@ -134,7 +133,6 @@ class AgentContext(WorkflowContext):
         self.tools = tools or []
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.conversation_id = conversation_id
 
     def to_dict(self) -> dict[str, Any]:
         """Convert context to dictionary, including agent-specific fields."""

@@ -1,6 +1,7 @@
 """Conversational chat agent with tools."""
 
 from polos import Agent, max_steps, MaxStepsConfig
+from polos.memory.types import CompactionConfig
 from tools import get_current_time, get_weather, calculator
 
 

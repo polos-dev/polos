@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ..core.context import AgentContext
 from ..core.workflow import _WORKFLOW_REGISTRY, Workflow, _execution_context
+from ..memory.types import CompactionConfig
 from ..runtime.client import ExecutionHandle, PolosClient
 from ..runtime.queue import Queue
 from ..types.types import AgentConfig, AgentResult
@@ -26,7 +27,6 @@ class AgentRunConfig:
         agent: "Agent",
         input: str | list[dict[str, Any]],
         session_id: str | None = None,
-        conversation_id: str | None = None,
         user_id: str | None = None,
         streaming: bool = False,
         initial_state: BaseModel | dict[str, Any] | None = None,
@@ -36,7 +36,6 @@ class AgentRunConfig:
         self.agent = agent
         self.input = input
         self.session_id = session_id
-        self.conversation_id = conversation_id
         self.user_id = user_id
         self.streaming = streaming
         self.initial_state = initial_state
@@ -385,7 +384,7 @@ class Agent(Workflow):
         on_tool_end: Callable | list[Callable] | None = None,
         guardrails: Callable | str | list[Callable | str] | None = None,
         guardrail_max_retries: int = 2,
-        conversation_history: int = 10,  # Number of messages to keep
+        compaction: CompactionConfig | None = None,
         stream_to_workflow: bool = False,
     ):
         # Parse queue configuration (same as task decorator)
@@ -440,8 +439,8 @@ class Agent(Workflow):
         self.guardrails = self._normalize_guardrails(guardrails)
         self.guardrail_max_retries = guardrail_max_retries
 
-        # Conversation history
-        self.conversation_history = conversation_history
+        # Session compaction configuration
+        self.compaction = compaction or CompactionConfig()
 
         # Stream to workflow topic for all invocations
         self.stream_to_workflow = stream_to_workflow
@@ -513,7 +512,6 @@ class Agent(Workflow):
         provider_kwargs = payload.get(
             "provider_kwargs", {}
         )  # Additional kwargs to pass to provider
-        conversation_id = payload.get("conversation_id")  # Conversation ID for conversation history
 
         # Build agent config
         agent_config = AgentConfig(
@@ -534,12 +532,6 @@ class Agent(Workflow):
 
         agent_run_id = ctx.execution_id
 
-        # Update context with conversation_id if provided
-        if conversation_id:
-            ctx.conversation_id = conversation_id
-        else:
-            ctx.conversation_id = await ctx.step.uuid("new_conversation_id")
-
         # Always call _agent_stream_function with streaming parameter
         from .stream import _agent_stream_function
 
@@ -551,7 +543,6 @@ class Agent(Workflow):
                 "agent_config": agent_config,
                 "input": input_data,
                 "session_id": ctx.session_id,
-                "conversation_id": ctx.conversation_id,
                 "user_id": ctx.user_id,
                 "streaming": streaming,
             },
@@ -586,7 +577,6 @@ class Agent(Workflow):
         input: str | list[dict[str, Any]],
         initial_state: BaseModel | dict[str, Any] | None = None,
         session_id: str | None = None,
-        conversation_id: str | None = None,
         user_id: str | None = None,
         timeout: float | None = 600.0,
         **kwargs,
@@ -602,7 +592,6 @@ class Agent(Workflow):
             client: PolosClient instance
             input: String or array of input items (multimodal)
             session_id: Optional session ID
-            conversation_id: Optional conversation ID for conversation history
             user_id: Optional user ID
             timeout: Optional timeout in seconds (default: 600 seconds / 10 minutes)
 
@@ -621,9 +610,6 @@ class Agent(Workflow):
         # Build agent-specific payload dict
         agent_payload = {
             "input": input,
-            "session_id": session_id,
-            "conversation_id": conversation_id,
-            "user_id": user_id,
             "streaming": False,
             "provider_kwargs": kwargs,  # Pass kwargs to provider
         }
@@ -644,7 +630,6 @@ class Agent(Workflow):
         input: str | list[dict[str, Any]],
         initial_state: BaseModel | dict[str, Any] | None = None,
         session_id: str | None = None,
-        conversation_id: str | None = None,
         user_id: str | None = None,
         run_timeout_seconds: int | None = None,
         **kwargs,
@@ -660,7 +645,6 @@ class Agent(Workflow):
             client: PolosClient instance
             input: String or array of input items (multimodal)
             session_id: Optional session ID
-            conversation_id: Optional conversation ID for conversation history
             user_id: Optional user ID
 
         Returns:
@@ -707,14 +691,13 @@ class Agent(Workflow):
             client=client,
             payload={
                 "input": input,
-                "session_id": session_id,
-                "user_id": user_id,
-                "conversation_id": conversation_id,
                 "streaming": True,
                 "provider_kwargs": kwargs,  # Pass kwargs to provider
             },
             initial_state=initial_state,
             run_timeout_seconds=run_timeout_seconds,
+            session_id=session_id,
+            user_id=user_id,
         )
 
         # Wrap ExecutionHandle in StreamResult
@@ -725,7 +708,6 @@ class Agent(Workflow):
         input: str | list[dict[str, Any]],
         initial_state: BaseModel | dict[str, Any] | None = None,
         session_id: str | None = None,
-        conversation_id: str | None = None,
         user_id: str | None = None,
         streaming: bool = False,
         run_timeout_seconds: int | None = None,
@@ -758,7 +740,6 @@ class Agent(Workflow):
             agent=self,
             input=input,
             session_id=session_id,
-            conversation_id=conversation_id,
             user_id=user_id,
             streaming=streaming,
             initial_state=initial_state,

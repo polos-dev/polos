@@ -67,12 +67,6 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.conversation_history.get_client_or_raise",
-                return_value=PolosClient(
-                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
-                ),
-            ),
-            patch(
                 "polos.features.tracing.get_client_or_raise",
                 return_value=PolosClient(
                     api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
@@ -85,17 +79,12 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.stream.get_conversation_history",
+                "polos.agents.stream.get_session_memory",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value={"summary": None, "messages": []},
             ),
             patch(
-                "polos.agents.conversation_history.add_conversation_history",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                "polos.agents.stream.add_conversation_history",
+                "polos.agents.stream.put_session_memory",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -251,12 +240,6 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.conversation_history.get_client_or_raise",
-                return_value=PolosClient(
-                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
-                ),
-            ),
-            patch(
                 "polos.features.tracing.get_client_or_raise",
                 return_value=PolosClient(
                     api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
@@ -269,17 +252,12 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.stream.get_conversation_history",
+                "polos.agents.stream.get_session_memory",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value={"summary": None, "messages": []},
             ),
             patch(
-                "polos.agents.conversation_history.add_conversation_history",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                "polos.agents.stream.add_conversation_history",
+                "polos.agents.stream.put_session_memory",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -398,12 +376,6 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.conversation_history.get_client_or_raise",
-                return_value=PolosClient(
-                    api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
-                ),
-            ),
-            patch(
                 "polos.features.tracing.get_client_or_raise",
                 return_value=PolosClient(
                     api_url="http://localhost:8080", api_key="test-key", project_id="test-project"
@@ -416,17 +388,12 @@ class TestAgentExecution:
                 ),
             ),
             patch(
-                "polos.agents.stream.get_conversation_history",
+                "polos.agents.stream.get_session_memory",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value={"summary": None, "messages": []},
             ),
             patch(
-                "polos.agents.conversation_history.add_conversation_history",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                "polos.agents.stream.add_conversation_history",
+                "polos.agents.stream.put_session_memory",
                 new_callable=AsyncMock,
                 return_value=None,
             ),

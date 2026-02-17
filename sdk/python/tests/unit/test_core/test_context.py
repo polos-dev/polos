@@ -168,7 +168,6 @@ class TestAgentContext:
         assert ctx.tools == []
         assert ctx.temperature is None
         assert ctx.max_tokens is None
-        assert ctx.conversation_id is None
 
     def test_initialization_full(self):
         """Test AgentContext initialization with all parameters."""
@@ -189,7 +188,6 @@ class TestAgentContext:
             temperature=0.7,
             max_tokens=1000,
             session_id="test-session",
-            conversation_id="test-conversation",
             user_id="test-user",
             created_at=created_at,
         )
@@ -200,7 +198,6 @@ class TestAgentContext:
         assert ctx.tools == ["tool1", "tool2"]
         assert ctx.temperature == 0.7
         assert ctx.max_tokens == 1000
-        assert ctx.conversation_id == "test-conversation"
         assert ctx.session_id == "test-session"
         assert ctx.user_id == "test-user"
         assert ctx.created_at == created_at

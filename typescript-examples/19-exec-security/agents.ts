@@ -50,5 +50,4 @@ export const codingAgent = defineAgent({
     'If you need clarification or a decision from the user, use the ask_user tool.',
   tools: [...tools, askUser],
   stopConditions: [maxSteps({ count: 30 })],
-  conversationHistory: 50,
 });

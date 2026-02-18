@@ -9,7 +9,7 @@
  */
 
 import { defineWorkflow } from '@polos/sdk';
-import type { BatchWorkflowInput } from '@polos/sdk';
+import type { BatchWorkflowInput, BatchStepResult } from '@polos/sdk';
 
 // ============================================================================
 // Payload / Result Types
@@ -144,12 +144,14 @@ export const parallelReview = defineWorkflow<Record<string, unknown>, unknown, A
       reviewRequests,
     );
 
-    // Aggregate results
+    // Aggregate results (each entry is a BatchStepResult wrapper)
     const reviews: AggregatedReview['reviews'] = [];
     let approvedCount = 0;
     let totalScore = 0;
 
-    for (const review of results) {
+    for (const entry of results) {
+      const review = entry.result;
+      if (!review) continue;
       reviews.push({
         reviewerId: review.reviewerId,
         approved: review.approved,
@@ -205,10 +207,12 @@ export const dataChunkProcessor = defineWorkflow<ChunkProcessorPayload, unknown,
       chunkRequests,
     );
 
-    // Aggregate results
+    // Aggregate results (each entry is a BatchStepResult wrapper)
     const allProcessed: unknown[] = [];
-    for (const result of results) {
-      allProcessed.push(...result.processed);
+    for (const entry of results) {
+      if (entry.result) {
+        allProcessed.push(...entry.result.processed);
+      }
     }
 
     return {

@@ -27,8 +27,7 @@ Hooks are functions that execute at specific points during agent execution:
 - `hooks.ts` - Hook function definitions
 - `tools.ts` - Example tools (search, calculator)
 - `agents.ts` - Agents with hooks attached
-- `worker.ts` - Worker that registers the agents
-- `main.ts` - Demo script that invokes agents to show hooks in action
+- `main.ts` - Starts Polos and invokes agents to show hooks in action
 
 ## Running the Example
 
@@ -48,21 +47,14 @@ Hooks are functions that execute at specific points during agent execution:
    # Edit .env with your project ID and OpenAI API key
    ```
 
-4. Run the worker in one terminal:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the demo in another terminal:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```
 
-   Watch the **worker terminal** to see the hooks being triggered!
-
 ## Expected Output
 
-In the worker terminal, you'll see hook logs like:
+You'll see hook logs like:
 ```
 [14:30:45] Agent started - workflow: abc-123
   [Step 1] LLM call starting...

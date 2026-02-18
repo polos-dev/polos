@@ -22,8 +22,7 @@ They can:
 
 - `agents.ts` - Agents with guardrails attached
 - `guardrails.ts` - Guardrail function definitions
-- `worker.ts` - Worker that registers the agents
-- `chat.ts` - Interactive chat client for testing guardrails
+- `chat.ts` - Starts Polos and runs the interactive chat for testing guardrails
 
 ## Running the Example
 
@@ -43,12 +42,7 @@ They can:
    # Edit .env with your project ID and OpenAI API key
    ```
 
-4. Run the worker in one terminal:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the interactive chat in another terminal:
+4. Run the chat:
    ```bash
    npx tsx chat.ts
    ```

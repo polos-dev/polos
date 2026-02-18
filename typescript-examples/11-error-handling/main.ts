@@ -1,20 +1,17 @@
 /**
- * Client demonstrating error handling patterns in workflows.
+ * Demonstrate error handling patterns in workflows.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
  *   POLOS_PROJECT_ID - Your project ID (required)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY - API key for authentication (required)
+ *   POLOS_API_KEY - API key for authentication (optional for local development)
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import {
   retryExample,
   errorRecovery,
@@ -33,7 +30,7 @@ function printSection(title: string): void {
   console.log(`\n--- ${title} ---`);
 }
 
-async function demoRetryExample(client: PolosClient): Promise<void> {
+async function demoRetryExample(polos: Polos): Promise<void> {
   printHeader('Retry Example Demo');
   console.log('This workflow demonstrates automatic retry with exponential backoff.');
   console.log('The step may fail randomly but will be retried up to 3 times.');
@@ -41,7 +38,7 @@ async function demoRetryExample(client: PolosClient): Promise<void> {
   // Low failure rate — should succeed
   printSection('Low failure rate (10%)');
   try {
-    const result = await retryExample.run(client, {
+    const result = await retryExample.run(polos, {
       failureRate: 0.1,
       operation: 'low_risk_process',
     });
@@ -54,7 +51,7 @@ async function demoRetryExample(client: PolosClient): Promise<void> {
   // High failure rate — likely to fail even with retries
   printSection('High failure rate (90%)');
   try {
-    const result = await retryExample.run(client, {
+    const result = await retryExample.run(polos, {
       failureRate: 0.9,
       operation: 'high_risk_process',
     });
@@ -65,13 +62,13 @@ async function demoRetryExample(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoErrorRecovery(client: PolosClient): Promise<void> {
+async function demoErrorRecovery(polos: Polos): Promise<void> {
   printHeader('Error Recovery Demo');
   console.log('This workflow processes items and continues even if some fail.');
   console.log("Items with 'fail' in their name will fail.");
 
   printSection('Processing mixed items');
-  const result = await errorRecovery.run(client, {
+  const result = await errorRecovery.run(polos, {
     items: ['item1', 'item2', 'fail_item', 'item3', 'another_fail'],
   });
 
@@ -93,13 +90,13 @@ async function demoErrorRecovery(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoFallbackPattern(client: PolosClient): Promise<void> {
+async function demoFallbackPattern(polos: Polos): Promise<void> {
   printHeader('Fallback Pattern Demo');
   console.log('This workflow tries primary method first, then falls back if it fails.');
 
   // Primary method succeeds
   printSection('Primary method succeeds');
-  let result = await fallbackPattern.run(client, {
+  let result = await fallbackPattern.run(polos, {
     data: { value: 'test_data' },
   });
   console.log(`  Method used: ${result.method}`);
@@ -109,7 +106,7 @@ async function demoFallbackPattern(client: PolosClient): Promise<void> {
 
   // Force primary to fail, use fallback
   printSection('Primary fails, using fallback');
-  result = await fallbackPattern.run(client, {
+  result = await fallbackPattern.run(polos, {
     data: { value: 'test_data', forceFailure: true },
   });
   console.log(`  Method used: ${result.method}`);
@@ -121,7 +118,7 @@ async function demoFallbackPattern(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoCircuitBreaker(client: PolosClient): Promise<void> {
+async function demoCircuitBreaker(polos: Polos): Promise<void> {
   printHeader('Circuit Breaker Demo');
   console.log('This workflow stops processing after too many consecutive failures.');
   console.log('Circuit opens after 3 failures, remaining items are skipped.');
@@ -137,7 +134,7 @@ async function demoCircuitBreaker(client: PolosClient): Promise<void> {
     { id: 7, name: 'item7' }, // Will be skipped
   ];
 
-  const result = await circuitBreaker.run(client, {
+  const result = await circuitBreaker.run(polos, {
     items,
     failureThreshold: 3,
   });
@@ -152,14 +149,14 @@ async function demoCircuitBreaker(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoCompensationPattern(client: PolosClient): Promise<void> {
+async function demoCompensationPattern(polos: Polos): Promise<void> {
   printHeader('Compensation Pattern Demo');
   console.log('This workflow performs a saga with compensation on failure.');
   console.log('Steps: reserve_inventory -> charge_payment -> send_confirmation');
 
   // Successful case
   printSection('Successful transaction');
-  let result = await compensationPattern.run(client, {
+  let result = await compensationPattern.run(polos, {
     orderId: 'ORDER-001',
   });
   console.log(`  Status: ${result.status}`);
@@ -167,7 +164,7 @@ async function demoCompensationPattern(client: PolosClient): Promise<void> {
 
   // Failure case — confirmation fails, triggers rollback
   printSection('Failed transaction with rollback');
-  result = await compensationPattern.run(client, {
+  result = await compensationPattern.run(polos, {
     orderId: 'ORDER-002',
     failConfirmation: true,
   });
@@ -179,46 +176,33 @@ async function demoCompensationPattern(client: PolosClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('='.repeat(60));
-  console.log('Error Handling Workflow Examples');
-  console.log('='.repeat(60));
-  console.log('\nMake sure the worker is running: npx tsx worker.ts');
-  console.log('\nThis demo showcases various error handling patterns:');
-  console.log('  1. Retry with exponential backoff');
-  console.log('  2. Error recovery (continue on failure)');
-  console.log('  3. Fallback pattern (primary/secondary)');
-  console.log('  4. Circuit breaker (fail fast)');
-  console.log('  5. Compensation pattern (saga rollback)');
+  const polos = new Polos({ deploymentId: 'error-handling-examples', logFile: 'polos.log' });
+  await polos.start();
 
   try {
-    await demoRetryExample(client);
-    await demoErrorRecovery(client);
-    await demoFallbackPattern(client);
-    await demoCircuitBreaker(client);
-    await demoCompensationPattern(client);
+    console.log('='.repeat(60));
+    console.log('Error Handling Workflow Examples');
+    console.log('='.repeat(60));
+    console.log('\nThis demo showcases various error handling patterns:');
+    console.log('  1. Retry with exponential backoff');
+    console.log('  2. Error recovery (continue on failure)');
+    console.log('  3. Fallback pattern (primary/secondary)');
+    console.log('  4. Circuit breaker (fail fast)');
+    console.log('  5. Compensation pattern (saga rollback)');
+
+    await demoRetryExample(polos);
+    await demoErrorRecovery(polos);
+    await demoFallbackPattern(polos);
+    await demoCircuitBreaker(polos);
+    await demoCompensationPattern(polos);
 
     console.log('\n' + '='.repeat(60));
     console.log('All demos completed!');
     console.log('='.repeat(60));
   } catch (e) {
     console.log(`\nError: ${String(e)}`);
-    console.log('\nMake sure the worker is running and try again.');
+  } finally {
+    await polos.stop();
   }
 }
 

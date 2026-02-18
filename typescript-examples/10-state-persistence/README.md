@@ -20,8 +20,7 @@ Workflow state is a Zod schema that:
 ## Files
 
 - `workflows.ts` - Workflows with state schemas
-- `worker.ts` - Worker that registers workflows
-- `main.ts` - Demo script that runs workflows
+- `main.ts` - Starts Polos and runs the state persistence demos
 
 ## Running the Example
 
@@ -41,12 +40,7 @@ Workflow state is a Zod schema that:
    # Edit .env with your project ID
    ```
 
-4. Run the worker in one terminal:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the demo in another terminal:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```
@@ -90,7 +84,7 @@ const myWorkflow = defineWorkflow<Payload, MyState, Result>(
 When invoking a workflow, you can provide initial state:
 
 ```typescript
-const handle = await client.invoke(
+const handle = await polos.invoke(
   workflow.id,
   { increment: 5 },
   { initialState: { count: 100 } },

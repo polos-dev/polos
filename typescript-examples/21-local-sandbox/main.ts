@@ -1,27 +1,33 @@
 /**
- * Run the local sandbox coding agent with tool approval.
+ * Local Sandbox Example — unified single-file usage.
  *
- * Since local mode has no container isolation, destructive operations
- * (exec, write, edit) suspend for user approval before running.
- * This script handles those suspend events in the terminal.
+ * Starts a Polos instance (worker + client), runs the local sandbox
+ * coding agent with tool approval. Since local mode has no container
+ * isolation, destructive operations (exec, write, edit) suspend for
+ * user approval before running.
  *
- * Run the worker first:
- *   npx tsx worker.ts
+ * Prerequisites:
+ *   - Polos server running (polos-server start)
  *
- * Then run this client:
+ * Run:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
- *   POLOS_API_URL    - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY    - API key for authentication (optional for local dev)
+ *   POLOS_PROJECT_ID  - Your project ID (default from env)
+ *   POLOS_API_URL     - Orchestrator URL (default: http://localhost:8080)
+ *   POLOS_API_KEY     - API key for authentication (optional for local dev)
+ *   ANTHROPIC_API_KEY - Anthropic API key for the coding agent
  */
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
+
+// Import for side-effects: triggers global registry registration
+import './agents.js';
+
 import { codingAgent } from './agents.js';
 
 const rl = readline.createInterface({ input, output });
@@ -66,10 +72,10 @@ interface SuspendEvent {
  * in real time between approval prompts.
  */
 async function* suspendEvents(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
 ): AsyncGenerator<SuspendEvent> {
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
     const eventType = event.eventType;
 
     if (eventType === 'text_delta') {
@@ -97,7 +103,7 @@ async function* suspendEvents(
  * Show a command approval prompt (exec tool has its own suspend format).
  */
 async function handleExecApproval(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -127,7 +133,7 @@ async function handleExecApproval(
     ? '\n  -> Approved. Resuming...\n'
     : `\n  -> Rejected${feedback ? ' with feedback' : ''}. Resuming...\n`);
 
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── File tool approval UI ───────────────────────────────────────────
@@ -136,7 +142,7 @@ async function handleExecApproval(
  * Show an approval prompt for write/edit tools (defineTool approval format).
  */
 async function handleFileApproval(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -177,7 +183,7 @@ async function handleFileApproval(
     ? '\n  -> Approved. Resuming...\n'
     : `\n  -> Rejected${feedback ? ' with feedback' : ''}. Resuming...\n`);
 
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Path approval UI (read/glob/grep outside workspace) ─────────────
@@ -187,7 +193,7 @@ async function handleFileApproval(
  * the workspace restriction.
  */
 async function handlePathApproval(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -218,91 +224,80 @@ async function handlePathApproval(
     ? '\n  -> Allowed. Resuming...\n'
     : `\n  -> Denied${feedback ? ' with feedback' : ''}. Resuming...\n`);
 
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
+  const polos = new Polos({ deploymentId: 'local-sandbox-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    printBanner('Local Sandbox Demo');
+    console.log('\n  This demo runs an agent with local sandbox tools (no Docker).');
+    console.log('  Since there is no container isolation:\n');
+    console.log('  - exec, write, edit: always require approval');
+    console.log('  - read, glob, grep: free within workspace, approval if outside\n');
+
+    const task =
+      'Create a file called hello.js that prints "Hello from the local sandbox!" and run it. ' +
+      'Then create a second file called fibonacci.js that computes the first 10 Fibonacci numbers ' +
+      'and prints them. Run that too.';
+
+    console.log(`  Task: ${task}\n`);
+    console.log('-'.repeat(60));
+
+    console.log('\nInvoking agent...');
+    const handle = await polos.invoke(
+      codingAgent.id, { input: task, streaming: true }
     );
-  }
+    console.log(`Execution ID: ${handle.id}`);
+    console.log('Waiting for agent activity...\n');
 
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
+    // Event loop: single persistent stream so concurrent suspends are never missed
+    for await (const suspend of suspendEvents(polos, handle)) {
+      if (suspend.stepKey.startsWith('approve_exec')) {
+        await handleExecApproval(polos, handle, suspend);
+      } else if (
+        suspend.stepKey.startsWith('approve_write') ||
+        suspend.stepKey.startsWith('approve_edit')
+      ) {
+        await handleFileApproval(polos, handle, suspend);
+      } else if (
+        suspend.stepKey.startsWith('approve_read') ||
+        suspend.stepKey.startsWith('approve_glob') ||
+        suspend.stepKey.startsWith('approve_grep')
+      ) {
+        await handlePathApproval(polos, handle, suspend);
+      } else {
+        console.log(`Received unexpected suspend: ${suspend.stepKey}`);
+      }
+    }
 
-  printBanner('Local Sandbox Demo');
-  console.log('\n  This demo runs an agent with local sandbox tools (no Docker).');
-  console.log('  Since there is no container isolation:\n');
-  console.log('  - exec, write, edit: always require approval');
-  console.log('  - read, glob, grep: free within workspace, approval if outside\n');
-  console.log('  Make sure the worker is running: npx tsx worker.ts\n');
+    // Fetch final result
+    console.log('-'.repeat(60));
+    console.log('\nFetching final result...');
 
-  const task =
-    'Create a file called hello.js that prints "Hello from the local sandbox!" and run it. ' +
-    'Then create a second file called fibonacci.js that computes the first 10 Fibonacci numbers ' +
-    'and prints them. Run that too.';
+    await new Promise((r) => setTimeout(r, 2000));
+    const execution = await polos.getExecution(handle.id);
 
-  console.log(`  Task: ${task}\n`);
-  console.log('-'.repeat(60));
-
-  console.log('\nInvoking agent...');
-  const handle = await client.invoke(
-    codingAgent.id, { input: task, streaming: true }
-  );
-  console.log(`Execution ID: ${handle.id}`);
-  console.log('Waiting for agent activity...\n');
-
-  // Event loop: single persistent stream so concurrent suspends are never missed
-  for await (const suspend of suspendEvents(client, handle)) {
-    if (suspend.stepKey.startsWith('approve_exec')) {
-      await handleExecApproval(client, handle, suspend);
-    } else if (
-      suspend.stepKey.startsWith('approve_write') ||
-      suspend.stepKey.startsWith('approve_edit')
-    ) {
-      await handleFileApproval(client, handle, suspend);
-    } else if (
-      suspend.stepKey.startsWith('approve_read') ||
-      suspend.stepKey.startsWith('approve_glob') ||
-      suspend.stepKey.startsWith('approve_grep')
-    ) {
-      await handlePathApproval(client, handle, suspend);
+    if (execution.status === 'completed') {
+      printBanner('Agent Completed');
+      const result = typeof execution.result === 'string'
+        ? execution.result
+        : JSON.stringify(execution.result, null, 2);
+      console.log(`\n${result}\n`);
     } else {
-      console.log(`Received unexpected suspend: ${suspend.stepKey}`);
+      console.log(`\nFinal status: ${execution.status}`);
+      if (execution.result) {
+        console.log(execution.result);
+      }
     }
+  } finally {
+    rl.close();
+    await polos.stop();
   }
-
-  // Fetch final result
-  console.log('-'.repeat(60));
-  console.log('\nFetching final result...');
-
-  await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
-
-  if (execution.status === 'completed') {
-    printBanner('Agent Completed');
-    const result = typeof execution.result === 'string'
-      ? execution.result
-      : JSON.stringify(execution.result, null, 2);
-    console.log(`\n${result}\n`);
-  } else {
-    console.log(`\nFinal status: ${execution.status}`);
-    if (execution.result) {
-      console.log(execution.result);
-    }
-  }
-
-  rl.close();
 }
 
 main().catch(console.error);

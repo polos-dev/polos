@@ -1,30 +1,37 @@
 /**
- * Interactive demo for exec security — command approval in the terminal.
+ * Exec Security Example — unified single-file usage.
  *
- * Invokes a coding agent whose exec tool has allowlist security. Commands
- * that don't match the allowlist suspend for approval. This script catches
- * those suspend events, shows the command to the user, and collects their
- * decision (approve / reject with feedback) before resuming.
+ * Starts a Polos instance (worker + client), invokes a coding agent
+ * whose exec tool has allowlist security. Commands that don't match the
+ * allowlist suspend for approval. This script catches those suspend
+ * events, shows the command to the user, and collects their decision
+ * (approve / reject with feedback) before resuming.
  *
- * Run the worker first:
- *   npx tsx worker.ts
+ * Prerequisites:
+ *   - Docker must be installed and running
+ *   - Polos server running (polos-server start)
  *
- * Then run this script:
+ * Run:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
- *   POLOS_API_URL    - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY    - API key for authentication (optional for local dev)
+ *   POLOS_PROJECT_ID  - Your project ID (default from env)
+ *   POLOS_API_URL     - Orchestrator URL (default: http://localhost:8080)
+ *   POLOS_API_KEY     - API key for authentication (optional for local dev)
+ *   ANTHROPIC_API_KEY - Anthropic API key for the coding agent
  */
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
-import { codingAgent } from './agents.js';
 import { randomUUID } from 'node:crypto';
+
+// Import for side-effects: triggers global registry registration
+import './agents.js';
+
+import { codingAgent } from './agents.js';
 
 const rl = readline.createInterface({ input, output });
 
@@ -65,10 +72,10 @@ interface SuspendEvent {
  * (text deltas, tool calls) are printed inline as side effects.
  */
 async function* streamEvents(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
 ): AsyncGenerator<SuspendEvent> {
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
     const eventType = event.eventType;
 
     if (eventType?.startsWith('suspend_')) {
@@ -96,7 +103,7 @@ async function* streamEvents(
  * Show an approval prompt in the terminal and collect the user's decision.
  */
 async function handleApproval(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -139,7 +146,7 @@ async function handleApproval(
     console.log(`\n  -> Rejected${feedback ? ' with feedback' : ''}. Resuming workflow...\n`);
   }
 
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Ask-user UI ─────────────────────────────────────────────────────
@@ -148,7 +155,7 @@ async function handleApproval(
  * Show the agent's question in the terminal and collect the user's answer.
  */
 async function handleAskUser(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -200,89 +207,78 @@ async function handleAskUser(
   }
 
   console.log('\n  -> Sending response to agent...\n');
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
+  const polos = new Polos({ deploymentId: 'exec-security-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    printBanner('Exec Security Demo');
+    console.log('\n  This demo shows how exec security works with an allowlist.');
+    console.log('  Commands matching the allowlist (node, cat, echo, ls) run automatically.');
+    console.log('  Everything else pauses for your approval.\n');
+    console.log('  You can reject a command and provide feedback — the agent will');
+    console.log('  read your feedback and try a different approach.\n');
+
+    // Task that will trigger both allowed and non-allowed commands
+    const task =
+      'Create a file called greet.js that takes a name argument and prints a greeting. ' +
+      'Run it with node to test it. ' +
+      'Then install the "chalk" npm package and update greet.js to print the greeting in color. ' +
+      'Run it again to verify it works.';
+
+    console.log(`  Task: ${task}\n`);
+    console.log('-'.repeat(60));
+
+    const conversationId = randomUUID();
+
+    // Start the agent
+    console.log('\nInvoking agent...');
+    const handle = await polos.invoke(
+      codingAgent.id, { input: task, conversationId, streaming: true }
     );
-  }
+    console.log(`Execution ID: ${handle.id}`);
+    console.log('Streaming agent activity...\n');
 
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
+    // Event loop: single persistent stream so concurrent suspends are never missed
+    for await (const suspend of streamEvents(polos, handle)) {
+      if (suspend.stepKey.startsWith('approve_exec')) {
+        await handleApproval(polos, handle, suspend);
+      } else if (suspend.stepKey.startsWith('ask_user')) {
+        await handleAskUser(polos, handle, suspend);
+      } else {
+        console.log(`Received unexpected suspend: ${suspend.stepKey}`);
+      }
+    }
 
-  printBanner('Exec Security Demo');
-  console.log('\n  This demo shows how exec security works with an allowlist.');
-  console.log('  Commands matching the allowlist (node, cat, echo, ls) run automatically.');
-  console.log('  Everything else pauses for your approval.\n');
-  console.log('  You can reject a command and provide feedback — the agent will');
-  console.log('  read your feedback and try a different approach.\n');
-  console.log('  Make sure the worker is running: npx tsx worker.ts\n');
+    // Fetch final result
+    console.log('-'.repeat(60));
+    console.log('\nFetching final result...');
 
-  // Task that will trigger both allowed and non-allowed commands
-  const task =
-    'Create a file called greet.js that takes a name argument and prints a greeting. ' +
-    'Run it with node to test it. ' +
-    'Then install the "chalk" npm package and update greet.js to print the greeting in color. ' +
-    'Run it again to verify it works.';
+    // Give the orchestrator a moment to finalize
+    await new Promise((r) => setTimeout(r, 2000));
+    const execution = await polos.getExecution(handle.id);
 
-  console.log(`  Task: ${task}\n`);
-  console.log('-'.repeat(60));
-
-  const conversationId = randomUUID();
-
-  // Start the agent
-  console.log('\nInvoking agent...');
-  const handle = await client.invoke(
-    codingAgent.id, { input: task, conversationId, streaming: true }
-  );
-  console.log(`Execution ID: ${handle.id}`);
-  console.log('Streaming agent activity...\n');
-
-  // Event loop: single persistent stream so concurrent suspends are never missed
-  for await (const suspend of streamEvents(client, handle)) {
-    if (suspend.stepKey.startsWith('approve_exec')) {
-      await handleApproval(client, handle, suspend);
-    } else if (suspend.stepKey.startsWith('ask_user')) {
-      await handleAskUser(client, handle, suspend);
+    if (execution.status === 'completed') {
+      printBanner('Agent Completed');
+      const result = typeof execution.result === 'string'
+        ? execution.result
+        : JSON.stringify(execution.result, null, 2);
+      console.log(`\n${result}\n`);
     } else {
-      console.log(`Received unexpected suspend: ${suspend.stepKey}`);
+      console.log(`\nFinal status: ${execution.status}`);
+      if (execution.result) {
+        console.log(execution.result);
+      }
     }
+  } finally {
+    rl.close();
+    await polos.stop();
   }
-
-  // Fetch final result
-  console.log('-'.repeat(60));
-  console.log('\nFetching final result...');
-
-  // Give the orchestrator a moment to finalize
-  await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
-
-  if (execution.status === 'completed') {
-    printBanner('Agent Completed');
-    const result = typeof execution.result === 'string'
-      ? execution.result
-      : JSON.stringify(execution.result, null, 2);
-    console.log(`\n${result}\n`);
-  } else {
-    console.log(`\nFinal status: ${execution.status}`);
-    if (execution.result) {
-      console.log(execution.result);
-    }
-  }
-
-  rl.close();
 }
 
 main().catch(console.error);

@@ -26,12 +26,6 @@ npm install
 
 ## Run
 
-Terminal 1 — start the worker:
-```bash
-npx tsx worker.ts
-```
-
-Terminal 2 — invoke the agent:
 ```bash
 npx tsx main.ts
 ```

@@ -1,47 +1,40 @@
 /**
- * Run the movie_reviewer agent.
+ * Structured Output example using the unified Polos class.
  *
- * This script invokes the movie_reviewer agent and waits for the result.
+ * This script starts an embedded worker, invokes the movie_reviewer agent
+ * with a Zod-typed output schema, and prints the structured result.
  *
  * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
+ *   POLOS_PROJECT_ID - Your project ID (defaults from env)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
  *   POLOS_API_KEY - API key for authentication (optional for local development)
+ *   OPENAI_API_KEY - OpenAI API key
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
+
+// Import agent definitions to trigger global registry side-effects
 import { movieReviewer } from './agents.js';
 
 async function main() {
-  // Get project_id from environment
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
+  const polos = new Polos({ deploymentId: 'structured-output-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    console.log('Invoking movie_reviewer agent...');
+
+    const result = await movieReviewer.run(polos, {
+      input: "What's the review for the movie 'The Dark Knight'?",
+    });
+
+    console.log(result.result);
+  } finally {
+    await polos.stop();
   }
-
-  // Create Polos client
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('Invoking movie_reviewer agent...');
-
-  const result = await movieReviewer.run(client, {
-    input: "What's the review for the movie 'The Dark Knight'?",
-  });
-
-  console.log(result.result);
 }
 
 main().catch(console.error);

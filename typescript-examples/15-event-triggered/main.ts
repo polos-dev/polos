@@ -1,10 +1,7 @@
 /**
- * Client demonstrating event-triggered workflow patterns.
+ * Demonstrate event-triggered workflow patterns.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
@@ -14,7 +11,7 @@
  */
 
 import 'dotenv/config';
-import { PolosClient, sleep } from '@polos/sdk';
+import { Polos, sleep } from '@polos/sdk';
 import {
   eventPublisher,
   eventWaiter,
@@ -31,7 +28,7 @@ function printSection(title: string): void {
   console.log(`\n--- ${title} ---`);
 }
 
-async function demoPublishEventTriggersWorkflow(client: PolosClient): Promise<void> {
+async function demoPublishEventTriggersWorkflow(polos: Polos): Promise<void> {
   printHeader('Event-Triggered Workflow Demo');
   console.log('This demo shows how publishing an event triggers a workflow.');
   console.log("The 'on_order_created' workflow listens for 'orders/created' events.");
@@ -53,17 +50,17 @@ async function demoPublishEventTriggersWorkflow(client: PolosClient): Promise<vo
   console.log(`  Total: $${String(orderData.total)}`);
 
   // Publish the event
-  await client.events.publish(
+  await polos.events.publish(
     'orders/created',
     { eventType: 'order_created', data: orderData },
   );
 
   console.log('\n  Event published!');
   console.log("  The 'on_order_created' workflow should now be triggered.");
-  console.log('  Check the worker logs to see the workflow execution.');
+  console.log('  Check the logs to see the workflow execution.');
 }
 
-async function demoPublishUserSignup(client: PolosClient): Promise<void> {
+async function demoPublishUserSignup(polos: Polos): Promise<void> {
   printHeader('User Signup Event Demo');
   console.log("Publishing a user signup event to trigger the 'on_user_signup' workflow.");
 
@@ -78,7 +75,7 @@ async function demoPublishUserSignup(client: PolosClient): Promise<void> {
   console.log(`  User ID: ${userData.user_id}`);
   console.log(`  Email: ${userData.email}`);
 
-  await client.events.publish(
+  await polos.events.publish(
     'users/signup',
     { eventType: 'user_signup', data: userData },
   );
@@ -87,7 +84,7 @@ async function demoPublishUserSignup(client: PolosClient): Promise<void> {
   console.log("  The 'on_user_signup' workflow should now be triggered.");
 }
 
-async function demoBatchEvents(client: PolosClient): Promise<void> {
+async function demoBatchEvents(polos: Polos): Promise<void> {
   printHeader('Batch Event Processing Demo');
   console.log('Publishing multiple events to trigger the batch processor workflow.');
   console.log('The workflow batches up to 10 events or waits 30 seconds.');
@@ -104,7 +101,7 @@ async function demoBatchEvents(client: PolosClient): Promise<void> {
     console.log(`  Event ${String(i + 1)}: record_id=${evt.data['record_id'] as string}, value=${String(evt.data['value'])}`);
   }
 
-  await client.events.batchPublish(
+  await polos.events.batchPublish(
     'data/updates',
     eventsToPublish,
   );
@@ -114,7 +111,7 @@ async function demoBatchEvents(client: PolosClient): Promise<void> {
   console.log('  (It may wait up to 30 seconds for more events before triggering)');
 }
 
-async function demoEventPublisherWorkflow(client: PolosClient): Promise<void> {
+async function demoEventPublisherWorkflow(polos: Polos): Promise<void> {
   printHeader('Event Publisher Workflow Demo');
   console.log('This workflow publishes events that can trigger other workflows.');
 
@@ -134,7 +131,7 @@ async function demoEventPublisherWorkflow(client: PolosClient): Promise<void> {
   console.log(`  Publishing to topic: ${payload.topic}`);
   console.log(`  Event type: ${payload.eventType}`);
 
-  const result = await eventPublisher.run(client, payload);
+  const result = await eventPublisher.run(polos, payload);
 
   printSection('Result');
   console.log(`  Published: ${String(result.published)}`);
@@ -143,7 +140,7 @@ async function demoEventPublisherWorkflow(client: PolosClient): Promise<void> {
   console.log("\n  This event will trigger the 'on_order_created' workflow!");
 }
 
-async function demoEventWaiterWorkflow(client: PolosClient): Promise<void> {
+async function demoEventWaiterWorkflow(polos: Polos): Promise<void> {
   printHeader('Event Waiter Workflow Demo');
   console.log('This workflow waits for an event on a specific topic.');
   console.log("We'll use a short timeout for demo purposes.");
@@ -157,7 +154,7 @@ async function demoEventWaiterWorkflow(client: PolosClient): Promise<void> {
   console.log(`  Timeout: ${String(timeout)} seconds`);
 
   // Start the waiter workflow (invoke without waiting for result)
-  const handle = await client.invoke('event_waiter', {
+  const handle = await polos.invoke('event_waiter', {
     topic,
     timeout,
   } satisfies WaitForEventPayload);
@@ -169,7 +166,7 @@ async function demoEventWaiterWorkflow(client: PolosClient): Promise<void> {
   printSection('Publishing event to wake up the waiter');
   await sleep(2000);
 
-  await client.events.publish(
+  await polos.events.publish(
     topic,
     {
       eventType: 'notification',
@@ -188,47 +185,34 @@ async function demoEventWaiterWorkflow(client: PolosClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('='.repeat(60));
-  console.log('Event-Triggered Workflow Examples');
-  console.log('='.repeat(60));
-  console.log('\nMake sure the worker is running: npx tsx worker.ts');
-  console.log('\nThis demo showcases event-driven patterns:');
-  console.log('  1. Publishing events that trigger workflows');
-  console.log('  2. User signup event triggering onboarding');
-  console.log('  3. Batch event processing');
-  console.log('  4. Workflow that publishes events');
-  console.log('  5. Workflow that waits for events');
+  const polos = new Polos({ deploymentId: 'event-triggered-examples', logFile: 'polos.log' });
+  await polos.start();
 
   try {
-    await demoPublishEventTriggersWorkflow(client);
-    await demoPublishUserSignup(client);
-    await demoBatchEvents(client);
-    await demoEventPublisherWorkflow(client);
-    await demoEventWaiterWorkflow(client);
+    console.log('='.repeat(60));
+    console.log('Event-Triggered Workflow Examples');
+    console.log('='.repeat(60));
+    console.log('\nThis demo showcases event-driven patterns:');
+    console.log('  1. Publishing events that trigger workflows');
+    console.log('  2. User signup event triggering onboarding');
+    console.log('  3. Batch event processing');
+    console.log('  4. Workflow that publishes events');
+    console.log('  5. Workflow that waits for events');
+
+    await demoPublishEventTriggersWorkflow(polos);
+    await demoPublishUserSignup(polos);
+    await demoBatchEvents(polos);
+    await demoEventPublisherWorkflow(polos);
+    await demoEventWaiterWorkflow(polos);
 
     console.log('\n' + '='.repeat(60));
     console.log('All demos completed!');
     console.log('='.repeat(60));
-    console.log('\nCheck the worker logs to see the event-triggered workflows execute.');
+    console.log('\nCheck the logs to see the event-triggered workflows execute.');
   } catch (e) {
     console.log(`\nError: ${String(e)}`);
-    console.log('\nMake sure the worker is running and try again.');
+  } finally {
+    await polos.stop();
   }
 }
 

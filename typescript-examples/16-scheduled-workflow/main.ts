@@ -1,10 +1,7 @@
 /**
- * Client demonstrating scheduled workflow patterns.
+ * Demonstrate scheduled workflow patterns.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
@@ -14,7 +11,7 @@
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { SchedulePayload } from '@polos/sdk';
 import { dailyCleanup } from './workflows.js';
 
@@ -28,9 +25,9 @@ function printSection(title: string): void {
   console.log(`\n--- ${title} ---`);
 }
 
-async function demoCreateSchedule(client: PolosClient): Promise<void> {
+async function demoCreateSchedule(polos: Polos): Promise<void> {
   printHeader('Create Schedule Demo');
-  console.log('This demo shows how to create a schedule dynamically using client.schedules.create().');
+  console.log('This demo shows how to create a schedule dynamically using polos.schedules.create().');
   console.log("The 'schedulable_reminder' workflow has no default schedule, meaning it can be");
   console.log('scheduled dynamically but has no fixed schedule.');
 
@@ -46,7 +43,7 @@ async function demoCreateSchedule(client: PolosClient): Promise<void> {
   console.log(`  Timezone: ${tz}`);
   console.log(`  Key: ${key}`);
 
-  const scheduleId = await client.schedules.create(
+  const scheduleId = await polos.schedules.create(
     'schedulable_reminder',
     cron,
     tz,
@@ -56,10 +53,10 @@ async function demoCreateSchedule(client: PolosClient): Promise<void> {
   console.log('\n  Schedule created!');
   console.log(`  Schedule ID: ${scheduleId}`);
   console.log('\n  The workflow will now run automatically every minute.');
-  console.log('  Check the worker logs to see the scheduled executions.');
+  console.log('  Check the logs to see the scheduled executions.');
 }
 
-async function demoCreatePerUserSchedules(client: PolosClient): Promise<void> {
+async function demoCreatePerUserSchedules(polos: Polos): Promise<void> {
   printHeader('Per-User Schedules Demo');
   console.log('This demo shows how to create different schedules for different users.');
   console.log('Each user gets their own schedule with the same workflow.');
@@ -73,7 +70,7 @@ async function demoCreatePerUserSchedules(client: PolosClient): Promise<void> {
   printSection('Creating per-user schedules');
 
   for (const user of users) {
-    const scheduleId = await client.schedules.create(
+    const scheduleId = await polos.schedules.create(
       'schedulable_reminder',
       user.cron,
       user.tz,
@@ -88,7 +85,7 @@ async function demoCreatePerUserSchedules(client: PolosClient): Promise<void> {
   console.log('  Charlie: 7 AM Tokyo time');
 }
 
-async function demoManualTriggerWithSchedulePayload(client: PolosClient): Promise<void> {
+async function demoManualTriggerWithSchedulePayload(polos: Polos): Promise<void> {
   printHeader('Manual Trigger with SchedulePayload Demo');
   console.log('This demo shows how to manually trigger a scheduled workflow');
   console.log('by passing a SchedulePayload directly to run().');
@@ -118,7 +115,7 @@ async function demoManualTriggerWithSchedulePayload(client: PolosClient): Promis
   console.log(`  Next run: ${payload.upcoming}`);
 
   // Run the workflow
-  const result = await dailyCleanup.run(client, payload);
+  const result = await dailyCleanup.run(polos, payload);
 
   printSection('Result');
   console.log(`  Timestamp: ${result.timestamp}`);
@@ -127,44 +124,31 @@ async function demoManualTriggerWithSchedulePayload(client: PolosClient): Promis
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('='.repeat(60));
-  console.log('Scheduled Workflow Examples');
-  console.log('='.repeat(60));
-  console.log('\nMake sure the worker is running: npx tsx worker.ts');
-  console.log('\nThis demo showcases scheduled workflow patterns:');
-  console.log('  1. Creating schedules dynamically with client.schedules.create()');
-  console.log('  2. Per-user/per-entity schedules');
-  console.log('  3. Manually triggering scheduled workflow with SchedulePayload');
+  const polos = new Polos({ deploymentId: 'scheduled-workflow-examples', logFile: 'polos.log' });
+  await polos.start();
 
   try {
-    await demoCreateSchedule(client);
-    await demoCreatePerUserSchedules(client);
-    await demoManualTriggerWithSchedulePayload(client);
+    console.log('='.repeat(60));
+    console.log('Scheduled Workflow Examples');
+    console.log('='.repeat(60));
+    console.log('\nThis demo showcases scheduled workflow patterns:');
+    console.log('  1. Creating schedules dynamically with polos.schedules.create()');
+    console.log('  2. Per-user/per-entity schedules');
+    console.log('  3. Manually triggering scheduled workflow with SchedulePayload');
+
+    await demoCreateSchedule(polos);
+    await demoCreatePerUserSchedules(polos);
+    await demoManualTriggerWithSchedulePayload(polos);
 
     console.log('\n' + '='.repeat(60));
     console.log('All demos completed!');
     console.log('='.repeat(60));
     console.log('\nScheduled workflows will run automatically based on their cron expressions.');
-    console.log('Check the worker logs to see scheduled executions.');
+    console.log('Check the logs to see scheduled executions.');
   } catch (e) {
     console.log(`\nError: ${String(e)}`);
-    console.log('\nMake sure the worker is running and try again.');
+  } finally {
+    await polos.stop();
   }
 }
 

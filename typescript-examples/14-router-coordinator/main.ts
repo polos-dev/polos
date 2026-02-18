@@ -1,10 +1,7 @@
 /**
- * Client demonstrating the Blog Review workflow with agent orchestration.
+ * Demonstrate Blog Review workflow with agent orchestration.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
@@ -14,9 +11,13 @@
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
-import { generateBlog, blogReview } from './workflows.js';
-import type { GenerateBlogPayload, BlogReviewPayload } from './workflows.js';
+import { Polos } from '@polos/sdk';
+
+// Import agents to trigger global registry side-effects
+import './agents.js';
+
+import { generateBlog, blogReview } from './workflows.ts';
+import type { GenerateBlogPayload, BlogReviewPayload } from './workflows.ts';
 
 function printHeader(title: string): void {
   console.log('\n' + '='.repeat(60));
@@ -28,7 +29,7 @@ function printSection(title: string): void {
   console.log(`\n--- ${title} ---`);
 }
 
-async function demoGenerateBlog(client: PolosClient): Promise<void> {
+async function demoGenerateBlog(polos: Polos): Promise<void> {
   printHeader('Generate Blog Demo');
   console.log('This workflow:');
   console.log('  1. Generates a blog post using the blog_generator agent');
@@ -44,7 +45,7 @@ async function demoGenerateBlog(client: PolosClient): Promise<void> {
   console.log(`  Instructions: ${additionalInstructions}`);
 
   // Invoke the workflow
-  const handle = await client.invoke('generate_blog', {
+  const handle = await polos.invoke(generateBlog.id, {
     topic,
     additionalInstructions,
   } satisfies GenerateBlogPayload);
@@ -54,7 +55,7 @@ async function demoGenerateBlog(client: PolosClient): Promise<void> {
   console.log('-'.repeat(60));
 
   // Stream workflow events and print agent_finish and workflow_finish events
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.rootExecutionId)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.rootExecutionId)) {
     const eventType = event.eventType;
 
     if (eventType === 'agent_finish') {
@@ -79,7 +80,7 @@ async function demoGenerateBlog(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoBlogReviewOnly(client: PolosClient): Promise<void> {
+async function demoBlogReviewOnly(polos: Polos): Promise<void> {
   printHeader('Blog Review Only Demo');
   console.log('This workflow reviews existing text through:');
   console.log('  1. Grammar reviewer (parallel)');
@@ -98,7 +99,7 @@ its about augmenting our capabilties.`;
   console.log('  Text: (contains intentional errors for demonstration)');
 
   // Invoke the workflow
-  const handle = await client.invoke('blog_review', {
+  const handle = await polos.invoke(blogReview.id, {
     text: sampleText.trim(),
   } satisfies BlogReviewPayload);
 
@@ -107,7 +108,7 @@ its about augmenting our capabilties.`;
   console.log('-'.repeat(60));
 
   // Stream workflow events
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.rootExecutionId)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.rootExecutionId)) {
     const eventType = event.eventType;
 
     if (eventType === 'agent_finish') {
@@ -126,43 +127,30 @@ its about augmenting our capabilties.`;
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('='.repeat(60));
-  console.log('Blog Review Workflow Examples');
-  console.log('='.repeat(60));
-  console.log('\nMake sure the worker is running: npx tsx worker.ts');
-  console.log('\nThis demo showcases agent orchestration patterns:');
-  console.log('  1. Generate blog - creates and reviews a blog post');
-  console.log('  2. Blog review only - reviews existing text');
+  const polos = new Polos({ deploymentId: 'router-coordinator-examples', logFile: 'polos.log' });
+  await polos.start();
 
   try {
+    console.log('='.repeat(60));
+    console.log('Blog Review Workflow Examples');
+    console.log('='.repeat(60));
+    console.log('\nThis demo showcases agent orchestration patterns:');
+    console.log('  1. Generate blog - creates and reviews a blog post');
+    console.log('  2. Blog review only - reviews existing text');
+
     // Demo 1: Generate and review a blog
-    await demoGenerateBlog(client);
+    await demoGenerateBlog(polos);
 
     // Demo 2: Review existing text
-    await demoBlogReviewOnly(client);
+    await demoBlogReviewOnly(polos);
 
     console.log('\n' + '='.repeat(60));
     console.log('All demos completed!');
     console.log('='.repeat(60));
   } catch (e) {
     console.log(`\nError: ${String(e)}`);
-    console.log('\nMake sure the worker is running and try again.');
+  } finally {
+    await polos.stop();
   }
 }
 

@@ -12,8 +12,7 @@ This example demonstrates agents that use chain-of-thought reasoning with struct
 
 - `agents.ts` - Three reasoning agent definitions with structured output
 - `schemas.ts` - Zod schema for reasoning output
-- `worker.ts` - Worker that registers and runs the agents
-- `main.ts` - Invokes the thinking agent with a trick question and streams the response
+- `main.ts` - Starts Polos, invokes the thinking agent with a trick question, and streams the response
 
 ## Running the Example
 
@@ -33,12 +32,7 @@ This example demonstrates agents that use chain-of-thought reasoning with struct
    # Edit .env with your settings
    ```
 
-4. Run the worker:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run main.ts to invoke the thinking agent:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```

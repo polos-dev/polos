@@ -1,27 +1,35 @@
 /**
- * Interactive research assistant with web search and streaming.
+ * Web Search Agent Example — unified single-file usage.
  *
- * Prompts the user for a research question, streams the agent's activity
- * (tool calls, text), handles ask_user suspend events (prompts the user
- * in the terminal and resumes), then displays the final answer.
+ * Starts a Polos instance (worker + client), prompts the user for a
+ * research question, streams the agent's activity (tool calls, text),
+ * handles ask_user suspend events (prompts the user in the terminal
+ * and resumes), then displays the final answer.
  *
- * Run the worker first:
- *   npx tsx worker.ts
+ * Prerequisites:
+ *   - Polos server running (polos-server start)
+ *   - TAVILY_API_KEY set (get one at https://tavily.com)
  *
- * Then run this script:
+ * Run:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
- *   POLOS_API_URL    - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY    - API key for authentication (optional for local dev)
+ *   POLOS_PROJECT_ID  - Your project ID (default from env)
+ *   POLOS_API_URL     - Orchestrator URL (default: http://localhost:8080)
+ *   POLOS_API_KEY     - API key for authentication (optional for local dev)
+ *   ANTHROPIC_API_KEY - Anthropic API key for the agent
+ *   TAVILY_API_KEY    - Tavily API key for web search
  */
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
+
+// Import for side-effects: triggers global registry registration
+import './agents.js';
+
 import { researchAgent } from './agents.js';
 
 const rl = readline.createInterface({ input, output });
@@ -63,10 +71,10 @@ interface SuspendEvent {
  * (text deltas, tool calls) are printed inline as side effects.
  */
 async function* streamEvents(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
 ): AsyncGenerator<SuspendEvent> {
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
     const eventType = event.eventType;
 
     if (eventType?.startsWith('suspend_')) {
@@ -106,7 +114,7 @@ async function* streamEvents(
  * collect optional feedback, and resume the workflow.
  */
 async function handleToolApproval(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -142,7 +150,7 @@ async function handleToolApproval(
     console.log(`\n  -> Rejected${feedback ? ' with feedback' : ''}. Resuming workflow...\n`);
   }
 
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Ask-user suspend handler ────────────────────────────────────────
@@ -152,7 +160,7 @@ async function handleToolApproval(
  * response, and resume the workflow.
  */
 async function handleAskUser(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
   suspend: SuspendEvent,
 ): Promise<void> {
@@ -204,87 +212,77 @@ async function handleAskUser(
   }
 
   console.log('\n  -> Sending response to agent...\n');
-  await client.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
+  await polos.resume(handle.rootWorkflowId, handle.id, suspend.stepKey, resumeData);
 }
 
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
+  const polos = new Polos({ deploymentId: 'web-search-agent-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    printBanner('Web Search Research Agent');
+    console.log('\n  Ask a research question and the agent will search the web');
+    console.log('  for current information. It may ask follow-up questions to');
+    console.log('  refine its research.\n');
+
+    // Prompt the user for their research question
+    const question = await ask('  What would you like to research?\n\n  > ');
+    if (!question) {
+      console.log('  No question provided. Exiting.');
+      rl.close();
+      await polos.stop();
+      return;
+    }
+
+    console.log();
+    console.log('-'.repeat(60));
+
+    // Start the agent
+    console.log('\nInvoking research agent...');
+    const handle = await polos.invoke(
+      researchAgent.id, { input: question, streaming: true }
     );
-  }
+    console.log(`Execution ID: ${handle.id}`);
+    console.log('Streaming agent activity...\n');
 
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
+    // Event loop: single persistent stream so concurrent suspends are never missed
+    for await (const suspend of streamEvents(polos, handle)) {
+      if (suspend.stepKey.startsWith('approve_')) {
+        await handleToolApproval(polos, handle, suspend);
+      } else if (suspend.stepKey.startsWith('ask_user')) {
+        await handleAskUser(polos, handle, suspend);
+      } else {
+        console.log(`\nReceived unexpected suspend: ${suspend.stepKey}`);
+      }
+    }
 
-  printBanner('Web Search Research Agent');
-  console.log('\n  Ask a research question and the agent will search the web');
-  console.log('  for current information. It may ask follow-up questions to');
-  console.log('  refine its research.\n');
-  console.log('  Make sure the worker is running: npx tsx worker.ts\n');
+    // Fetch final result
+    console.log('\n' + '-'.repeat(60));
+    console.log('\nFetching final result...');
 
-  // Prompt the user for their research question
-  const question = await ask('  What would you like to research?\n\n  > ');
-  if (!question) {
-    console.log('  No question provided. Exiting.');
-    rl.close();
-    return;
-  }
+    // Give the orchestrator a moment to finalize
+    await new Promise((r) => setTimeout(r, 2000));
+    const execution = await polos.getExecution(handle.id);
 
-  console.log();
-  console.log('-'.repeat(60));
-
-  // Start the agent
-  console.log('\nInvoking research agent...');
-  const handle = await client.invoke(
-    researchAgent.id, { input: question, streaming: true }
-  );
-  console.log(`Execution ID: ${handle.id}`);
-  console.log('Streaming agent activity...\n');
-
-  // Event loop: single persistent stream so concurrent suspends are never missed
-  for await (const suspend of streamEvents(client, handle)) {
-    if (suspend.stepKey.startsWith('approve_')) {
-      await handleToolApproval(client, handle, suspend);
-    } else if (suspend.stepKey.startsWith('ask_user')) {
-      await handleAskUser(client, handle, suspend);
+    if (execution.status === 'completed') {
+      printBanner('Research Complete');
+      const result =
+        typeof execution.result === 'string'
+          ? execution.result
+          : JSON.stringify(execution.result, null, 2);
+      console.log(`\n${result}\n`);
     } else {
-      console.log(`\nReceived unexpected suspend: ${suspend.stepKey}`);
+      console.log(`\nFinal status: ${execution.status}`);
+      if (execution.result) {
+        console.log(execution.result);
+      }
     }
+  } finally {
+    rl.close();
+    await polos.stop();
   }
-
-  // Fetch final result
-  console.log('\n' + '-'.repeat(60));
-  console.log('\nFetching final result...');
-
-  // Give the orchestrator a moment to finalize
-  await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
-
-  if (execution.status === 'completed') {
-    printBanner('Research Complete');
-    const result =
-      typeof execution.result === 'string'
-        ? execution.result
-        : JSON.stringify(execution.result, null, 2);
-    console.log(`\n${result}\n`);
-  } else {
-    console.log(`\nFinal status: ${execution.status}`);
-    if (execution.result) {
-      console.log(execution.result);
-    }
-  }
-
-  rl.close();
 }
 
 main().catch(console.error);

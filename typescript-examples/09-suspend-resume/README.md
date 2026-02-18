@@ -18,8 +18,7 @@ This example demonstrates how workflows can suspend execution and wait for exter
 ## Files
 
 - `workflows.ts` - Workflow definitions with suspend/resume
-- `worker.ts` - Worker that registers workflows
-- `main.ts` - Interactive demo client
+- `main.ts` - Starts Polos and runs the interactive suspend/resume demo
 
 ## Running the Example
 
@@ -39,12 +38,7 @@ This example demonstrates how workflows can suspend execution and wait for exter
    # Edit .env with your project ID
    ```
 
-4. Run the worker in one terminal:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the interactive demo in another terminal:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```
@@ -91,17 +85,17 @@ const approvalWorkflow = defineWorkflow<ApprovalRequest, unknown, ApprovalResult
 ### Client-Side Resume
 
 ```typescript
-const handle = await client.invoke(approvalWorkflow.id, payload);
+const handle = await polos.invoke(approvalWorkflow.id, payload);
 
 // Stream events to detect suspension
-for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
   if (event.eventType?.startsWith('suspend_')) {
     break; // Workflow is suspended
   }
 }
 
 // Resume with user decision
-await client.resume(
+await polos.resume(
   handle.rootWorkflowId,
   handle.id,
   'await_approval',

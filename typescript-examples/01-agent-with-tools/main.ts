@@ -1,47 +1,41 @@
 /**
- * Run the weather agent.
+ * Agent with Tools example using the unified Polos class.
  *
- * This script invokes the weather agent and waits for the result.
+ * This script starts an embedded worker, invokes the weather agent,
+ * and prints the result.
  *
  * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
+ *   POLOS_PROJECT_ID - Your project ID (defaults from env)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY - API key for authentication (required)
+ *   POLOS_API_KEY - API key for authentication (optional for local development)
+ *   OPENAI_API_KEY - OpenAI API key for the weather agent
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
+
+// Import agent and tool definitions to trigger global registry side-effects
 import { weatherAgent } from './agents.js';
+import './tools.js';
 
 async function main() {
-  // Get project_id from environment
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
+  const polos = new Polos({ deploymentId: 'agent-with-tools-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    console.log('Invoking weather_agent...');
+
+    const result = await weatherAgent.run(polos, {
+      input: "What's the weather like in Paris?",
+    });
+
+    console.log(result.result);
+  } finally {
+    await polos.stop();
   }
-
-  // Create Polos client
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('Invoking weather_agent...');
-
-  const result = await weatherAgent.run(client, {
-    input: "What's the weather like in Paris?",
-  });
-
-  console.log(result.result);
 }
 
 main().catch(console.error);

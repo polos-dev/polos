@@ -1,22 +1,19 @@
 /**
  * Interactive demo for suspend/resume workflows.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this script:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
  *   POLOS_PROJECT_ID - Your project ID (required)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY - API key for authentication (required)
+ *   POLOS_API_KEY - API key for authentication (optional for local development)
  */
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { ExecutionHandle } from '@polos/sdk';
 import { approvalWorkflow, multiStepForm, documentReview } from './workflows.js';
 
@@ -61,10 +58,10 @@ async function askChoice(prompt: string, options: string[]): Promise<number> {
 }
 
 async function waitForSuspend(
-  client: PolosClient,
+  polos: Polos,
   handle: ExecutionHandle,
 ): Promise<Record<string, unknown> | undefined> {
-  for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
+  for await (const event of polos.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
     if (event.eventType?.startsWith('suspend_')) {
       return event.data;
     }
@@ -72,7 +69,7 @@ async function waitForSuspend(
   return undefined;
 }
 
-async function runApprovalWorkflow(client: PolosClient): Promise<void> {
+async function runApprovalWorkflow(polos: Polos): Promise<void> {
   printHeader('Approval Workflow Demo');
 
   console.log('\nEnter approval request details:');
@@ -84,7 +81,7 @@ async function runApprovalWorkflow(client: PolosClient): Promise<void> {
   printSection('Starting workflow');
   console.log(`Starting approval workflow for request: ${requestId}`);
 
-  const handle = await client.invoke(approvalWorkflow.id, {
+  const handle = await polos.invoke(approvalWorkflow.id, {
     requestId,
     requester,
     description,
@@ -94,7 +91,7 @@ async function runApprovalWorkflow(client: PolosClient): Promise<void> {
   console.log('Workflow will suspend and wait for approval...');
 
   console.log(`\nStreaming events for workflow: ${handle.rootWorkflowId}`);
-  const suspendData = await waitForSuspend(client, handle);
+  const suspendData = await waitForSuspend(polos, handle);
 
   if (!suspendData) {
     console.log('Did not receive suspend event');
@@ -114,7 +111,7 @@ async function runApprovalWorkflow(client: PolosClient): Promise<void> {
   const comments = await ask('Comments (optional)');
 
   printSection('Resuming workflow');
-  await client.resume(handle.rootWorkflowId, handle.id, 'await_approval', {
+  await polos.resume(handle.rootWorkflowId, handle.id, 'await_approval', {
     approved,
     approver,
     comments: comments || undefined,
@@ -122,7 +119,7 @@ async function runApprovalWorkflow(client: PolosClient): Promise<void> {
   console.log('Resume event published!');
 
   await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
+  const execution = await polos.getExecution(handle.id);
 
   if (execution.status === 'completed') {
     printSection('Workflow Completed');
@@ -138,7 +135,7 @@ async function runApprovalWorkflow(client: PolosClient): Promise<void> {
   }
 }
 
-async function runMultiStepForm(client: PolosClient): Promise<void> {
+async function runMultiStepForm(polos: Polos): Promise<void> {
   printHeader('Multi-Step Form Workflow Demo');
 
   const formId = await ask('\nForm ID', 'FORM-001');
@@ -146,7 +143,7 @@ async function runMultiStepForm(client: PolosClient): Promise<void> {
   printSection('Starting workflow');
   console.log(`Starting multi-step form: ${formId}`);
 
-  const handle = await client.invoke(multiStepForm.id, { formId });
+  const handle = await polos.invoke(multiStepForm.id, { formId });
   console.log(`Execution ID: ${handle.id}`);
 
   const steps: [string, string, string[]][] = [
@@ -158,7 +155,7 @@ async function runMultiStepForm(client: PolosClient): Promise<void> {
   for (const [stepKey, stepName] of steps) {
     console.log(`\nWaiting for step: ${stepName}`);
 
-    const suspendData = await waitForSuspend(client, handle);
+    const suspendData = await waitForSuspend(polos, handle);
     if (suspendData) {
       console.log(`\n  Step ${String(suspendData['step'])} of ${String(suspendData['total_steps'])}`);
       console.log(`  ${String(suspendData['prompt'])}`);
@@ -189,12 +186,12 @@ async function runMultiStepForm(client: PolosClient): Promise<void> {
     }
 
     console.log(`\nSubmitting ${stepName}...`);
-    await client.resume(handle.rootWorkflowId, handle.id, stepKey, resumeData);
+    await polos.resume(handle.rootWorkflowId, handle.id, stepKey, resumeData);
     console.log('Resume event published!');
   }
 
   await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
+  const execution = await polos.getExecution(handle.id);
 
   if (execution.status === 'completed') {
     printSection('Form Completed');
@@ -227,7 +224,7 @@ async function runMultiStepForm(client: PolosClient): Promise<void> {
   }
 }
 
-async function runDocumentReview(client: PolosClient): Promise<void> {
+async function runDocumentReview(polos: Polos): Promise<void> {
   printHeader('Document Review Workflow Demo');
 
   console.log('\nEnter document details:');
@@ -240,7 +237,7 @@ async function runDocumentReview(client: PolosClient): Promise<void> {
   console.log(`Starting document review for: ${documentTitle}`);
   console.log(`Reviewers: ${reviewers.join(', ')}`);
 
-  const handle = await client.invoke(documentReview.id, {
+  const handle = await polos.invoke(documentReview.id, {
     documentId,
     documentTitle,
     reviewers,
@@ -253,7 +250,7 @@ async function runDocumentReview(client: PolosClient): Promise<void> {
 
     console.log(`\nWaiting for reviewer: ${reviewer}`);
 
-    const suspendData = await waitForSuspend(client, handle);
+    const suspendData = await waitForSuspend(polos, handle);
     if (suspendData) {
       console.log(`\n  Reviewer ${String(suspendData['reviewer_number'])} of ${String(suspendData['total_reviewers'])}`);
       console.log(`  Document: ${String(suspendData['document_title'])}`);
@@ -266,7 +263,7 @@ async function runDocumentReview(client: PolosClient): Promise<void> {
     const rating = Number(await ask('  Rating (1-5)', '4'));
 
     console.log(`\nSubmitting ${reviewer}'s review...`);
-    await client.resume(handle.rootWorkflowId, handle.id, suspendStepKey, {
+    await polos.resume(handle.rootWorkflowId, handle.id, suspendStepKey, {
       approved,
       comments: comments || undefined,
       rating,
@@ -275,7 +272,7 @@ async function runDocumentReview(client: PolosClient): Promise<void> {
   }
 
   await new Promise((r) => setTimeout(r, 2000));
-  const execution = await client.getExecution(handle.id);
+  const execution = await polos.getExecution(handle.id);
 
   if (execution.status === 'completed') {
     printSection('Review Completed');
@@ -299,57 +296,47 @@ async function runDocumentReview(client: PolosClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
+  const polos = new Polos({ deploymentId: 'suspend-resume-examples', logFile: 'polos.log' });
+  await polos.start();
 
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
+  try {
+    printHeader('Suspend/Resume Workflow Demo');
+    console.log('\nThis demo shows how workflows can pause for user input and resume.');
 
-  printHeader('Suspend/Resume Workflow Demo');
-  console.log('\nThis demo shows how workflows can pause for user input and resume.');
-  console.log('Make sure the worker is running: npx tsx worker.ts');
+    let running = true;
+    while (running) {
+      const choice = await askChoice('Select a workflow to run:', [
+        'Approval Workflow - Single approval with suspend/resume',
+        'Multi-Step Form - Collect data across 3 steps',
+        'Document Review - Multiple reviewers in sequence',
+        'Exit',
+      ]);
 
-  let running = true;
-  while (running) {
-    const choice = await askChoice('Select a workflow to run:', [
-      'Approval Workflow - Single approval with suspend/resume',
-      'Multi-Step Form - Collect data across 3 steps',
-      'Document Review - Multiple reviewers in sequence',
-      'Exit',
-    ]);
-
-    try {
-      if (choice === 1) {
-        await runApprovalWorkflow(client);
-      } else if (choice === 2) {
-        await runMultiStepForm(client);
-      } else if (choice === 3) {
-        await runDocumentReview(client);
-      } else {
-        console.log('\nGoodbye!');
-        running = false;
+      try {
+        if (choice === 1) {
+          await runApprovalWorkflow(polos);
+        } else if (choice === 2) {
+          await runMultiStepForm(polos);
+        } else if (choice === 3) {
+          await runDocumentReview(polos);
+        } else {
+          console.log('\nGoodbye!');
+          running = false;
+        }
+      } catch (e) {
+        console.log(`\nError: ${String(e)}`);
+        console.log('Please try again.');
       }
-    } catch (e) {
-      console.log(`\nError: ${String(e)}`);
-      console.log('Make sure the worker is running and try again.');
+
+      if (running) {
+        console.log('\n' + '-'.repeat(60));
+      }
     }
 
-    if (running) {
-      console.log('\n' + '-'.repeat(60));
-    }
+    rl.close();
+  } finally {
+    await polos.stop();
   }
-
-  rl.close();
 }
 
 main().catch(console.error);

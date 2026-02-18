@@ -1,20 +1,25 @@
 /**
- * Client demonstrating how to consume streaming agent responses.
+ * Agent Streaming example using the unified Polos class.
  *
- * Run the worker first:
- *   npx tsx worker.ts
+ * Demonstrates three ways to consume streaming agent responses:
+ *   1. Streaming text chunks
+ *   2. Streaming full events
+ *   3. Awaiting the final accumulated text
  *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
+ *   POLOS_PROJECT_ID - Your project ID (defaults from env)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY - API key for authentication (required)
+ *   POLOS_API_KEY - API key for authentication (optional for local development)
+ *   OPENAI_API_KEY - OpenAI API key for the agent
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos, type PolosClient } from '@polos/sdk';
+
+// Import agent definition to trigger global registry side-effects
 import { storyteller } from './agents.js';
 
 async function streamTextChunks(client: PolosClient) {
@@ -94,25 +99,18 @@ async function getFinalText(client: PolosClient) {
 }
 
 async function main() {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
+  const polos = new Polos({ deploymentId: 'agent-streaming-examples', logFile: 'polos.log' });
+  await polos.start();
+
+  try {
+    const client = polos.getClient();
+
+    await streamTextChunks(client);
+    await streamFullEvents(client);
+    await getFinalText(client);
+  } finally {
+    await polos.stop();
   }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  await streamTextChunks(client);
-  await streamFullEvents(client);
-  await getFinalText(client);
 }
 
 main().catch(console.error);

@@ -1,10 +1,7 @@
 /**
- * Client demonstrating parallel workflow execution patterns.
+ * Demonstrate parallel workflow execution patterns.
  *
- * Run the worker first:
- *   npx tsx worker.ts
- *
- * Then run this client:
+ * Run with:
  *   npx tsx main.ts
  *
  * Environment variables:
@@ -14,7 +11,7 @@
  */
 
 import 'dotenv/config';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import {
   singleReview,
   parallelReview,
@@ -33,12 +30,12 @@ function printSection(title: string): void {
   console.log(`\n--- ${title} ---`);
 }
 
-async function demoSingleReview(client: PolosClient): Promise<void> {
+async function demoSingleReview(polos: Polos): Promise<void> {
   printHeader('Single Review Demo');
   console.log('This workflow processes a single document review.');
 
   printSection('Running single review');
-  const result = await singleReview.run(client, {
+  const result = await singleReview.run(polos, {
     reviewerId: 'alice',
     documentId: 'DOC-001',
     content: 'This is a sample document for review. It contains important information.',
@@ -51,7 +48,7 @@ async function demoSingleReview(client: PolosClient): Promise<void> {
   console.log(`  Comments: ${result.comments}`);
 }
 
-async function demoParallelReview(client: PolosClient): Promise<void> {
+async function demoParallelReview(polos: Polos): Promise<void> {
   printHeader('Parallel Review Demo');
   console.log('This workflow runs multiple reviews in parallel and aggregates results.');
   console.log('Uses batchInvokeAndWait to run all reviews concurrently.');
@@ -61,7 +58,7 @@ async function demoParallelReview(client: PolosClient): Promise<void> {
   console.log('  Document: DOC-002');
   console.log(`  Reviewers: ${reviewers.join(', ')}`);
 
-  const result = await parallelReview.run(client, {
+  const result = await parallelReview.run(polos, {
     documentId: 'DOC-002',
     content: 'This is an important proposal document that requires multiple approvals.',
     reviewers,
@@ -71,8 +68,8 @@ async function demoParallelReview(client: PolosClient): Promise<void> {
   console.log(`  Document ID: ${result.documentId}`);
   console.log(`  Total Reviews: ${String(result.totalReviews)}`);
   console.log(`  Approved Count: ${String(result.approvedCount)}/${String(result.totalReviews)}`);
-  console.log(`  Average Score: ${result.averageScore.toFixed(1)}/10`);
-  console.log(`  All Approved: ${String(result.allApproved)}`);
+  console.log(`  Average Score: ${(result.averageScore ?? 0).toFixed(1)}/10`);
+  console.log(`  All Approved: ${String(result.allApproved ?? false)}`);
 
   console.log('\n  Individual Reviews:');
   for (const review of result.reviews) {
@@ -81,7 +78,7 @@ async function demoParallelReview(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoDataChunkProcessor(client: PolosClient): Promise<void> {
+async function demoDataChunkProcessor(polos: Polos): Promise<void> {
   printHeader('Data Chunk Processor Demo');
   console.log('This workflow splits data into chunks and processes them in parallel.');
   console.log('Demonstrates fan-out/fan-in pattern for data processing.');
@@ -95,7 +92,7 @@ async function demoDataChunkProcessor(client: PolosClient): Promise<void> {
   console.log(`  Chunk size: ${String(chunkSize)}`);
   console.log(`  Number of chunks: ${String(Math.ceil(data.length / chunkSize))}`);
 
-  const result = await dataChunkProcessor.run(client, { data, chunkSize });
+  const result = await dataChunkProcessor.run(polos, { data, chunkSize });
 
   printSection('Processing Results');
   console.log(`  Total items: ${String(result.totalItems)}`);
@@ -107,7 +104,7 @@ async function demoDataChunkProcessor(client: PolosClient): Promise<void> {
   }
 }
 
-async function demoFireAndForget(client: PolosClient): Promise<void> {
+async function demoFireAndForget(polos: Polos): Promise<void> {
   printHeader('Fire and Forget Batch Demo');
   console.log('This workflow launches multiple background tasks without waiting.');
   console.log("Returns execution IDs for tracking, but doesn't block on completion.");
@@ -121,7 +118,7 @@ async function demoFireAndForget(client: PolosClient): Promise<void> {
   printSection('Launching background tasks');
   console.log(`  Tasks to launch: ${String(tasks.length)}`);
 
-  const result = await fireAndForgetBatch.run(client, { tasks });
+  const result = await fireAndForgetBatch.run(polos, { tasks });
 
   printSection('Launch Results');
   console.log(`  Tasks launched: ${String(result['launched'])}`);
@@ -134,7 +131,7 @@ async function demoFireAndForget(client: PolosClient): Promise<void> {
   console.log('  Use the execution IDs to check their status later.');
 }
 
-async function demoParallelComparison(client: PolosClient): Promise<void> {
+async function demoParallelComparison(polos: Polos): Promise<void> {
   printHeader('Parallel vs Sequential Comparison');
   console.log('This demo shows the time savings of parallel execution.');
 
@@ -144,7 +141,7 @@ async function demoParallelComparison(client: PolosClient): Promise<void> {
 
   for (let i = 0; i < 3; i++) {
     const reviewer = `reviewer${String(i + 1)}`;
-    await singleReview.run(client, {
+    await singleReview.run(polos, {
       reviewerId: reviewer,
       documentId: 'DOC-SEQ',
       content: 'Sequential test document',
@@ -159,7 +156,7 @@ async function demoParallelComparison(client: PolosClient): Promise<void> {
   printSection('Parallel Execution (3 reviews)');
   startTime = Date.now();
 
-  const result = await parallelReview.run(client, {
+  const result = await parallelReview.run(polos, {
     documentId: 'DOC-PAR',
     content: 'Parallel test document',
     reviewers: ['reviewer1', 'reviewer2', 'reviewer3'],
@@ -176,46 +173,33 @@ async function demoParallelComparison(client: PolosClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
-
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
-
-  console.log('='.repeat(60));
-  console.log('Parallel Review Workflow Examples');
-  console.log('='.repeat(60));
-  console.log('\nMake sure the worker is running: npx tsx worker.ts');
-  console.log('\nThis demo showcases parallel workflow patterns:');
-  console.log('  1. Single review workflow');
-  console.log('  2. Parallel multi-reviewer workflow (batchInvokeAndWait)');
-  console.log('  3. Data chunk processing (fan-out/fan-in)');
-  console.log('  4. Fire-and-forget batch (batchInvoke)');
-  console.log('  5. Sequential vs parallel comparison');
+  const polos = new Polos({ deploymentId: 'parallel-review-examples', logFile: 'polos.log' });
+  await polos.start();
 
   try {
-    await demoSingleReview(client);
-    await demoParallelReview(client);
-    await demoDataChunkProcessor(client);
-    await demoFireAndForget(client);
-    await demoParallelComparison(client);
+    console.log('='.repeat(60));
+    console.log('Parallel Review Workflow Examples');
+    console.log('='.repeat(60));
+    console.log('\nThis demo showcases parallel workflow patterns:');
+    console.log('  1. Single review workflow');
+    console.log('  2. Parallel multi-reviewer workflow (batchInvokeAndWait)');
+    console.log('  3. Data chunk processing (fan-out/fan-in)');
+    console.log('  4. Fire-and-forget batch (batchInvoke)');
+    console.log('  5. Sequential vs parallel comparison');
+
+    await demoSingleReview(polos);
+    await demoParallelReview(polos);
+    await demoDataChunkProcessor(polos);
+    await demoFireAndForget(polos);
+    await demoParallelComparison(polos);
 
     console.log('\n' + '='.repeat(60));
     console.log('All demos completed!');
     console.log('='.repeat(60));
   } catch (e) {
     console.log(`\nError: ${String(e)}`);
-    console.log('\nMake sure the worker is running and try again.');
+  } finally {
+    await polos.stop();
   }
 }
 

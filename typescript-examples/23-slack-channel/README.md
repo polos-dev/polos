@@ -22,10 +22,10 @@ cp .env.example .env
 # Edit .env with your values
 
 npm install
-npx tsx worker.ts
+npx tsx main.ts
 ```
 
-Then trigger the agent via the Polos UI or API. When the agent calls `ask_user`, you'll see a Slack message with a "Respond" button.
+The server starts and blocks until Ctrl+C. Trigger the agent via the Polos UI or API. When the agent calls `ask_user`, you'll see a Slack message with a "Respond" button.
 
 ## Thread Support
 

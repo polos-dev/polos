@@ -26,12 +26,6 @@ npm install
 
 ## Run
 
-Terminal 1 — start the worker:
-```bash
-npx tsx worker.ts
-```
-
-Terminal 2 — run the interactive client:
 ```bash
 npx tsx main.ts
 ```
@@ -60,7 +54,7 @@ const agent = defineAgent({
 });
 ```
 
-The client uses `client.invoke()` + `client.events.streamWorkflow()` to stream events. When a `suspend_ask_user` event arrives, it prompts the user and calls `client.resume()` to continue the workflow.
+The client uses `polos.invoke()` + `polos.events.streamWorkflow()` to stream events. When a `suspend_ask_user` event arrives, it prompts the user and calls `polos.resume()` to continue the workflow.
 
 ### Custom search provider
 

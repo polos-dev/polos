@@ -11,9 +11,8 @@ This example demonstrates how to use Zod schemas to get structured, typed respon
 ## Files
 
 - `agents.ts` - Agent definitions with output schemas
-- `worker.ts` - Worker that registers and runs the agents
 - `schemas.ts` - Zod schemas for structured output
-- `main.ts` - Invokes the movie_reviewer agent and displays the result
+- `main.ts` - Starts Polos, invokes the agent, and displays the structured result
 
 ## Running the Example
 
@@ -33,12 +32,7 @@ This example demonstrates how to use Zod schemas to get structured, typed respon
    # Edit .env with your settings
    ```
 
-4. Run the worker:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run main.ts to invoke the movie_reviewer agent:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```

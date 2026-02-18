@@ -1,23 +1,27 @@
 /**
- * Interactive chat client for testing guardrails.
+ * Interactive chat client for testing guardrails using the unified Polos class.
  *
- * Run the worker first:
- *   npx tsx worker.ts
+ * Starts an embedded worker and runs an interactive chat loop where you can
+ * test different agents with various guardrail configurations.
  *
- * Then run this chat client:
+ * Run with:
  *   npx tsx chat.ts
  *
  * Environment variables:
- *   POLOS_PROJECT_ID - Your project ID (required)
+ *   POLOS_PROJECT_ID - Your project ID (defaults from env)
  *   POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
- *   POLOS_API_KEY - API key for authentication (required)
+ *   POLOS_API_KEY - API key for authentication (optional for local development)
+ *   OPENAI_API_KEY - OpenAI API key
  */
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import type { AgentWorkflow } from '@polos/sdk';
+
+// Import agent and guardrail definitions to trigger global registry side-effects
 import { safeAssistant, contentGenerator, simpleAgent } from './agents.js';
+import './guardrails.js';
 
 // Available agents for testing
 const AGENTS: Record<string, { name: string; agent: AgentWorkflow; description: string }> = {
@@ -60,21 +64,10 @@ async function selectAgent(
 }
 
 async function chatLoop() {
-  const projectId = process.env['POLOS_PROJECT_ID'];
-  if (!projectId) {
-    throw new Error(
-      'POLOS_PROJECT_ID environment variable is required. ' +
-        'Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). ' +
-        'You can get this from the output printed by `polos-server start` or from the UI page at ' +
-        "http://localhost:5173/projects/settings (the ID will be below the project name 'default')",
-    );
-  }
+  const polos = new Polos({ deploymentId: 'guardrails-examples', logFile: 'polos.log' });
+  await polos.start();
 
-  const client = new PolosClient({
-    projectId,
-    apiUrl: process.env['POLOS_API_URL'] ?? 'http://localhost:8080',
-    apiKey: process.env['POLOS_API_KEY'] ?? '',
-  });
+  const client = polos.getClient();
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -177,6 +170,7 @@ async function chatLoop() {
     }
   } finally {
     rl.close();
+    await polos.stop();
   }
 }
 

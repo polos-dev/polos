@@ -11,8 +11,7 @@ This example demonstrates how to consume streaming responses from agents, includ
 ## Files
 
 - `agents.ts` - Storyteller agent definition
-- `worker.ts` - Worker that registers and runs the agent
-- `main.ts` - Three streaming examples: text chunks, full events, and final text
+- `main.ts` - Starts Polos and runs three streaming examples: text chunks, full events, and final text
 
 ## Running the Example
 
@@ -32,12 +31,7 @@ This example demonstrates how to consume streaming responses from agents, includ
    # Edit .env with your settings
    ```
 
-4. Run the worker:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run main.ts to invoke the storyteller agent:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```

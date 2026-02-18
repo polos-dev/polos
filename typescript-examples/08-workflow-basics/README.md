@@ -26,8 +26,7 @@ Workflows are functions created with `defineWorkflow()` that provide:
 ## Files
 
 - `workflows.ts` - Workflow definitions with TypeScript interfaces
-- `worker.ts` - Worker that registers workflows
-- `main.ts` - Demo script that runs workflows
+- `main.ts` - Starts Polos and runs the workflow demos
 
 ## Running the Example
 
@@ -47,12 +46,7 @@ Workflows are functions created with `defineWorkflow()` that provide:
    # Edit .env with your project ID
    ```
 
-4. Run the worker in one terminal:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the demo in another terminal:
+4. Run the example:
    ```bash
    npx tsx main.ts
    ```
@@ -141,21 +135,20 @@ const timestamp = await ctx.step.now('current_time');
 const result = await ctx.step.invokeAndWait('step_key', childWorkflow, payload);
 ```
 
-## Running Workflows from Client
+## Running Workflows
 
 ```typescript
-import { PolosClient } from '@polos/sdk';
+import { Polos } from '@polos/sdk';
 import { simpleWorkflow } from './workflows.js';
 
-const client = new PolosClient({
-  projectId: '...',
-  apiUrl: 'http://localhost:8080',
-});
+const polos = new Polos();
+await polos.start();
 
 // Invoke workflow and wait for result
-const handle = await client.invoke(simpleWorkflow, { name: 'Alice' });
-const result = await handle.getResult();
+const result = await simpleWorkflow.run(polos, { name: 'Alice' });
 console.log(result); // { message: "Hello, Alice!" }
+
+await polos.stop();
 ```
 
 ## Workflow Context

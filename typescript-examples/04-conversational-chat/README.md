@@ -13,8 +13,7 @@ This example demonstrates an interactive chat agent with tools, streaming respon
 
 - `agents.ts` - Chat assistant agent definition with tools
 - `tools.ts` - Tool definitions (get_current_time, get_weather, calculator)
-- `worker.ts` - Worker that registers and runs the agent and tools
-- `chat.ts` - Interactive chat client with streaming
+- `chat.ts` - Starts Polos and runs the interactive chat with streaming
 
 ## Running the Example
 
@@ -34,12 +33,7 @@ This example demonstrates an interactive chat agent with tools, streaming respon
    # Edit .env with your settings
    ```
 
-4. Run the worker:
-   ```bash
-   npx tsx worker.ts
-   ```
-
-5. Run the chat client:
+4. Run the chat:
    ```bash
    npx tsx chat.ts
    ```

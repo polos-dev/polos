@@ -6,6 +6,9 @@ container isolation: every shell command suspends for user approval.
 
 File operations (read, write, edit) use path_restriction to prevent
 the agent from accessing files outside the workspace directory.
+
+The sandbox lifecycle is fully managed -- the environment is created
+lazily on first tool use and cleaned up when the execution completes.
 """
 
 import os

@@ -80,7 +80,10 @@ class DockerEnvironmentConfig(BaseModel):
     """Configuration for a Docker execution environment."""
 
     image: str = Field(description='Docker image to use (e.g., "node:20-slim")')
-    workspace_dir: str = Field(description="Host directory to mount as workspace")
+    workspace_dir: str | None = Field(
+        default=None,
+        description="Host directory to mount as workspace (auto-managed when omitted)",
+    )
     container_workdir: str | None = Field(
         default=None, description='Working directory inside the container (default: "/workspace")'
     )
@@ -141,11 +144,27 @@ class ExecToolConfig(BaseModel):
     )
 
 
+SandboxScope = Literal["execution", "session"]
+
+
 class SandboxToolsConfig(BaseModel):
     """Configuration for the sandbox_tools() factory."""
 
     env: Literal["local", "docker", "e2b"] | None = Field(
         default=None, description='Environment type (default: "docker")'
+    )
+    scope: SandboxScope | None = Field(
+        default=None,
+        description='Sandbox lifecycle scope (default: "execution"). '
+        '"session" reuses the sandbox across executions sharing the same session_id.',
+    )
+    id: str | None = Field(
+        default=None, description="Custom sandbox ID (auto-generated if not provided)"
+    )
+    idle_destroy_timeout: str | None = Field(
+        default=None,
+        description='Idle timeout before session-scoped sandbox is destroyed (default: "1h"). '
+        'Supports "30m", "1h", "3d" format.',
     )
     cwd: str | None = Field(default=None, description="Working directory override")
     tools: list[Literal["exec", "read", "write", "edit", "glob", "grep"]] | None = Field(

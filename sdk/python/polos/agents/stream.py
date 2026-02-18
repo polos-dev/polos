@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from ..core.context import AgentContext
 from ..core.workflow import _WORKFLOW_REGISTRY
 from ..llm import _llm_generate, _llm_stream
+from ..llm.providers import get_provider
 from ..memory.compaction import build_summary_messages, compact_if_needed
 from ..memory.session_memory import get_session_memory, put_session_memory
 from ..memory.types import CompactionConfig, NormalizedCompactionConfig
@@ -154,7 +155,19 @@ async def _agent_stream_function(ctx: AgentContext, payload: dict[str, Any]) -> 
                 summary_msgs = build_summary_messages(current_summary)
                 conversation_messages.extend(summary_msgs)
             if loaded.get("messages"):
-                conversation_messages.extend(loaded["messages"])
+                # Convert normalized session messages to provider format
+                # so function_call/function_call_output messages get proper
+                # role fields before being sent to the LLM.
+                provider_name = getattr(agent_config, "provider", "") or ""
+                provider_kwargs: dict[str, Any] = {}
+                if getattr(agent_config, "provider_llm_api", None):
+                    provider_kwargs["llm_api"] = agent_config.provider_llm_api
+                try:
+                    provider = get_provider(provider_name, **provider_kwargs)
+                    provider_messages = provider.convert_history_messages(loaded["messages"])
+                except Exception:
+                    provider_messages = loaded["messages"]
+                conversation_messages.extend(provider_messages)
                 session_messages.extend(loaded["messages"])
 
     # Add current input to conversation

@@ -57,6 +57,69 @@ class OpenAIProvider(LLMProvider):
         # This is used when llm_api is "chat_completions"
         self.supports_structured_output = True  # Can be overridden by subclasses
 
+    def convert_history_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert normalized session memory messages to OpenAI format.
+
+        The Responses API natively accepts our normalized format
+        (``function_call`` / ``function_call_output`` items), so no
+        conversion is needed.
+
+        The Chat Completions API requires role-based messages, so we
+        group consecutive ``function_call`` messages into a single
+        ``{role: "assistant", tool_calls: [...]}`` and convert each
+        ``function_call_output`` into ``{role: "tool", ...}``.
+        """
+        if self.llm_api == "responses":
+            # Responses API accepts function_call / function_call_output
+            # items directly — no conversion needed.
+            return messages
+
+        # Chat Completions format conversion
+        result: list[dict[str, Any]] = []
+
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            msg_type = msg.get("type")
+
+            if msg_type == "function_call":
+                # Collect consecutive function_call messages into one
+                # assistant message with tool_calls.
+                tool_calls: list[dict[str, Any]] = []
+                while i < len(messages) and messages[i].get("type") == "function_call":
+                    fc = messages[i]
+                    tool_calls.append(
+                        {
+                            "id": fc.get("call_id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": fc.get("name", ""),
+                                "arguments": fc.get("arguments", "{}"),
+                            },
+                        }
+                    )
+                    i += 1
+                result.append({"role": "assistant", "tool_calls": tool_calls})
+
+            elif msg_type == "function_call_output":
+                # Each function_call_output becomes a separate tool message.
+                output = msg.get("output", "")
+                result.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.get("call_id", ""),
+                        "content": output if isinstance(output, str) else json.dumps(output),
+                    }
+                )
+                i += 1
+
+            else:
+                # Regular message (role-based) — pass through.
+                result.append(msg)
+                i += 1
+
+        return result
+
     async def generate(
         self,
         messages: list[dict[str, Any]],

@@ -110,7 +110,11 @@ class DockerEnvironment(ExecutionEnvironment):
         self._container_id: str | None = None
         self._max_output_chars = max_output_chars or DEFAULT_MAX_OUTPUT_CHARS
 
-    async def initialize(self) -> None:
+    def get_container_name(self) -> str:
+        """Return the Docker container name."""
+        return self._container_name
+
+    async def initialize(self, labels: dict[str, str] | None = None) -> None:
         args = [
             "run",
             "-d",
@@ -131,6 +135,10 @@ class DockerEnvironment(ExecutionEnvironment):
         if self._config.env:
             for key, value in self._config.env.items():
                 args.extend(["-e", f"{key}={value}"])
+
+        if labels:
+            for key, value in labels.items():
+                args.extend(["--label", f"{key}={value}"])
 
         args.extend([self._config.image, "sleep", "infinity"])
 

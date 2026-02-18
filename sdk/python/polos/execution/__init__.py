@@ -12,6 +12,8 @@ from .local import LocalEnvironment
 
 # Output utilities
 from .output import is_binary, parse_grep_output, strip_ansi, truncate_output
+from .sandbox import ManagedSandbox, Sandbox, SandboxScope
+from .sandbox_manager import SandboxManager, parse_duration
 from .sandbox_tools import SandboxToolsResult, sandbox_tools
 
 # Security utilities
@@ -44,6 +46,12 @@ __all__ = [
     # Main entry point
     "sandbox_tools",
     "SandboxToolsResult",
+    # Sandbox lifecycle
+    "ManagedSandbox",
+    "Sandbox",
+    "SandboxScope",
+    "SandboxManager",
+    "parse_duration",
     # Types
     "ExecutionEnvironment",
     "ExecOptions",

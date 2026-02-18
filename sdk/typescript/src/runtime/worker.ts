@@ -772,6 +772,7 @@ export class Worker {
     }
 
     let result: ExecutionResult | undefined;
+    let retryableFailure = true;
 
     try {
       // Build execution context
@@ -805,6 +806,9 @@ export class Worker {
 
       // Handle result
       await this.handleExecutionResult(executionId, workflowId, context, result);
+      // Cancelled and successful executions are not retryable.
+      // For non-waiting failures reported via result (not thrown), check result.retryable.
+      retryableFailure = !result.success && !result.waiting && (result.retryable ?? true);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
@@ -813,6 +817,7 @@ export class Worker {
       const retryable =
         !(error instanceof StepExecutionError) && workflow.config.workflowType !== 'tool';
 
+      retryableFailure = retryable;
       logger.error(`Execution failed: ${executionId}`, { error: errorMessage, stack });
       await this.reportFailure(executionId, errorMessage, retryable, stack);
     } finally {
@@ -820,7 +825,8 @@ export class Worker {
       this.activeExecutions.delete(executionId);
 
       // Notify sandbox manager — but NOT if execution is suspended (waiting)
-      if (!result?.waiting) {
+      // or if the failure is retryable (orchestrator will re-dispatch).
+      if (!result?.waiting && !retryableFailure) {
         try {
           await this.sandboxManager.onExecutionComplete(executionId);
         } catch (err) {

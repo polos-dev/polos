@@ -1,8 +1,9 @@
 """Sandbox tools factory.
 
 Creates a set of tools (exec, read, write, edit, glob, grep) that share
-a lazily-initialized execution environment via closure. The environment
-is created on first tool use and reused for all subsequent calls.
+a lazily-initialized execution environment via the ``SandboxManager``
+from the Worker execution context. The environment is created on first
+tool use and reused for all subsequent calls within the same execution.
 
 Example::
 
@@ -12,10 +13,7 @@ Example::
         id="solver",
         tools=sandbox_tools(SandboxToolsConfig(
             env="docker",
-            docker=DockerEnvironmentConfig(
-                image="node:20",
-                workspace_dir="/path/to/project",
-            ),
+            docker=DockerEnvironmentConfig(image="node:20"),
         )),
     )
 """
@@ -23,12 +21,10 @@ Example::
 from __future__ import annotations
 
 import asyncio
-import os
 
+from ..core.workflow import _execution_context
 from ..tools.tool import Tool
-from .docker import DockerEnvironment
 from .environment import ExecutionEnvironment
-from .local import LocalEnvironment
 from .tools.edit import create_edit_tool
 from .tools.exec import create_exec_tool
 from .tools.glob import create_glob_tool
@@ -37,7 +33,6 @@ from .tools.path_approval import PathRestrictionConfig
 from .tools.read import create_read_tool
 from .tools.write import create_write_tool
 from .types import (
-    DockerEnvironmentConfig,
     ExecToolConfig,
     SandboxToolsConfig,
 )
@@ -51,44 +46,13 @@ class SandboxToolsResult(list):
         ...
 
 
-def _create_environment(config: SandboxToolsConfig | None) -> ExecutionEnvironment:
-    """Create an execution environment from config.
-
-    Args:
-        config: Sandbox tools configuration.
-
-    Returns:
-        An ExecutionEnvironment instance (not yet initialized).
-
-    Raises:
-        ValueError: If environment type is unknown or not yet implemented.
-    """
-    env_type = (config.env if config else None) or "docker"
-
-    if env_type == "docker":
-        docker_config = (config.docker if config else None) or DockerEnvironmentConfig(
-            image="node:20-slim",
-            workspace_dir=os.getcwd(),
-        )
-        max_output_chars = config.exec.max_output_chars if (config and config.exec) else None
-        return DockerEnvironment(docker_config, max_output_chars)
-    elif env_type == "e2b":
-        raise NotImplementedError("E2B environment is not yet implemented.")
-    elif env_type == "local":
-        local_config = config.local if config else None
-        max_output_chars = config.exec.max_output_chars if (config and config.exec) else None
-        return LocalEnvironment(local_config, max_output_chars)
-    else:
-        raise ValueError(f"Unknown environment type: {env_type}")
-
-
 def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResult:
     """Create sandbox tools for AI agents.
 
     Returns a list of Tool that can be passed directly to Agent().
-    All tools share a single execution environment that is lazily created on first use.
-
-    The returned list has a ``cleanup()`` method for destroying the environment.
+    All tools share a single execution environment managed by the
+    ``SandboxManager`` from the Worker execution context. The environment
+    is lazily created on first tool use.
 
     Args:
         config: Optional sandbox tools configuration.
@@ -96,34 +60,50 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     Returns:
         SandboxToolsResult -- a list of Tool instances with a cleanup() method.
     """
-    # Lazy environment -- created on first tool use
-    env: ExecutionEnvironment | None = None
-    env_future: asyncio.Task[ExecutionEnvironment] | None = None
+    # Cache by root_execution_id so the same sandbox is reused across
+    # sub-workflows within the same root execution.
+    _sandbox_cache: dict[str, ExecutionEnvironment] = {}
     _lock = asyncio.Lock()
 
     async def get_env() -> ExecutionEnvironment:
-        nonlocal env, env_future
+        exec_ctx = _execution_context.get()
+        if exec_ctx is None:
+            raise RuntimeError(
+                "sandbox_tools requires a Worker execution context. "
+                "Make sure this agent is running inside a Polos Worker."
+            )
 
-        if env is not None:
-            return env
+        sandbox_manager = exec_ctx.get("sandbox_manager")
+        if sandbox_manager is None:
+            raise RuntimeError(
+                "No SandboxManager found in execution context. "
+                "Make sure the Worker is configured with sandbox support."
+            )
 
+        execution_id = exec_ctx.get("execution_id", "")
+        root_execution_id = exec_ctx.get("root_execution_id", execution_id)
+        session_id = exec_ctx.get("session_id")
+
+        # Use root_execution_id as the stable key — tool sub-workflows each
+        # get their own execution_id, but they all share the same root.
+        cache_key = root_execution_id or execution_id
+        if cache_key in _sandbox_cache:
+            return _sandbox_cache[cache_key]
+
+        # Serialize creation to prevent parallel tool calls from spawning
+        # multiple containers for the same execution.
         async with _lock:
-            # Double-check after acquiring lock
-            if env is not None:
-                return env
+            if cache_key in _sandbox_cache:
+                return _sandbox_cache[cache_key]
 
-            if env_future is None:
-
-                async def _init() -> ExecutionEnvironment:
-                    nonlocal env
-                    created = _create_environment(config)
-                    await created.initialize()
-                    env = created
-                    return env
-
-                env_future = asyncio.ensure_future(_init())
-
-            return await env_future
+            sandbox = await sandbox_manager.get_or_create_sandbox(
+                config or SandboxToolsConfig(),
+                cache_key,
+                session_id,
+            )
+            sandbox_env = await sandbox.get_environment()
+            _sandbox_cache[cache_key] = sandbox_env
+            return sandbox_env
 
     # Validate environment type eagerly
     env_type = (config.env if config else None) or "docker"
@@ -173,11 +153,8 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     result = SandboxToolsResult(tools)
 
     async def _cleanup() -> None:
-        nonlocal env, env_future
-        if env is not None:
-            await env.destroy()
-            env = None
-            env_future = None
+        # Cleanup is handled by the SandboxManager; this is a no-op.
+        _sandbox_cache.clear()
 
     result.cleanup = _cleanup  # type: ignore[attr-defined]
 

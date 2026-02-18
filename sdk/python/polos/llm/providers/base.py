@@ -78,6 +78,19 @@ class LLMProvider(ABC):
         """
         pass
 
+    def convert_history_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert normalized session memory messages to provider format.
+
+        Session memory stores tool interactions in a provider-agnostic format:
+        - ``{type: "function_call", name, call_id, arguments}``
+        - ``{type: "function_call_output", call_id, output}``
+
+        This method converts them into the role-based messages each provider
+        expects. The default implementation is a no-op (returns as-is).
+        Providers that need conversion should override this.
+        """
+        return messages
+
     async def stream(
         self,
         messages: list[dict[str, Any]],

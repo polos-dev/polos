@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from ..agents.agent import Agent
 from ..core.step import ExecutionCancelledError
 from ..core.workflow import _WORKFLOW_REGISTRY, StepExecutionError, Workflow
+from ..execution.sandbox_manager import SandboxManager
 from ..features.tracing import shutdown_otel
 from ..features.wait import WaitException
 from ..tools.tool import Tool
@@ -225,6 +226,13 @@ class Worker:
                 self.workflows_registry[tool.id] = tool
                 self.tool_ids.append(tool.id)
 
+        # Sandbox lifecycle manager
+        self.sandbox_manager = SandboxManager(
+            worker_id="pending",  # Updated after registration
+            project_id=self.project_id,
+            orchestrator_client=client,
+        )
+
         # Worker state
         self.worker_id: str | None = None
         self.running = False
@@ -269,6 +277,9 @@ class Worker:
 
         # Mark worker as online after all registrations are complete
         await self._mark_online()
+
+        # Start sandbox idle sweep
+        self.sandbox_manager.start_sweep()
 
         self.running = True
 
@@ -347,6 +358,7 @@ class Worker:
             response.raise_for_status()
             data = response.json()
             self.worker_id = data["worker_id"]
+            self.sandbox_manager.set_worker_id(self.worker_id)
 
             logger.info("Registered: %s (mode: %s)", self.worker_id, self.mode)
         except Exception as error:
@@ -848,6 +860,7 @@ class Worker:
                 "otel_span_id": workflow_data.get("otel_span_id"),
                 "initial_state": workflow_data.get("initial_state"),
                 "run_timeout_seconds": run_timeout_seconds,
+                "sandbox_manager": self.sandbox_manager,
             }
 
             payload = workflow_data["payload"]
@@ -949,6 +962,15 @@ class Worker:
                 workflow_data["execution_id"], prepared_result, output_schema_name, final_state
             )
 
+            # Notify sandbox manager that execution completed
+            try:
+                await self.sandbox_manager.on_execution_complete(execution_id)
+            except Exception as sandbox_err:
+                logger.warning(
+                    "Failed to notify sandbox manager of execution completion: %s",
+                    sandbox_err,
+                )
+
         except WaitException as e:
             # WaitException is expected when a workflow waits for a sub-workflow
             # The orchestrator will resume the execution when the sub-workflow completes
@@ -962,6 +984,15 @@ class Worker:
             # catch, but handle it here too in case it propagates from a different path.
             logger.info("Execution %s was cancelled (cooperative)", execution_id)
             await self._handle_cancellation(execution_id, workflow_id, context)
+
+            # Cancelled executions won't be retried — destroy the sandbox.
+            try:
+                await self.sandbox_manager.on_execution_complete(execution_id)
+            except Exception as sandbox_err:
+                logger.warning(
+                    "Failed sandbox manager cleanup (cancellation): %s",
+                    sandbox_err,
+                )
             return
 
         except Exception as error:
@@ -986,6 +1017,19 @@ class Worker:
             await self._report_failure(
                 workflow_data["execution_id"], error_message, stack_trace, retryable=retryable
             )
+
+            # Notify sandbox manager only if failure is non-retryable.
+            # Retryable failures will be re-dispatched by the orchestrator,
+            # so keep the sandbox alive for the retry.
+            if not retryable:
+                try:
+                    await self.sandbox_manager.on_execution_complete(execution_id)
+                except Exception as sandbox_err:
+                    logger.warning(
+                        "Failed sandbox manager cleanup (failure): %s",
+                        sandbox_err,
+                    )
+
             raise
 
     def _setup_worker_server(self):
@@ -1398,6 +1442,13 @@ class Worker:
                 await self.heartbeat_task
         except asyncio.CancelledError:
             pass
+
+        # Stop sandbox sweep and destroy all sandboxes
+        self.sandbox_manager.stop_sweep()
+        try:
+            await self.sandbox_manager.destroy_all()
+        except Exception as e:
+            logger.error("Error destroying sandboxes: %s", e)
 
         # Close HTTP client
         if hasattr(self, "client") and self.client:

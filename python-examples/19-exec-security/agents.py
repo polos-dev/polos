@@ -4,9 +4,10 @@ The exec tool is configured with an allowlist: commands matching the
 patterns run immediately, everything else suspends for user approval.
 The user can approve, reject, or reject with feedback so the agent
 can adjust its approach.
-"""
 
-import os
+The sandbox lifecycle is fully managed -- the container is created lazily
+on first tool use and destroyed automatically when the execution completes.
+"""
 
 from polos import (
     Agent,
@@ -19,8 +20,6 @@ from polos import (
     create_ask_user_tool,
 )
 
-workspace_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
-
 # Sandbox tools with exec security -- only allowlisted commands run
 # without approval. Everything else suspends for the user to decide.
 tools = sandbox_tools(
@@ -28,7 +27,6 @@ tools = sandbox_tools(
         env="docker",
         docker=DockerEnvironmentConfig(
             image="node:20-slim",
-            workspace_dir=workspace_dir,
             network="bridge",
         ),
         exec=ExecToolConfig(

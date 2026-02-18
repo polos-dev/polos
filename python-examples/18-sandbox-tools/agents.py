@@ -3,9 +3,11 @@
 The agent gets access to exec, read, write, edit, glob, and grep tools
 that all operate inside an isolated Docker container with a bind-mounted
 workspace directory.
-"""
 
-import os
+The sandbox lifecycle is fully managed -- the container is created lazily
+on first tool use and destroyed automatically when the execution completes.
+The workspace directory defaults to POLOS_WORKSPACES_DIR/{projectId}/{sandboxId}.
+"""
 
 from polos import (
     Agent,
@@ -16,20 +18,20 @@ from polos import (
     DockerEnvironmentConfig,
 )
 
-# Workspace directory on the host -- gets mounted into the container at /workspace
-workspace_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
-
-# Create sandbox tools that run inside a Docker container
+# Create sandbox tools that run inside a Docker container.
+# Workspace directory is managed automatically -- set the POLOS_WORKSPACES_DIR
+# env var to override the base path (defaults to ~/.polos/workspaces).
 tools = sandbox_tools(
     SandboxToolsConfig(
         env="docker",
         docker=DockerEnvironmentConfig(
             image="node:20-slim",
-            workspace_dir=workspace_dir,
-            # setup_command="npm install",  # optional: run after container creation
-            # memory="512m",               # optional: limit container memory
-            # network="none",              # default: no network access
+            # workspace_dir="/path/to/project",  # optional: override managed default
+            # setup_command="npm install",        # optional: run after container creation
+            # memory="512m",                      # optional: limit container memory
+            # network="none",                     # optional: no network access
         ),
+        # scope="session",                        # optional: reuse sandbox across turns
     )
 )
 

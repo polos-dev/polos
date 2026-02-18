@@ -113,7 +113,8 @@ class LocalEnvironment(ExecutionEnvironment):
         self._cwd = os.path.abspath(self._config.cwd or os.getcwd())
         self._max_output_chars = max_output_chars or DEFAULT_MAX_OUTPUT_CHARS
 
-    async def initialize(self) -> None:
+    async def initialize(self, labels: dict[str, str] | None = None) -> None:
+        # Labels are ignored for local environments (no container to label)
         # Validate that the working directory exists
         if not os.path.exists(self._cwd):
             raise RuntimeError(f"Working directory does not exist: {self._cwd}")

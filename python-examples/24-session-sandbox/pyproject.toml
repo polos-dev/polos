@@ -1,7 +1,7 @@
 [project]
-name = "polos-exec-security"
+name = "polos-session-sandbox"
 version = "0.1.0"
-description = "Exec security example -- allowlist + interactive terminal approval for sandbox commands"
+description = "Session-scoped sandbox -- reuse a Docker container across multiple agent runs"
 requires-python = ">=3.10"
 dependencies = [
     "polos-sdk[anthropic]",

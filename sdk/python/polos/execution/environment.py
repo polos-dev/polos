@@ -55,8 +55,13 @@ class ExecutionEnvironment(ABC):
         ...
 
     @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the environment (create container, connect to sandbox, etc.)."""
+    async def initialize(self, labels: dict[str, str] | None = None) -> None:
+        """Initialize the environment (create container, connect to sandbox, etc.).
+
+        Args:
+            labels: Optional labels for lifecycle management (e.g., Docker container labels).
+                    Ignored by environments that don't support labels.
+        """
         ...
 
     @abstractmethod

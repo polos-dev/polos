@@ -130,6 +130,69 @@ class AnthropicProvider(LLMProvider):
         # Initialize Anthropic async client
         self.client = AsyncAnthropic(api_key=self.api_key)
 
+    def convert_history_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert normalized session memory messages to Anthropic format.
+
+        Groups consecutive function_call messages into a single assistant
+        message with tool_use content blocks, and consecutive
+        function_call_output messages into a single user message with
+        tool_result content blocks.
+        """
+        result: list[dict[str, Any]] = []
+
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            msg_type = msg.get("type")
+
+            if msg_type == "function_call":
+                # Collect consecutive function_call messages into one
+                # assistant message with tool_use content blocks.
+                tool_use_blocks: list[dict[str, Any]] = []
+                while i < len(messages) and messages[i].get("type") == "function_call":
+                    fc = messages[i]
+                    args_raw = fc.get("arguments", "{}")
+                    try:
+                        args_parsed = (
+                            json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        args_parsed = {}
+                    tool_use_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": fc.get("call_id", ""),
+                            "name": fc.get("name", ""),
+                            "input": args_parsed,
+                        }
+                    )
+                    i += 1
+                result.append({"role": "assistant", "content": tool_use_blocks})
+
+            elif msg_type == "function_call_output":
+                # Collect consecutive function_call_output messages into
+                # one user message with tool_result content blocks.
+                tool_result_blocks: list[dict[str, Any]] = []
+                while i < len(messages) and messages[i].get("type") == "function_call_output":
+                    fr = messages[i]
+                    output = fr.get("output", "")
+                    tool_result_blocks.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": fr.get("call_id", ""),
+                            "content": output if isinstance(output, str) else json.dumps(output),
+                        }
+                    )
+                    i += 1
+                result.append({"role": "user", "content": tool_result_blocks})
+
+            else:
+                # Regular message (role-based) — pass through.
+                result.append(msg)
+                i += 1
+
+        return result
+
     async def generate(
         self,
         messages: list[dict[str, Any]],

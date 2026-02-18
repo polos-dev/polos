@@ -250,6 +250,7 @@ class Workflow:
         otel_traceparent = context.get("otel_traceparent")
         otel_span_id = context.get("otel_span_id")
         cancel_event = context.get("cancel_event")
+        sandbox_manager = context.get("sandbox_manager")
 
         # Ensure execution_id is a string
         if execution_id:
@@ -349,9 +350,11 @@ class Workflow:
                     f"got {type(payload).__name__}"
                 )
 
-        return await self._execute_internal(workflow_ctx, prepared_payload)
+        return await self._execute_internal(workflow_ctx, prepared_payload, sandbox_manager)
 
-    async def _execute_internal(self, ctx: WorkflowContext, payload: Any) -> Any:
+    async def _execute_internal(
+        self, ctx: WorkflowContext, payload: Any, sandbox_manager: Any = None
+    ) -> Any:
         """Internal execution method with shared logic for workflows and agents.
 
         This method handles:
@@ -439,6 +442,8 @@ class Workflow:
             exec_context["_otel_trace_id"] = format(span_context.trace_id, "032x")
             exec_context["_otel_span_id"] = format(span_context.span_id, "016x")
             exec_context["state"] = ctx.state  # Store workflow_ctx for worker to access final_state
+            if sandbox_manager is not None:
+                exec_context["sandbox_manager"] = sandbox_manager
             token = _execution_context.set(exec_context)
 
             # Topic for workflow events

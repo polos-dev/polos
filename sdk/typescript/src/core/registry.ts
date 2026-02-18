@@ -111,6 +111,11 @@ export function createWorkflowRegistry(): WorkflowRegistry {
 
 /**
  * Global workflow registry instance.
- * Used for automatic workflow registration when using defineWorkflow.
+ * Uses globalThis so that ESM and CJS entry points share the same singleton
+ * (avoids the dual-package hazard when both dist/index.js and dist/index.cjs
+ * are loaded in the same process, e.g. via tsx).
  */
-export const globalRegistry = createWorkflowRegistry();
+const REGISTRY_KEY = '__polos_global_registry__';
+export const globalRegistry: WorkflowRegistry = ((globalThis as Record<string, unknown>)[
+  REGISTRY_KEY
+] ??= createWorkflowRegistry()) as WorkflowRegistry;

@@ -39,8 +39,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "tsx --test src/**/*.test.ts",
-    "test:watch": "tsx --test --watch src/**/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts",
+    "test:watch": "tsx --test --watch src/*.test.ts src/**/*.test.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.ts\"",

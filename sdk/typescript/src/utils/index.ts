@@ -11,12 +11,14 @@ export { retry, createRetry, calculateDelay, sleep, type RetryOptions } from './
 
 export {
   createLogger,
+  configureLogging,
   logger,
   type Logger,
   type LogLevel,
   type LogContext,
   type LogEntry,
   type LoggerOptions,
+  type ConfigureLoggingOptions,
 } from './logger.js';
 
 export {

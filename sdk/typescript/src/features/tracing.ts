@@ -389,6 +389,27 @@ export function getTracer(): Tracer | undefined {
 }
 
 /**
+ * Flush pending spans and shut down the OpenTelemetry tracer provider.
+ *
+ * Must be called during worker shutdown before the process exits so that
+ * the BatchSpanProcessor exports any remaining spans.
+ */
+export async function shutdownOtel(): Promise<void> {
+  if (!_tracerProvider) return;
+
+  try {
+    await _tracerProvider.forceFlush();
+    await _tracerProvider.shutdown();
+  } catch (e) {
+    logger.warn(`Error during OpenTelemetry shutdown: ${String(e)}`);
+  } finally {
+    _tracerProvider = undefined;
+    _tracer = undefined;
+    _initialized = false;
+  }
+}
+
+/**
  * Get the current span from OTel context.
  */
 export function getCurrentSpan(): Span | undefined {

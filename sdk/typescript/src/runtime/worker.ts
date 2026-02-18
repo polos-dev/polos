@@ -26,7 +26,7 @@ import {
 import { WorkerServer, type WorkerExecutionData } from './worker-server.js';
 import { executeWorkflow, serializeFinalState, type ExecutionResult } from './executor.js';
 import { createLogger } from '../utils/logger.js';
-import { initializeOtel } from '../features/tracing.js';
+import { initializeOtel, shutdownOtel } from '../features/tracing.js';
 import { getModelId, getModelProvider } from '../llm/types.js';
 
 const logger = createLogger({ name: 'worker' });
@@ -171,74 +171,9 @@ export class Worker {
       throw new Error(`Cannot start worker: current state is ${this.state}`);
     }
 
-    this.state = 'starting';
-
     try {
-      logger.info('Starting worker...');
-      logger.info(`Deployment ID: ${this.config.deploymentId}`);
-      logger.info(`Orchestrator: ${this.config.apiUrl}`);
-      logger.info(`Workflows: ${Array.from(this.workflowRegistry.keys()).join(', ')}`);
-
-      // Initialize OpenTelemetry tracing
-      initializeOtel({
-        apiUrl: this.config.apiUrl,
-        apiKey: this.config.apiKey,
-        projectId: this.config.projectId,
-      });
-
-      // Step 1: Register worker with orchestrator
-      await this.register();
-
-      // Step 2: Register deployment
-      await this.registerDeployment();
-
-      // Step 3: Register agents, tools, and workflows
-      await this.registerAgents();
-      await this.registerTools();
-      await this.registerWorkflows();
-
-      // Step 4: Register queues (non-fatal)
-      try {
-        await this.registerQueues();
-      } catch (error) {
-        logger.warn('Failed to register queues', { error: String(error) });
-      }
-
-      // Step 5: Mark worker as online (non-fatal)
-      try {
-        await this.markOnline();
-      } catch (error) {
-        logger.warn('Failed to mark worker as online', { error: String(error) });
-      }
-
-      // Step 6: Setup worker server
-      await this.setupWorkerServer();
-
-      // Step 7: Start heartbeat loop
-      this.startHeartbeat();
-
-      this.state = 'running';
-      logger.info('Worker is running');
-
-      // Register signal handlers for graceful shutdown
-      const signalHandler = (): void => {
-        void this.shutdown();
-      };
-      process.on('SIGINT', signalHandler);
-      process.on('SIGTERM', signalHandler);
-      this.signalHandler = signalHandler;
-
-      // Keep running until shutdown is called
-      await new Promise<void>((resolve) => {
-        const checkState = (): void => {
-          if (this.state === 'stopping' || this.state === 'stopped') {
-            resolve();
-          } else {
-            setTimeout(checkState, 100);
-          }
-        };
-        checkState();
-      });
+      await this.registerAll();
+      await this.runServer();
     } catch (error) {
       this.state = 'stopped';
       logger.error('Failed to start worker', { error: String(error) });
@@ -247,10 +182,90 @@ export class Worker {
   }
 
   /**
+   * Phase 1: Initialize tracing and register with orchestrator.
+   * @internal
+   */
+  async registerAll(): Promise<void> {
+    this.state = 'starting';
+
+    logger.info('Starting worker...');
+    logger.info(`Deployment ID: ${this.config.deploymentId}`);
+    logger.info(`Orchestrator: ${this.config.apiUrl}`);
+    logger.info(`Workflows: ${Array.from(this.workflowRegistry.keys()).join(', ')}`);
+
+    // Initialize OpenTelemetry tracing
+    initializeOtel({
+      apiUrl: this.config.apiUrl,
+      apiKey: this.config.apiKey,
+      projectId: this.config.projectId,
+    });
+
+    // Step 1: Register worker with orchestrator
+    await this.register();
+
+    // Step 2: Register deployment
+    await this.registerDeployment();
+
+    // Step 3: Register agents, tools, and workflows
+    await this.registerAgents();
+    await this.registerTools();
+    await this.registerWorkflows();
+
+    // Step 4: Register queues (non-fatal)
+    try {
+      await this.registerQueues();
+    } catch (error) {
+      logger.warn('Failed to register queues', { error: String(error) });
+    }
+
+    // Step 5: Mark worker as online (non-fatal)
+    try {
+      await this.markOnline();
+    } catch (error) {
+      logger.warn('Failed to mark worker as online', { error: String(error) });
+    }
+  }
+
+  /**
+   * Phase 2: Start worker server, heartbeat, and signal handlers (blocks until shutdown).
+   * @internal
+   */
+  async runServer(): Promise<void> {
+    // Setup worker server
+    await this.setupWorkerServer();
+
+    // Start heartbeat loop
+    this.startHeartbeat();
+
+    this.state = 'running';
+    logger.info('Worker is running');
+
+    // Register signal handlers for graceful shutdown
+    const signalHandler = (): void => {
+      void this.shutdown();
+    };
+    process.on('SIGINT', signalHandler);
+    process.on('SIGTERM', signalHandler);
+    this.signalHandler = signalHandler;
+
+    // Keep running until shutdown is called
+    await new Promise<void>((resolve) => {
+      const checkState = (): void => {
+        if (this.state === 'stopping' || this.state === 'stopped') {
+          resolve();
+        } else {
+          setTimeout(checkState, 100);
+        }
+      };
+      checkState();
+    });
+  }
+
+  /**
    * Gracefully shutdown the worker.
    */
   async shutdown(): Promise<void> {
-    if (this.state !== 'running') {
+    if (this.state === 'stopped' || this.state === 'stopping') {
       logger.warn(`Cannot shutdown worker: current state is ${this.state}`);
       return;
     }
@@ -293,6 +308,9 @@ export class Worker {
       await this.workerServer.stop();
       this.workerServer = null;
     }
+
+    // Flush pending spans before marking as stopped
+    await shutdownOtel();
 
     this.state = 'stopped';
     logger.info('Worker shutdown complete');

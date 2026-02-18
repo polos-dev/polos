@@ -2,6 +2,8 @@
  * Simple structured logging utility.
  */
 
+import { appendFileSync } from 'node:fs';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
@@ -29,10 +31,17 @@ export interface LoggerOptions {
   handler?: ((entry: LogEntry) => void) | undefined;
 }
 
+export interface ConfigureLoggingOptions {
+  /** Custom log handler for all SDK loggers */
+  handler?: ((entry: LogEntry) => void) | undefined;
+  /** Path to a log file. SDK logs will be appended to this file instead of stdout. */
+  file?: string | undefined;
+}
+
 /**
- * Default log handler that writes to console.
+ * Console log handler.
  */
-function defaultHandler(entry: LogEntry): void {
+function consoleHandler(entry: LogEntry): void {
   const prefix = `[${entry.timestamp}] ${entry.level.toUpperCase()}`;
   const message = entry.context
     ? `${prefix}: ${entry.message} ${JSON.stringify(entry.context)}`
@@ -51,6 +60,47 @@ function defaultHandler(entry: LogEntry): void {
     case 'error':
       console.error(message);
       break;
+  }
+}
+
+/**
+ * The active global handler. All SDK loggers created with the default handler
+ * delegate to this, so calling `configureLogging()` retroactively redirects them.
+ */
+let _activeHandler: (entry: LogEntry) => void = consoleHandler;
+
+/**
+ * Default handler that delegates to the mutable `_activeHandler`.
+ * This is the handler captured by module-level loggers at import time.
+ */
+function defaultHandler(entry: LogEntry): void {
+  _activeHandler(entry);
+}
+
+/**
+ * Configure logging for all SDK loggers globally.
+ *
+ * @example
+ * ```typescript
+ * // Redirect all SDK logs to a file
+ * configureLogging({ file: 'polos.log' });
+ *
+ * // Use a custom handler
+ * configureLogging({ handler: (entry) => myLogger.log(entry) });
+ * ```
+ */
+export function configureLogging(options: ConfigureLoggingOptions): void {
+  if (options.handler) {
+    _activeHandler = options.handler;
+  } else if (options.file) {
+    const filePath = options.file;
+    _activeHandler = (entry: LogEntry) => {
+      const prefix = `[${entry.timestamp}] ${entry.level.toUpperCase()}`;
+      const line = entry.context
+        ? `${prefix}: ${entry.message} ${JSON.stringify(entry.context)}\n`
+        : `${prefix}: ${entry.message}\n`;
+      appendFileSync(filePath, line);
+    };
   }
 }
 

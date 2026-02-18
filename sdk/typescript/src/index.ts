@@ -15,6 +15,9 @@ export {
   type SchedulePayload,
 } from './client.js';
 
+// Unified Polos class
+export { Polos, type PolosConfig } from './polos.js';
+
 // Execution Handle
 export { ExecutionHandle, type ExecutionHandleFields } from './execution-handle.js';
 
@@ -246,7 +249,14 @@ export type {
 } from './types/events.js';
 
 // Utilities
-export { retry, sleep, createLogger, type Logger } from './utils/index.js';
+export {
+  retry,
+  sleep,
+  createLogger,
+  configureLogging,
+  type Logger,
+  type ConfigureLoggingOptions,
+} from './utils/index.js';
 
 // Features - Tracing
 export {

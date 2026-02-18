@@ -52,6 +52,7 @@ from .features.events import BatchEventPayload, EventPayload
 from .features.schedules import SchedulePayload
 from .middleware.guardrail import GuardrailContext, GuardrailResult, guardrail
 from .middleware.hook import HookAction, HookContext, HookResult, hook
+from .polos import Polos
 from .runtime.batch import batch_agent_invoke, batch_invoke
 from .runtime.client import ExecutionHandle, PolosClient
 from .runtime.queue import Queue, queue
@@ -78,6 +79,7 @@ from .types.types import (
 )
 
 __all__ = [
+    "Polos",
     "workflow",
     "Workflow",
     "get_workflow",

@@ -23,6 +23,7 @@ class WorkerServer:
         on_cancel_requested: Callable[[str], Awaitable[bool]] | None = None,
         port: int = 8000,
         local_mode: bool = False,
+        log_file: str | None = None,
     ):
         """
         Initialize worker server.
@@ -33,6 +34,8 @@ class WorkerServer:
             on_cancel_requested: Optional async callback function to handle cancel
                 requests (execution_id)
             port: Port to run the server on
+            log_file: Path to log file. When set, uvicorn logs are written here
+                instead of stdout/stderr.
         """
         self.worker_id = worker_id
         self.max_concurrent_workflows = max_concurrent_workflows
@@ -41,6 +44,7 @@ class WorkerServer:
         self.port = port
         self.current_execution_count = 0
         self.local_mode = local_mode
+        self.log_file = log_file
         self.app: FastAPI | None = None
         self.server: uvicorn.Server | None = None
         self._setup_app()
@@ -222,6 +226,20 @@ class WorkerServer:
         from uvicorn.config import LOGGING_CONFIG
 
         logging_config = copy.deepcopy(LOGGING_CONFIG)
+
+        # When log_file is set, replace uvicorn's stream handlers with file handlers
+        if self.log_file:
+            logging_config["handlers"]["default"] = {
+                "formatter": "default",
+                "class": "logging.FileHandler",
+                "filename": self.log_file,
+            }
+            logging_config["handlers"]["access"] = {
+                "formatter": "access",
+                "class": "logging.FileHandler",
+                "filename": self.log_file,
+            }
+
         # Configure root logger to capture all application logs
         if "" not in logging_config["loggers"]:
             logging_config["loggers"][""] = {}

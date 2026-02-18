@@ -470,6 +470,27 @@ def initialize_otel():
         _tracer = trace.NoOpTracer()
 
 
+def shutdown_otel():
+    """Flush pending spans and shut down the OpenTelemetry tracer provider.
+
+    Must be called before the worker context is torn down so that the
+    DatabaseSpanExporter can still reach the PolosClient.
+    """
+    global _tracer_provider, _tracer
+
+    if _tracer_provider is None:
+        return
+
+    try:
+        _tracer_provider.force_flush(timeout_millis=5000)
+        _tracer_provider.shutdown()
+    except Exception as e:
+        logger.warning(f"Error during OpenTelemetry shutdown: {e}")
+    finally:
+        _tracer_provider = None
+        _tracer = None
+
+
 def get_current_span() -> Span | None:
     """Get the current active span."""
     if not OTELEMETRY_AVAILABLE:

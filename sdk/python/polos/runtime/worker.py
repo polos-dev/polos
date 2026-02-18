@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from ..agents.agent import Agent
 from ..core.step import ExecutionCancelledError
 from ..core.workflow import _WORKFLOW_REGISTRY, StepExecutionError, Workflow
+from ..features.tracing import shutdown_otel
 from ..features.wait import WaitException
 from ..tools.tool import Tool
 from ..utils.config import is_localhost_url
@@ -77,6 +78,7 @@ class Worker:
         max_concurrent_workflows: int | None = None,
         mode: str = "push",  # "push" or "pull"
         worker_server_url: str | None = None,  # Required if mode="push"
+        log_file: str | None = None,
     ):
         """
         Initialize worker.
@@ -117,6 +119,7 @@ class Worker:
         local_mode_requested = os.getenv("POLOS_LOCAL_MODE", "False").lower() == "true"
         is_localhost = is_localhost_url(self.api_url)
         self.local_mode = local_mode_requested and is_localhost
+        self.log_file = log_file
 
         if local_mode_requested and not is_localhost:
             logger.warning(
@@ -235,6 +238,16 @@ class Worker:
     async def run(self):
         """Run the worker (blocks until shutdown)."""
         logger.info("Starting worker...")
+        await self._register_all()
+        await self._run_server()
+
+    async def _register_all(self):
+        """Phase 1: Register with orchestrator (all HTTP setup calls).
+
+        Creates the HTTP client, registers the worker, deployment, agents, tools,
+        workflows, and queues, then marks the worker as online. After this method
+        returns, the worker is fully registered and ready to receive work.
+        """
         logger.info("Deployment ID: %s", self.deployment_id)
         logger.info("Orchestrator: %s", self.api_url)
 
@@ -262,6 +275,14 @@ class Worker:
         # Register this worker instance so client.py can reuse its HTTP client
         # and so features can access the client
         set_current_worker(self)
+
+    async def _run_server(self):
+        """Phase 2: Start server + heartbeat (blocks until shutdown).
+
+        Sets up signal handlers, then starts the FastAPI server (push mode) or
+        poll loop (pull mode) along with the heartbeat loop. Blocks until
+        shutdown is triggered via SIGINT/SIGTERM.
+        """
 
         # Setup signal handlers
         def signal_handler(sig):
@@ -993,6 +1014,7 @@ class Worker:
             on_work_received=on_work_received,
             on_cancel_requested=on_cancel_requested,
             local_mode=self.local_mode,
+            log_file=self.log_file,
         )
 
         logger.info("Worker server initialized")
@@ -1347,8 +1369,9 @@ class Worker:
 
         # Cancel tasks
         if self.mode == "push":
-            if self.worker_server_task:
-                self.worker_server_task.cancel()
+            # Don't cancel - uvicorn is already shutting down gracefully
+            # via worker_server.shutdown(). Just wait for it to finish.
+            pass
         else:
             if self.poll_task:
                 self.poll_task.cancel()
@@ -1356,12 +1379,12 @@ class Worker:
         if self.heartbeat_task:
             self.heartbeat_task.cancel()
 
-        # Wait for cancellation
+        # Wait for tasks to finish
         if self.mode == "push":
             try:
                 if self.worker_server_task:
-                    await self.worker_server_task
-            except asyncio.CancelledError:
+                    await asyncio.wait_for(self.worker_server_task, timeout=10)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
         else:
             try:
@@ -1382,6 +1405,9 @@ class Worker:
                 await self.client.aclose()
             except Exception as e:
                 logger.error("Error closing HTTP client: %s", e)
+
+        # Flush pending spans while the worker context is still available
+        shutdown_otel()
 
         # Unregister this worker instance
         set_current_worker(None)

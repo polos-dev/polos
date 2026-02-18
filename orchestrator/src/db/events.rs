@@ -206,7 +206,9 @@ impl Database {
         let result = sqlx::query_scalar::<_, i64>(
             r#"
         WITH waiting_for_events AS (
-            -- Find one execution waiting for an event (suspend or wait_for_event)
+            -- Find one execution waiting for an event that has a matching event available.
+            -- The EXISTS check prevents head-of-line blocking: wait_steps without
+            -- a matching event are skipped so they don't block newer, resolvable ones.
             SELECT
                 ws.execution_id,
                 ws.step_key,
@@ -220,6 +222,19 @@ impl Database {
               AND ws.wait_type IN ('event', 'suspend')
               AND ws.wait_topic IS NOT NULL
               AND ws.step_key IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM events ev
+                  WHERE ev.topic = ws.wait_topic
+                    AND ev.status = 'valid'
+                    AND ev.project_id = e.project_id
+                    AND ev.created_at >= ws.created_at
+                    AND (
+                        (ws.wait_type = 'suspend' AND ev.event_type = 'resume_' || ws.step_key)
+                        OR
+                        (ws.wait_type = 'event')
+                    )
+                  LIMIT 1
+              )
             ORDER BY ws.created_at ASC  -- Process oldest waits first
             LIMIT 1
             FOR UPDATE OF ws SKIP LOCKED

@@ -33,6 +33,7 @@ import type {
   ConversationMessage,
   SessionMemoryResponse,
   PutSessionMemoryRequest,
+  GetActiveWorkersResponse,
 } from './orchestrator-types.js';
 
 import type { StreamEvent } from '../types/events.js';
@@ -225,6 +226,15 @@ export class OrchestratorClient {
         push_endpoint_url: request.pushEndpointUrl,
       },
     });
+  }
+
+  /**
+   * Get active worker IDs for the current project.
+   * Uses the X-Project-ID header already set on all requests.
+   */
+  async getActiveWorkerIds(): Promise<string[]> {
+    const response = await this.request<GetActiveWorkersResponse>('GET', '/api/v1/workers/active');
+    return response.worker_ids;
   }
 
   /**

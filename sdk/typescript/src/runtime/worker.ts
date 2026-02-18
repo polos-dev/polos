@@ -25,6 +25,7 @@ import {
 } from './orchestrator-client.js';
 import { WorkerServer, type WorkerExecutionData } from './worker-server.js';
 import { executeWorkflow, serializeFinalState, type ExecutionResult } from './executor.js';
+import { SandboxManager } from '../execution/sandbox-manager.js';
 import { createLogger } from '../utils/logger.js';
 import { initializeOtel, shutdownOtel } from '../features/tracing.js';
 import { getModelId, getModelProvider } from '../llm/types.js';
@@ -100,6 +101,9 @@ export class Worker {
   private readonly workerServerUrl: string;
   private readonly port: number;
 
+  /** Sandbox manager for managed sandbox lifecycle. */
+  readonly sandboxManager: SandboxManager;
+
   private workerId: string | null = null;
   private workerServer: WorkerServer | null = null;
   private state: WorkerState = 'stopped';
@@ -123,6 +127,8 @@ export class Worker {
       timeout: config.timeout,
     };
     this.orchestratorClient = new OrchestratorClient(clientConfig);
+
+    this.sandboxManager = new SandboxManager('', config.projectId, this.orchestratorClient);
 
     // Register workflows
     if (config.workflows) {
@@ -202,6 +208,10 @@ export class Worker {
 
     // Step 1: Register worker with orchestrator
     await this.register();
+
+    // Initialize sandbox manager with assigned worker ID
+    this.sandboxManager.setWorkerId(this.getWorkerIdOrThrow());
+    this.sandboxManager.startSweep();
 
     // Step 2: Register deployment
     await this.registerDeployment();
@@ -301,6 +311,14 @@ export class Worker {
 
     if (this.activeExecutions.size > 0) {
       logger.warn(`${String(this.activeExecutions.size)} executions did not complete in time`);
+    }
+
+    // Destroy all managed sandboxes
+    this.sandboxManager.stopSweep();
+    try {
+      await this.sandboxManager.destroyAll();
+    } catch (err) {
+      logger.warn('Failed to destroy sandboxes during shutdown', { error: String(err) });
     }
 
     // Stop worker server
@@ -712,6 +730,11 @@ export class Worker {
         this.workerServer.updateWorkerId(this.workerId);
       }
 
+      // Update sandbox manager with new worker ID
+      if (this.workerId) {
+        this.sandboxManager.setWorkerId(this.workerId);
+      }
+
       logger.info('Re-registration complete');
     } catch (error) {
       logger.error('Re-registration failed', { error: String(error) });
@@ -748,6 +771,8 @@ export class Worker {
       }, data.runTimeoutSeconds * 1000);
     }
 
+    let result: ExecutionResult | undefined;
+
     try {
       // Build execution context
       const context: ExecutionContext = {
@@ -767,7 +792,7 @@ export class Worker {
       };
 
       // Execute workflow
-      const result = await executeWorkflow({
+      result = await executeWorkflow({
         workflow,
         payload: data.payload,
         context,
@@ -775,6 +800,7 @@ export class Worker {
         workerId: this.getWorkerIdOrThrow(),
         abortSignal: abortController.signal,
         channels: this.channels,
+        sandboxManager: this.sandboxManager,
       });
 
       // Handle result
@@ -792,6 +818,18 @@ export class Worker {
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       this.activeExecutions.delete(executionId);
+
+      // Notify sandbox manager — but NOT if execution is suspended (waiting)
+      if (!result?.waiting) {
+        try {
+          await this.sandboxManager.onExecutionComplete(executionId);
+        } catch (err) {
+          logger.warn('Failed to notify sandbox manager of execution completion', {
+            executionId,
+            error: String(err),
+          });
+        }
+      }
     }
   }
 

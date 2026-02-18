@@ -196,24 +196,51 @@ export interface ExecToolConfig {
   maxOutputChars?: number | undefined;
 }
 
+// ── Sandbox lifecycle types ──────────────────────────────────────────
+
+/**
+ * Sandbox lifecycle scope.
+ *
+ * - `'execution'` — sandbox created on first tool use, destroyed when execution completes.
+ * - `'session'` — sandbox persists across executions sharing the same sessionId.
+ */
+export type SandboxScope = 'execution' | 'session';
+
+/**
+ * Configuration for a managed sandbox.
+ */
+export interface SandboxConfig {
+  /** Custom sandbox ID. Auto-generated if omitted. */
+  id?: string | undefined;
+  /** Lifecycle scope. Default: 'execution'. */
+  scope?: SandboxScope | undefined;
+  /** Environment type. Default: 'docker'. */
+  env?: 'local' | 'docker' | 'e2b' | undefined;
+  /** Docker environment configuration. */
+  docker?: DockerEnvironmentConfig | undefined;
+  /** E2B environment configuration. */
+  e2b?: E2BEnvironmentConfig | undefined;
+  /** Local environment configuration. */
+  local?: LocalEnvironmentConfig | undefined;
+  /** Exec tool configuration (security, timeout, etc). */
+  exec?: ExecToolConfig | undefined;
+  /** Approval mode for file-mutating tools (write, edit). Defaults to 'always' for local env. */
+  fileApproval?: 'always' | 'none' | undefined;
+  /**
+   * Idle destruction timeout for session-scoped sandboxes.
+   * Container destroyed after this duration of no tool calls.
+   * Default: '1h'. Only applies to scope: 'session'.
+   * Examples: '1h', '24h', '3d'.
+   */
+  idleDestroyTimeout?: string | undefined;
+}
+
 /**
  * Configuration for the sandboxTools() factory.
  */
-export interface SandboxToolsConfig {
-  /** Environment type (default: "docker") */
-  env?: 'local' | 'docker' | 'e2b' | undefined;
+export interface SandboxToolsConfig extends SandboxConfig {
   /** Working directory override */
   cwd?: string | undefined;
   /** Subset of tools to include (default: all) */
   tools?: ('exec' | 'read' | 'write' | 'edit' | 'glob' | 'grep')[] | undefined;
-  /** Docker environment configuration */
-  docker?: DockerEnvironmentConfig | undefined;
-  /** E2B environment configuration */
-  e2b?: E2BEnvironmentConfig | undefined;
-  /** Local environment configuration */
-  local?: LocalEnvironmentConfig | undefined;
-  /** Exec tool configuration */
-  exec?: ExecToolConfig | undefined;
-  /** Approval mode for file-mutating tools (write, edit). Defaults to 'always' for local env. */
-  fileApproval?: 'always' | 'none' | undefined;
 }

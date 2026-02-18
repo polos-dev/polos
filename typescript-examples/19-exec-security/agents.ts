@@ -5,13 +5,13 @@
  * patterns run immediately, everything else suspends for user approval.
  * The user can approve, reject, or reject with feedback so the agent
  * can adjust its approach.
+ *
+ * The sandbox lifecycle is fully managed — the container is created lazily
+ * on first tool use and destroyed automatically when the execution completes.
  */
 
 import { defineAgent, maxSteps, sandboxTools, createAskUserTool } from '@polos/sdk';
 import { anthropic } from '@ai-sdk/anthropic';
-import path from 'node:path';
-
-const workspaceDir = path.resolve(process.cwd(), 'workspace');
 
 // Sandbox tools with exec security — only allowlisted commands run
 // without approval. Everything else suspends for the user to decide.
@@ -19,7 +19,6 @@ export const tools = sandboxTools({
   env: 'docker',
   docker: {
     image: 'node:20-slim',
-    workspaceDir,
     network: 'bridge',
   },
   exec: {

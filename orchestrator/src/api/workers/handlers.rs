@@ -775,6 +775,56 @@ pub async fn get_worker_status(
     }))
 }
 
+/// Response for active workers query
+#[derive(Serialize, ToSchema)]
+pub struct ActiveWorkersResponse {
+    pub worker_ids: Vec<String>,
+}
+
+/// Get active worker IDs for a project.
+/// Returns workers that are online and have sent a heartbeat within the last 60 seconds.
+#[utoipa::path(
+    get,
+    path = "/api/v1/workers/active",
+    tag = "Workers",
+    params(
+        ("X-Project-ID" = String, Header, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Active worker IDs", body = ActiveWorkersResponse),
+        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("cookie_auth" = [])
+    )
+)]
+pub async fn get_active_workers(
+    State(state): State<Arc<AppState>>,
+    ProjectId(project_id): ProjectId,
+) -> Result<Json<ActiveWorkersResponse>, StatusCode> {
+    state
+        .db
+        .set_project_id(&project_id, false)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to set project_id: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let worker_ids = state
+        .db
+        .get_active_worker_ids(&project_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get active worker IDs: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(ActiveWorkersResponse { worker_ids }))
+}
+
 // Mark worker as online (called after worker completes registration of agents, tools, workflows, etc.)
 pub async fn mark_worker_online(
     State(state): State<Arc<AppState>>,

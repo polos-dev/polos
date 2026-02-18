@@ -8,7 +8,11 @@
  */
 
 // Main entry point
-export { sandboxTools, type SandboxToolsResult } from './sandbox-tools.js';
+export { sandboxTools } from './sandbox-tools.js';
+
+// Sandbox lifecycle
+export { type Sandbox, ManagedSandbox } from './sandbox.js';
+export { SandboxManager, parseDuration } from './sandbox-manager.js';
 
 // Types
 export type {
@@ -24,6 +28,8 @@ export type {
   LocalEnvironmentConfig,
   ExecToolConfig,
   SandboxToolsConfig,
+  SandboxScope,
+  SandboxConfig,
 } from './types.js';
 
 // Environment implementations

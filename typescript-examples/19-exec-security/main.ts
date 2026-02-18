@@ -18,6 +18,7 @@
  *   POLOS_PROJECT_ID  - Your project ID (default from env)
  *   POLOS_API_URL     - Orchestrator URL (default: http://localhost:8080)
  *   POLOS_API_KEY     - API key for authentication (optional for local dev)
+ *   POLOS_WORKSPACES_DIR - Base path for sandbox workspaces (default: /var/polos/workspaces)
  *   ANTHROPIC_API_KEY - Anthropic API key for the coding agent
  */
 

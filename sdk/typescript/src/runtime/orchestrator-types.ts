@@ -454,3 +454,11 @@ export interface PutSessionMemoryRequest {
   summary: string | null;
   messages: ConversationMessage[];
 }
+
+/**
+ * Response from GET /api/v1/workers/active.
+ * Returns the IDs of all active workers in the current project.
+ */
+export interface GetActiveWorkersResponse {
+  worker_ids: string[];
+}

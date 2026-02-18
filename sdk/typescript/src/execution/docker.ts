@@ -136,7 +136,14 @@ export class DockerEnvironment implements ExecutionEnvironment {
     this.maxOutputChars = maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
   }
 
-  async initialize(): Promise<void> {
+  /**
+   * Get the container name (useful for health checking and identification).
+   */
+  getContainerName(): string {
+    return this.containerName;
+  }
+
+  async initialize(labels?: Record<string, string>): Promise<void> {
     const args = [
       'run',
       '-d',
@@ -159,6 +166,12 @@ export class DockerEnvironment implements ExecutionEnvironment {
     if (this.config.env) {
       for (const [key, value] of Object.entries(this.config.env)) {
         args.push('-e', `${key}=${value}`);
+      }
+    }
+
+    if (labels) {
+      for (const [key, value] of Object.entries(labels)) {
+        args.push('--label', `${key}=${value}`);
       }
     }
 

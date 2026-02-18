@@ -285,7 +285,8 @@ export {
 // Execution - Sandbox tools
 export {
   sandboxTools,
-  type SandboxToolsResult,
+  ManagedSandbox,
+  SandboxManager,
   DockerEnvironment,
   evaluateAllowlist,
   assertSafePath,
@@ -299,6 +300,9 @@ export {
   createEditTool,
   createGlobTool,
   createGrepTool,
+  type Sandbox,
+  type SandboxScope,
+  type SandboxConfig,
   type ExecutionEnvironment,
   type ExecOptions,
   type ExecResult,

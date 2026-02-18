@@ -4,25 +4,28 @@
  * The agent gets access to exec, read, write, edit, glob, and grep tools
  * that all operate inside an isolated Docker container with a bind-mounted
  * workspace directory.
+ *
+ * The sandbox lifecycle is fully managed — the container is created lazily
+ * on first tool use and destroyed automatically when the execution completes.
+ * The workspace directory defaults to POLOS_WORKSPACES_DIR/{projectId}/{sandboxId}.
  */
 
 import { defineAgent, maxSteps, sandboxTools } from '@polos/sdk';
 import { anthropic } from '@ai-sdk/anthropic';
-import path from 'node:path';
 
-// Workspace directory on the host — this gets mounted into the container at /workspace
-const workspaceDir = path.resolve(process.cwd(), 'workspace');
-
-// Create sandbox tools that run inside a Docker container
+// Create sandbox tools that run inside a Docker container.
+// Workspace directory is managed automatically — set the POLOS_WORKSPACES_DIR
+// env var to override the base path (defaults to /var/polos/workspaces).
 export const tools = sandboxTools({
   env: 'docker',
   docker: {
     image: 'node:20-slim',
-    workspaceDir,
-    // setupCommand: 'npm install',  // optional: run after container creation
-    // memory: '512m',               // optional: limit container memory
-    // network: 'none',              // optional: no network access
+    // workspaceDir: '/path/to/project', // optional: override managed default
+    // setupCommand: 'npm install',      // optional: run after container creation
+    // memory: '512m',                   // optional: limit container memory
+    // network: 'none',                  // optional: no network access
   },
+  // scope: 'session',                   // optional: reuse sandbox across turns
 });
 
 // Define an agent that can write and run code in the sandbox

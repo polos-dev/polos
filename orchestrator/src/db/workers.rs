@@ -8,6 +8,23 @@ use crate::db::{
 };
 
 impl Database {
+    /// Get IDs of all active workers for a project.
+    /// A worker is considered active if it is online and has sent a heartbeat
+    /// within the last 60 seconds.
+    pub async fn get_active_worker_ids(&self, project_id: &Uuid) -> anyhow::Result<Vec<String>> {
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM workers
+             WHERE project_id = $1
+               AND status = 'online'
+               AND last_heartbeat > NOW() - INTERVAL '60 seconds'",
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|(id,)| id.to_string()).collect())
+    }
+
     // Get count of online workers for a deployment
     pub async fn get_worker_count_for_deployment(
         &self,

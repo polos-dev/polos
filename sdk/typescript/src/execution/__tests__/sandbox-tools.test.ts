@@ -23,6 +23,11 @@ describe('sandboxTools', () => {
     assert.ok(ids.includes('grep'));
   });
 
+  it('returns a plain array (ToolWorkflow[])', () => {
+    const tools = sandboxTools({ env: 'docker' });
+    assert.ok(Array.isArray(tools));
+  });
+
   it('returns subset when tools option is specified', () => {
     const tools = sandboxTools({
       env: 'docker',
@@ -103,17 +108,6 @@ describe('sandboxTools', () => {
     assert.ok('pattern' in props);
   });
 
-  it('has a cleanup method', () => {
-    const tools = sandboxTools({ env: 'docker' });
-    assert.strictEqual(typeof tools.cleanup, 'function');
-  });
-
-  it('cleanup is safe to call without initialization', async () => {
-    const tools = sandboxTools({ env: 'docker' });
-    // Should not throw even though no environment was created
-    await tools.cleanup();
-  });
-
   it('tools are auto-registered in global registry', () => {
     const before = globalRegistry.getIds().length;
 
@@ -152,6 +146,17 @@ describe('sandboxTools', () => {
       env: 'local',
       exec: { security: 'allow-always' },
     });
+    assert.strictEqual(tools.length, 6);
+  });
+
+  it('accepts SandboxConfig fields (scope, id, idleDestroyTimeout)', () => {
+    const tools = sandboxTools({
+      env: 'docker',
+      scope: 'session',
+      id: 'my-sandbox',
+      idleDestroyTimeout: '24h',
+    });
+
     assert.strictEqual(tools.length, 6);
   });
 });

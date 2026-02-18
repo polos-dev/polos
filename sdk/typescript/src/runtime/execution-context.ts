@@ -8,6 +8,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { OrchestratorClient } from './orchestrator-client.js';
+import type { SandboxManager } from '../execution/sandbox-manager.js';
 
 /**
  * Data stored in the execution context.
@@ -15,6 +16,12 @@ import type { OrchestratorClient } from './orchestrator-client.js';
 export interface ExecutionContextData {
   executionId: string;
   workflowId: string;
+  /** Root execution ID — stable across sub-workflows, used by sandbox tools for cache key. */
+  rootExecutionId?: string | undefined;
+  /** Session ID — used by sandbox tools to scope sandboxes. */
+  sessionId?: string | undefined;
+  /** Sandbox manager — injected by worker for managed sandbox lifecycle. */
+  sandboxManager?: SandboxManager | undefined;
   /** Orchestrator client — needed by agents for conversation history. */
   orchestratorClient?: OrchestratorClient | undefined;
   /** OTel span context from current span (typed as unknown since @opentelemetry/api is optional). */

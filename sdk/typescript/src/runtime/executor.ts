@@ -34,6 +34,7 @@ import { retry, type RetryOptions } from '../utils/retry.js';
 import { createLogger } from '../utils/logger.js';
 import { getModelId, getModelProvider } from '../llm/types.js';
 import { runInExecutionContext, getExecutionContext } from './execution-context.js';
+import type { SandboxManager } from '../execution/sandbox-manager.js';
 import {
   type Span,
   type SpanContext,
@@ -74,6 +75,8 @@ export interface ExecuteWorkflowOptions {
   abortSignal?: AbortSignal | undefined;
   /** Notification channels for suspend events */
   channels?: Channel[] | undefined;
+  /** Sandbox manager for managed sandbox lifecycle */
+  sandboxManager?: SandboxManager | undefined;
 }
 
 /**
@@ -1133,8 +1136,16 @@ function createOrchestratorStepHelper(
  * 9. Returns (result, finalState)
  */
 export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<ExecutionResult> {
-  const { workflow, payload, context, orchestratorClient, workerId, abortSignal, channels } =
-    options;
+  const {
+    workflow,
+    payload,
+    context,
+    orchestratorClient,
+    workerId,
+    abortSignal,
+    channels,
+    sandboxManager,
+  } = options;
 
   let state: Record<string, unknown> = {};
   let validatedPayload = payload;
@@ -1326,6 +1337,9 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     const execContextData = {
       executionId: context.executionId,
       workflowId: workflow.id,
+      rootExecutionId,
+      sessionId: context.sessionId,
+      sandboxManager,
       orchestratorClient,
       _otelSpanContext: spanCtx,
       _otelTraceId: spanCtx?.traceId,

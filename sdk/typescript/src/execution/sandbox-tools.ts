@@ -2,16 +2,27 @@
  * Sandbox tools factory.
  *
  * Creates a set of tools (exec, read, write, edit, glob, grep) that share
- * a lazily-initialized execution environment via closure. The environment
- * is created on first tool use and reused for all subsequent calls.
+ * a managed sandbox. The sandbox is created lazily on first tool use
+ * via the SandboxManager injected through the execution context.
  *
  * @example
  * ```typescript
  * import { defineAgent, sandboxTools } from '@polos/sdk';
  *
+ * // Per-execution (default) — sandbox dies when the workflow finishes
  * const agent = defineAgent({
  *   id: 'solver',
  *   tools: sandboxTools({
+ *     env: 'docker',
+ *     docker: { image: 'node:20', workspaceDir: '/path/to/project' },
+ *   }),
+ * });
+ *
+ * // Per-session — sandbox lives across turns
+ * const agent2 = defineAgent({
+ *   id: 'coder',
+ *   tools: sandboxTools({
+ *     scope: 'session',
  *     env: 'docker',
  *     docker: { image: 'node:20', workspaceDir: '/path/to/project' },
  *   }),
@@ -21,8 +32,8 @@
 
 import type { ToolWorkflow } from '../core/tool.js';
 import type { ExecutionEnvironment, SandboxToolsConfig, ExecToolConfig } from './types.js';
-import { DockerEnvironment } from './docker.js';
-import { LocalEnvironment } from './local.js';
+import type { Sandbox } from './sandbox.js';
+import { getExecutionContext } from '../runtime/execution-context.js';
 import { createExecTool } from './tools/exec.js';
 import { createReadTool } from './tools/read.js';
 import { createWriteTool } from './tools/write.js';
@@ -31,62 +42,53 @@ import { createGlobTool } from './tools/glob.js';
 import { createGrepTool } from './tools/grep.js';
 
 /**
- * Return type for sandboxTools — an array of ToolWorkflow with a cleanup method.
- */
-export interface SandboxToolsResult extends Array<ToolWorkflow> {
-  /** Destroy the shared execution environment (remove container, etc.) */
-  cleanup(): Promise<void>;
-}
-
-/**
- * Create an execution environment from config.
- * @internal
- */
-function createEnvironment(config?: SandboxToolsConfig): ExecutionEnvironment {
-  const envType = config?.env ?? 'docker';
-
-  switch (envType) {
-    case 'docker': {
-      const dockerConfig = config?.docker ?? {
-        image: 'node:20-slim',
-        workspaceDir: process.cwd(),
-      };
-      return new DockerEnvironment(dockerConfig, config?.exec?.maxOutputChars);
-    }
-    case 'e2b':
-      throw new Error('E2B environment is not yet implemented.');
-    case 'local':
-      return new LocalEnvironment(config?.local, config?.exec?.maxOutputChars);
-    default:
-      throw new Error(`Unknown environment type: ${String(envType)}`);
-  }
-}
-
-/**
  * Create sandbox tools for AI agents.
  *
  * Returns an array of ToolWorkflow that can be passed directly to defineAgent().
- * All tools share a single execution environment that is lazily created on first use.
- *
- * The returned array has a `cleanup()` method for destroying the environment.
+ * All tools share a single managed sandbox that is lazily created on first use.
+ * Lifecycle is managed by the SandboxManager — no manual cleanup needed.
  */
-export function sandboxTools(config?: SandboxToolsConfig): SandboxToolsResult {
-  // Lazy environment — created on first tool use
-  let env: ExecutionEnvironment | null = null;
-  let envPromise: Promise<ExecutionEnvironment> | null = null;
+export function sandboxTools(config?: SandboxToolsConfig): ToolWorkflow[] {
+  // Cache keyed by rootExecutionId so all tool sub-workflows within the same
+  // agent run share one sandbox. Each tool call runs as a separate sub-workflow
+  // with its own executionId, but rootExecutionId is stable across them.
+  const sandboxCache = new Map<string, Sandbox>();
 
   async function getEnv(): Promise<ExecutionEnvironment> {
-    if (env) return env;
-    if (envPromise) return envPromise;
+    const ctx = getExecutionContext();
+    if (!ctx) {
+      throw new Error(
+        'sandboxTools requires an execution context. ' +
+          'Ensure tools are called within a workflow execution.'
+      );
+    }
 
-    envPromise = (async () => {
-      const created = createEnvironment(config);
-      await created.initialize();
-      env = created;
-      return env;
-    })();
+    const { executionId, rootExecutionId, sessionId, sandboxManager } = ctx;
+    if (!sandboxManager) {
+      throw new Error(
+        'No SandboxManager found in execution context. ' +
+          'Ensure the Worker is configured to inject sandboxManager.'
+      );
+    }
 
-    return envPromise;
+    // Use rootExecutionId as cache key so all tool calls in the same agent
+    // run share one sandbox. Falls back to executionId for top-level workflows.
+    const cacheKey = rootExecutionId ?? executionId;
+
+    // Check cache first
+    const cached = sandboxCache.get(cacheKey);
+    if (cached && !cached.destroyed) {
+      return cached.getEnvironment();
+    }
+
+    // Create or retrieve sandbox via manager
+    const sandbox = await sandboxManager.getOrCreateSandbox(config ?? {}, {
+      executionId: cacheKey,
+      sessionId,
+    });
+    sandboxCache.set(cacheKey, sandbox);
+
+    return sandbox.getEnvironment();
   }
 
   // Validate environment type eagerly
@@ -123,15 +125,5 @@ export function sandboxTools(config?: SandboxToolsConfig): SandboxToolsResult {
   if (include.has('glob')) tools.push(createGlobTool(getEnv, pathConfig));
   if (include.has('grep')) tools.push(createGrepTool(getEnv, pathConfig));
 
-  // Create result array with cleanup method
-  const result = tools as SandboxToolsResult;
-  result.cleanup = async () => {
-    if (env) {
-      await env.destroy();
-      env = null;
-      envPromise = null;
-    }
-  };
-
-  return result;
+  return tools;
 }

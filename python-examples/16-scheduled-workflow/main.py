@@ -1,20 +1,16 @@
 """
-Client demonstrating scheduled workflow patterns.
+Demonstrate scheduled workflow patterns.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
 from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
 from polos import (
-    PolosClient,
+    Polos,
     schedules,
     SchedulePayload,
 )
@@ -36,7 +32,7 @@ def print_section(title: str):
     print(f"\n--- {title} ---")
 
 
-async def demo_create_schedule(client: PolosClient):
+async def demo_create_schedule(polos):
     """Demonstrate creating a schedule for a workflow."""
     print_header("Create Schedule Demo")
     print("This demo shows how to create a schedule dynamically using schedules.create().")
@@ -45,8 +41,7 @@ async def demo_create_schedule(client: PolosClient):
 
     print_section("Creating a schedule for 'schedulable_reminder'")
 
-    # Create a schedule that runs every minute (for demo purposes)
-    cron = "* * * * *"  # Every minute
+    cron = "* * * * *"
     tz = "UTC"
     key = "demo-user-123"
 
@@ -56,7 +51,7 @@ async def demo_create_schedule(client: PolosClient):
     print(f"  Key: {key}")
 
     schedule_id = await schedules.create(
-        client=client,
+        client=polos,
         workflow="schedulable_reminder",
         cron=cron,
         timezone=tz,
@@ -66,10 +61,10 @@ async def demo_create_schedule(client: PolosClient):
     print(f"\n  Schedule created!")
     print(f"  Schedule ID: {schedule_id}")
     print("\n  The workflow will now run automatically every minute.")
-    print("  Check the worker logs to see the scheduled executions.")
+    print("  Check the logs to see the scheduled executions.")
 
 
-async def demo_create_per_user_schedules(client: PolosClient):
+async def demo_create_per_user_schedules(polos):
     """Demonstrate creating per-user schedules."""
     print_header("Per-User Schedules Demo")
     print("This demo shows how to create different schedules for different users.")
@@ -85,7 +80,7 @@ async def demo_create_per_user_schedules(client: PolosClient):
 
     for user in users:
         schedule_id = await schedules.create(
-            client=client,
+            client=polos,
             workflow="schedulable_reminder",
             cron=user["cron"],
             timezone=user["tz"],
@@ -99,7 +94,7 @@ async def demo_create_per_user_schedules(client: PolosClient):
     print("  Charlie: 7 AM Tokyo time")
 
 
-async def demo_manual_trigger_with_schedule_payload(client: PolosClient):
+async def demo_manual_trigger_with_schedule_payload(polos):
     """Demonstrate manually triggering a scheduled workflow with SchedulePayload."""
     print_header("Manual Trigger with SchedulePayload Demo")
     print("This demo shows how to manually trigger a scheduled workflow")
@@ -108,7 +103,6 @@ async def demo_manual_trigger_with_schedule_payload(client: PolosClient):
 
     print_section("Running 'daily_cleanup' with manual SchedulePayload")
 
-    # Create a SchedulePayload manually for testing
     now = datetime.now(timezone.utc)
     payload = SchedulePayload(
         timestamp=now,
@@ -126,8 +120,7 @@ async def demo_manual_trigger_with_schedule_payload(client: PolosClient):
     print(f"  Key: {payload.key}")
     print(f"  Next run: {payload.upcoming}")
 
-    # Run the workflow
-    result = await daily_cleanup.run(client, payload)
+    result = await daily_cleanup.run(polos, payload)
 
     print_section("Result")
     print(f"  Timestamp: {result.timestamp}")
@@ -137,49 +130,30 @@ async def demo_manual_trigger_with_schedule_payload(client: PolosClient):
 
 async def main():
     """Run scheduled workflow demos."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     print("=" * 60)
     print("Scheduled Workflow Examples")
     print("=" * 60)
-    print("\nMake sure the worker is running: python worker.py")
     print("\nThis demo showcases scheduled workflow patterns:")
     print("  1. Creating schedules dynamically with schedules.create()")
     print("  2. Per-user/per-entity schedules")
     print("  3. Manually triggering scheduled workflow with SchedulePayload")
 
-    try:
-        # Demo 1: Create a schedule dynamically
-        await demo_create_schedule(client)
+    async with Polos(log_file="polos.log") as polos:
+        try:
+            await demo_create_schedule(polos)
+            await demo_create_per_user_schedules(polos)
+            await demo_manual_trigger_with_schedule_payload(polos)
 
-        # Demo 2: Per-user schedules
-        await demo_create_per_user_schedules(client)
+            print("\n" + "=" * 60)
+            print("All demos completed!")
+            print("=" * 60)
+            print("\nScheduled workflows will run automatically based on their cron expressions.")
+            print("Check the logs to see scheduled executions.")
 
-        # Demo 3: Manual trigger with SchedulePayload
-        await demo_manual_trigger_with_schedule_payload(client)
-
-        print("\n" + "=" * 60)
-        print("All demos completed!")
-        print("=" * 60)
-        print("\nScheduled workflows will run automatically based on their cron expressions.")
-        print("Check the worker logs to see scheduled executions.")
-
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-
-        traceback.print_exc()
-        print("\nMake sure the worker is running and try again.")
+        except Exception as e:
+            print(f"\nError: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

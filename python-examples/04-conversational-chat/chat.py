@@ -1,40 +1,23 @@
 """
 Interactive chat client with streaming and tool execution display.
 
-Run the worker first:
-    python worker.py
-
-Then run this chat client:
+Run with:
     python chat.py
 """
 
 import asyncio
-import os
 import uuid
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 
 from agents import chat_assistant
 
 load_dotenv()
 
 
-async def chat_loop():
+async def chat_loop(polos):
     """Run an interactive chat loop with streaming responses."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
-    # Generate a session ID to maintain conversation context
     session_id = str(uuid.uuid4())
 
     print("=" * 60)
@@ -46,7 +29,6 @@ async def chat_loop():
     print()
 
     while True:
-        # Get user input
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -60,17 +42,15 @@ async def chat_loop():
             print("Goodbye!")
             break
 
-        # Invoke agent with streaming, using session_id for conversation context
         print("Assistant: ", end="", flush=True)
 
         try:
             result = await chat_assistant.stream(
-                client,
+                polos,
                 user_input,
                 session_id=session_id
             )
 
-            # Stream the response with tool call indicators
             async for event in result.events:
                 event_type = event.event_type
 
@@ -82,8 +62,8 @@ async def chat_loop():
                     tool_name = event.data.get("tool_call", {}).get("function", {}).get("name", "unknown")
                     print(f"\n  [Using {tool_name}...]", end="", flush=True)
 
-            print()  # New line after response
-            print()  # Extra spacing
+            print()
+            print()
 
         except Exception as e:
             print(f"\nError: {e}")
@@ -92,7 +72,8 @@ async def chat_loop():
 
 async def main():
     """Main entry point."""
-    await chat_loop()
+    async with Polos(log_file="polos.log") as polos:
+        await chat_loop(polos)
 
 
 if __name__ == "__main__":

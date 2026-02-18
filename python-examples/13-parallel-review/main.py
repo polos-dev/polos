@@ -1,18 +1,15 @@
 """
-Client demonstrating parallel workflow execution patterns.
+Demonstrate parallel workflow execution patterns.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
+import time
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 
 from workflows import (
     single_review,
@@ -37,14 +34,14 @@ def print_section(title: str):
     print(f"\n--- {title} ---")
 
 
-async def demo_single_review(client: PolosClient):
+async def demo_single_review(polos):
     """Demonstrate a single review workflow."""
     print_header("Single Review Demo")
     print("This workflow processes a single document review.")
 
     print_section("Running single review")
     result = await single_review.run(
-        client,
+        polos,
         ReviewRequest(
             reviewer_id="alice",
             document_id="DOC-001",
@@ -59,7 +56,7 @@ async def demo_single_review(client: PolosClient):
     print(f"  Comments: {result.comments}")
 
 
-async def demo_parallel_review(client: PolosClient):
+async def demo_parallel_review(polos):
     """Demonstrate parallel review workflow with multiple reviewers."""
     print_header("Parallel Review Demo")
     print("This workflow runs multiple reviews in parallel and aggregates results.")
@@ -71,7 +68,7 @@ async def demo_parallel_review(client: PolosClient):
     print(f"  Reviewers: {', '.join(reviewers)}")
 
     result = await parallel_review.run(
-        client,
+        polos,
         {
             "document_id": "DOC-002",
             "content": "This is an important proposal document that requires multiple approvals.",
@@ -92,13 +89,12 @@ async def demo_parallel_review(client: PolosClient):
         print(f"    {status} {review['reviewer_id']}: score={review['score']}")
 
 
-async def demo_data_chunk_processor(client: PolosClient):
+async def demo_data_chunk_processor(polos):
     """Demonstrate parallel data chunk processing."""
     print_header("Data Chunk Processor Demo")
     print("This workflow splits data into chunks and processes them in parallel.")
     print("Demonstrates fan-out/fan-in pattern for data processing.")
 
-    # Create sample data
     data = [f"item_{i}" for i in range(25)]
     chunk_size = 10
 
@@ -108,7 +104,7 @@ async def demo_data_chunk_processor(client: PolosClient):
     print(f"  Number of chunks: {(len(data) + chunk_size - 1) // chunk_size}")
 
     result = await data_chunk_processor.run(
-        client,
+        polos,
         {
             "data": data,
             "chunk_size": chunk_size,
@@ -124,13 +120,12 @@ async def demo_data_chunk_processor(client: PolosClient):
         print(f"    - {item}")
 
 
-async def demo_fire_and_forget(client: PolosClient):
+async def demo_fire_and_forget(polos):
     """Demonstrate fire-and-forget batch workflow."""
     print_header("Fire and Forget Batch Demo")
     print("This workflow launches multiple background tasks without waiting.")
     print("Returns execution IDs for tracking, but doesn't block on completion.")
 
-    # Create sample tasks
     tasks = [
         {"id": f"task-{i}", "data": {"value": i * 10}}
         for i in range(5)
@@ -140,7 +135,7 @@ async def demo_fire_and_forget(client: PolosClient):
     print(f"  Tasks to launch: {len(tasks)}")
 
     result = await fire_and_forget_batch.run(
-        client,
+        polos,
         {"tasks": tasks},
     )
 
@@ -154,20 +149,18 @@ async def demo_fire_and_forget(client: PolosClient):
     print("  Use the execution IDs to check their status later.")
 
 
-async def demo_parallel_comparison(client: PolosClient):
+async def demo_parallel_comparison(polos):
     """Compare sequential vs parallel execution time."""
     print_header("Parallel vs Sequential Comparison")
     print("This demo shows the time savings of parallel execution.")
 
-    import time
-
-    # Sequential: Run 3 reviews one by one
+    # Sequential
     print_section("Sequential Execution (3 reviews)")
     start = time.time()
 
     for i, reviewer in enumerate(["reviewer1", "reviewer2", "reviewer3"]):
         await single_review.run(
-            client,
+            polos,
             ReviewRequest(
                 reviewer_id=reviewer,
                 document_id="DOC-SEQ",
@@ -179,12 +172,12 @@ async def demo_parallel_comparison(client: PolosClient):
     sequential_time = time.time() - start
     print(f"\n  Sequential time: {sequential_time:.2f} seconds")
 
-    # Parallel: Run 3 reviews at once
+    # Parallel
     print_section("Parallel Execution (3 reviews)")
     start = time.time()
 
     result = await parallel_review.run(
-        client,
+        polos,
         {
             "document_id": "DOC-PAR",
             "content": "Parallel test document",
@@ -203,22 +196,9 @@ async def demo_parallel_comparison(client: PolosClient):
 
 async def main():
     """Run all parallel review demos."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     print("=" * 60)
     print("Parallel Review Workflow Examples")
     print("=" * 60)
-    print("\nMake sure the worker is running: python worker.py")
     print("\nThis demo showcases parallel workflow patterns:")
     print("  1. Single review workflow")
     print("  2. Parallel multi-reviewer workflow (batch_invoke_and_wait)")
@@ -226,22 +206,22 @@ async def main():
     print("  4. Fire-and-forget batch (batch_invoke)")
     print("  5. Sequential vs parallel comparison")
 
-    try:
-        await demo_single_review(client)
-        await demo_parallel_review(client)
-        await demo_data_chunk_processor(client)
-        await demo_fire_and_forget(client)
-        await demo_parallel_comparison(client)
+    async with Polos(log_file="polos.log") as polos:
+        try:
+            await demo_single_review(polos)
+            await demo_parallel_review(polos)
+            await demo_data_chunk_processor(polos)
+            await demo_fire_and_forget(polos)
+            await demo_parallel_comparison(polos)
 
-        print("\n" + "=" * 60)
-        print("All demos completed!")
-        print("=" * 60)
+            print("\n" + "=" * 60)
+            print("All demos completed!")
+            print("=" * 60)
 
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        print("\nMake sure the worker is running and try again.")
+        except Exception as e:
+            print(f"\nError: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

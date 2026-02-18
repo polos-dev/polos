@@ -1,39 +1,29 @@
 """
 Client demonstrating how to consume streaming agent responses.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
-import json
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 
 from agents import storyteller
 
 load_dotenv()
 
 
-async def stream_text_chunks():
+async def stream_text_chunks(polos):
     """Demonstrate streaming text chunks only."""
     print("=" * 60)
     print("Example 1: Streaming Text Chunks")
     print("=" * 60)
 
-    client = PolosClient(
-        project_id=os.getenv("POLOS_PROJECT_ID"),
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     # Invoke with streaming=True
     result = await storyteller.stream(
-        client,
+        polos,
         "Tell me a short story about a robot learning to paint",
     )
 
@@ -48,19 +38,14 @@ async def stream_text_chunks():
     print("\n")
 
 
-async def stream_full_events():
+async def stream_full_events(polos):
     """Demonstrate streaming all events including tool calls."""
     print("=" * 60)
     print("Example 2: Streaming Full Events")
     print("=" * 60)
 
-    client = PolosClient(
-        project_id=os.getenv("POLOS_PROJECT_ID"),
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     result = await storyteller.stream(
-        client,
+        polos,
         "Write a haiku about mountains",
     )
 
@@ -88,19 +73,14 @@ async def stream_full_events():
     print("\n")
 
 
-async def get_final_text():
+async def get_final_text(polos):
     """Demonstrate getting the final accumulated text."""
     print("=" * 60)
     print("Example 3: Get Final Text")
     print("=" * 60)
 
-    client = PolosClient(
-        project_id=os.getenv("POLOS_PROJECT_ID"),
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     result = await storyteller.stream(
-        client,
+        polos,
         "What are three benefits of reading books?"
     )
 
@@ -114,16 +94,10 @@ async def get_final_text():
 
 async def main():
     """Run all streaming examples."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    await stream_text_chunks()
-    await stream_full_events()
-    await get_final_text()
+    async with Polos(log_file="polos.log") as polos:
+        await stream_text_chunks(polos)
+        await stream_full_events(polos)
+        await get_final_text(polos)
 
 
 if __name__ == "__main__":

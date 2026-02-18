@@ -63,5 +63,4 @@ coding_agent = Agent(
     ),
     tools=[*tools, ask_user],
     stop_conditions=[max_steps(MaxStepsConfig(count=30))],
-    conversation_history=50,
 )

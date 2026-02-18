@@ -10,6 +10,9 @@ __pycache__/
 dist/
 build/
 
+# Logs
+polos.log
+
 # uv
 uv.lock
 

@@ -5,26 +5,16 @@ Since local mode has no container isolation, destructive operations
 (exec, write, edit) suspend for user approval before running.
 This script handles those suspend events in the terminal.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
-
-Environment variables:
-    POLOS_PROJECT_ID - Your project ID (required)
-    POLOS_API_URL    - Orchestrator URL (default: http://localhost:8080)
-    POLOS_API_KEY    - API key for authentication (optional for local dev)
 """
 
 import asyncio
 import json
-import os
-import sys
 import uuid
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 from polos.features import events
 
 from agents import coding_agent
@@ -59,13 +49,13 @@ def ask_yes_no(prompt: str) -> bool:
 # -- Event handling -----------------------------------------------------------
 
 
-async def suspend_events(client: PolosClient, handle):
+async def suspend_events(polos, handle):
     """Yield suspend events from the workflow stream.
 
     Also streams text_delta and tool_call events to show agent activity
     in real time between approval prompts.
     """
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type == "text_delta":
@@ -84,7 +74,7 @@ async def suspend_events(client: PolosClient, handle):
 # -- Exec approval UI --------------------------------------------------------
 
 
-async def handle_exec_approval(client: PolosClient, handle, suspend: dict) -> None:
+async def handle_exec_approval(polos, handle, suspend: dict) -> None:
     """Show a command approval prompt (exec tool has its own suspend format)."""
     form = suspend["data"].get("_form", {}) if isinstance(suspend["data"], dict) else {}
     context = form.get("context", {})
@@ -115,7 +105,7 @@ async def handle_exec_approval(client: PolosClient, handle, suspend: dict) -> No
     else:
         print(f"\n  -> Rejected{' with feedback' if feedback else ''}. Resuming...\n")
 
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend["step_key"],
@@ -126,7 +116,7 @@ async def handle_exec_approval(client: PolosClient, handle, suspend: dict) -> No
 # -- File tool approval UI ---------------------------------------------------
 
 
-async def handle_file_approval(client: PolosClient, handle, suspend: dict) -> None:
+async def handle_file_approval(polos, handle, suspend: dict) -> None:
     """Show an approval prompt for write/edit tools."""
     form = suspend["data"].get("_form", {}) if isinstance(suspend["data"], dict) else {}
     context = form.get("context", {})
@@ -168,7 +158,7 @@ async def handle_file_approval(client: PolosClient, handle, suspend: dict) -> No
     else:
         print(f"\n  -> Rejected{' with feedback' if feedback else ''}. Resuming...\n")
 
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend["step_key"],
@@ -179,7 +169,7 @@ async def handle_file_approval(client: PolosClient, handle, suspend: dict) -> No
 # -- Path approval UI --------------------------------------------------------
 
 
-async def handle_path_approval(client: PolosClient, handle, suspend: dict) -> None:
+async def handle_path_approval(polos, handle, suspend: dict) -> None:
     """Show an approval prompt when a read-only tool accesses outside workspace."""
     form = suspend["data"].get("_form", {}) if isinstance(suspend["data"], dict) else {}
     context = form.get("context", {})
@@ -211,7 +201,7 @@ async def handle_path_approval(client: PolosClient, handle, suspend: dict) -> No
     else:
         print(f"\n  -> Denied{' with feedback' if feedback else ''}. Resuming...\n")
 
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend["step_key"],
@@ -223,79 +213,64 @@ async def handle_path_approval(client: PolosClient, handle, suspend: dict) -> No
 
 
 async def main() -> None:
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). "
-            "You can get this from the output printed by `polos-server start` or from the UI page at "
-            "http://localhost:5173/projects/settings (the ID will be below the project name 'default')"
+    async with Polos(log_file="polos.log") as polos:
+        print_banner("Local Sandbox Demo")
+        print("\n  This demo runs an agent with local sandbox tools (no Docker).")
+        print("  Since there is no container isolation:\n")
+        print("  - exec, write, edit: always require approval")
+        print("  - read, glob, grep: free within workspace, approval if outside\n")
+
+        task = (
+            'Create a file called hello.js that prints "Hello from the local sandbox!" and run it. '
+            "Then create a second file called fibonacci.js that computes the first 10 Fibonacci numbers "
+            "and prints them. Run that too."
         )
 
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
+        print(f"  Task: {task}\n")
+        print("-" * 60)
 
-    print_banner("Local Sandbox Demo")
-    print("\n  This demo runs an agent with local sandbox tools (no Docker).")
-    print("  Since there is no container isolation:\n")
-    print("  - exec, write, edit: always require approval")
-    print("  - read, glob, grep: free within workspace, approval if outside\n")
-    print("  Make sure the worker is running: python worker.py\n")
+        session_id = str(uuid.uuid4())
 
-    task = (
-        'Create a file called hello.js that prints "Hello from the local sandbox!" and run it. '
-        "Then create a second file called fibonacci.js that computes the first 10 Fibonacci numbers "
-        "and prints them. Run that too."
-    )
+        print("\nInvoking agent...")
+        handle = await polos.invoke(
+            coding_agent.id, {"input": task, "streaming": True}, session_id=session_id
+        )
+        print(f"Execution ID: {handle.id}")
+        print("Waiting for agent activity...\n")
 
-    print(f"  Task: {task}\n")
-    print("-" * 60)
+        async for suspend in suspend_events(polos, handle):
+            step_key = suspend["step_key"]
+            if step_key.startswith("approve_exec"):
+                await handle_exec_approval(polos, handle, suspend)
+            elif step_key.startswith("approve_write") or step_key.startswith("approve_edit"):
+                await handle_file_approval(polos, handle, suspend)
+            elif (
+                step_key.startswith("approve_read")
+                or step_key.startswith("approve_glob")
+                or step_key.startswith("approve_grep")
+            ):
+                await handle_path_approval(polos, handle, suspend)
+            else:
+                print(f"Received unexpected suspend: {step_key}")
 
-    session_id = str(uuid.uuid4())
+        # Fetch final result
+        print("-" * 60)
+        print("\nFetching final result...")
 
-    print("\nInvoking agent...")
-    handle = await client.invoke(
-        coding_agent.id, {"input": task, "streaming": True}, session_id=session_id
-    )
-    print(f"Execution ID: {handle.id}")
-    print("Waiting for agent activity...\n")
+        await asyncio.sleep(2)
+        execution = await polos.get_execution(handle.id)
 
-    # Event loop: single persistent stream so concurrent suspends are never missed
-    async for suspend in suspend_events(client, handle):
-        step_key = suspend["step_key"]
-        if step_key.startswith("approve_exec"):
-            await handle_exec_approval(client, handle, suspend)
-        elif step_key.startswith("approve_write") or step_key.startswith("approve_edit"):
-            await handle_file_approval(client, handle, suspend)
-        elif (
-            step_key.startswith("approve_read")
-            or step_key.startswith("approve_glob")
-            or step_key.startswith("approve_grep")
-        ):
-            await handle_path_approval(client, handle, suspend)
+        if execution.get("status") == "completed":
+            print_banner("Agent Completed")
+            result = execution.get("result", "")
+            if isinstance(result, str):
+                print(f"\n{result}\n")
+            else:
+                print(f"\n{json.dumps(result, indent=2)}\n")
         else:
-            print(f"Received unexpected suspend: {step_key}")
-
-    # Fetch final result
-    print("-" * 60)
-    print("\nFetching final result...")
-
-    await asyncio.sleep(2)
-    execution = await client.get_execution(handle.id)
-
-    if execution.get("status") == "completed":
-        print_banner("Agent Completed")
-        result = execution.get("result", "")
-        if isinstance(result, str):
-            print(f"\n{result}\n")
-        else:
-            print(f"\n{json.dumps(result, indent=2)}\n")
-    else:
-        print(f"\nFinal status: {execution.get('status')}")
-        if execution.get("result"):
-            print(execution["result"])
+            print(f"\nFinal status: {execution.get('status')}")
+            if execution.get("result"):
+                print(execution["result"])
 
 
 if __name__ == "__main__":

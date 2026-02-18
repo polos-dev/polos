@@ -1,31 +1,20 @@
 """
 Interactive demo for suspend/resume workflows.
 
-This script demonstrates how to:
-1. Start a workflow that will suspend
-2. Stream events to detect when the workflow is suspended
-3. Collect user input
-4. Resume the workflow with that input
-
-Run the worker first:
-    python worker.py
-
-Then run this script:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 from polos.features import events
 
 from workflows import (
     approval_workflow,
     multi_step_form,
     document_review,
-    # Payload models
     ApprovalRequest,
     MultiStepFormPayload,
     DocumentReviewPayload,
@@ -73,11 +62,10 @@ def get_yes_no(prompt: str) -> bool:
         print("Please enter 'y' or 'n'")
 
 
-async def run_approval_workflow(client: PolosClient):
+async def run_approval_workflow(polos):
     """Run the approval workflow with interactive resume."""
     print_header("Approval Workflow Demo")
 
-    # Get request details from user
     print("\nEnter approval request details:")
     request_id = input("  Request ID [REQ-001]: ").strip() or "REQ-001"
     requester = input("  Requester email [alice@example.com]: ").strip() or "alice@example.com"
@@ -92,22 +80,19 @@ async def run_approval_workflow(client: PolosClient):
         amount=amount,
     )
 
-    # Start the workflow
     print_section("Starting workflow")
     print(f"Starting approval workflow for request: {request_id}")
 
-    handle = await approval_workflow.invoke(client, payload)
+    handle = await approval_workflow.invoke(polos, payload)
     print(f"Execution ID: {handle.id}")
     print("Workflow will suspend and wait for approval...")
 
-    # Build the suspend topic used by the workflow
     suspend_step_key = "await_approval"
 
     print(f"\nStreaming suspend events for workflow: {handle.root_workflow_id}")
 
-    # Stream events from the suspend topic and display the data when we receive the suspend event
     suspend_data = None
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
         if event.event_type.startswith("suspend_"):
             print("\nReceived suspend event!")
             suspend_data = event.data
@@ -122,13 +107,11 @@ async def run_approval_workflow(client: PolosClient):
         print("Did not receive suspend event")
         return
 
-    # Get approval decision from user
     print_section("Enter Approval Decision")
     approved = get_yes_no("Do you approve this request?")
     approver = input("Your email [manager@example.com]: ").strip() or "manager@example.com"
     comments = input("Comments (optional): ").strip() or None
 
-    # Resume the workflow
     print_section("Resuming workflow")
     resume_data = {
         "approved": approved,
@@ -136,7 +119,7 @@ async def run_approval_workflow(client: PolosClient):
         "comments": comments,
     }
 
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend_step_key,
@@ -144,9 +127,8 @@ async def run_approval_workflow(client: PolosClient):
     )
     print("Resume event published!")
 
-    # Wait a moment for completion and get final status
     await asyncio.sleep(2)
-    execution = await client.get_execution(handle.id)
+    execution = await polos.get_execution(handle.id)
 
     if execution.get("status") == "completed":
         print_section("Workflow Completed")
@@ -160,23 +142,20 @@ async def run_approval_workflow(client: PolosClient):
         print(f"Final status: {execution.get('status')}")
 
 
-async def run_multi_step_form(client: PolosClient):
+async def run_multi_step_form(polos):
     """Run the multi-step form workflow with interactive resume."""
     print_header("Multi-Step Form Workflow Demo")
 
-    # Get form details
     form_id = input("\nForm ID [FORM-001]: ").strip() or "FORM-001"
 
     payload = MultiStepFormPayload(form_id=form_id)
 
-    # Start the workflow
     print_section("Starting workflow")
     print(f"Starting multi-step form: {form_id}")
 
-    handle = await multi_step_form.invoke(client, payload)
+    handle = await multi_step_form.invoke(polos, payload)
     print(f"Execution ID: {handle.id}")
 
-    # Define the steps and their keys
     steps = [
         ("personal_info", "Personal Information", ["first_name", "last_name", "email"]),
         ("address_info", "Address Information", ["street", "city", "country"]),
@@ -186,15 +165,13 @@ async def run_multi_step_form(client: PolosClient):
     for step_key, step_name, fields in steps:
         print(f"\nWaiting for step: {step_name}")
 
-        # Stream events until we receive the suspend event
-        async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+        async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
             if event.event_type.startswith("suspend_"):
                 suspend_data = event.data
                 print(f"\n  Step {suspend_data.get('step')} of {suspend_data.get('total_steps')}")
                 print(f"  {suspend_data.get('prompt')}")
                 break
 
-        # Collect data based on step
         if step_key == "personal_info":
             print("\nEnter personal information:")
             resume_data = {
@@ -218,9 +195,8 @@ async def run_multi_step_form(client: PolosClient):
         else:
             resume_data = {}
 
-        # Resume
         print(f"\nSubmitting {step_name}...")
-        await client.resume(
+        await polos.resume(
             suspend_workflow_id=handle.root_workflow_id,
             suspend_execution_id=handle.id,
             suspend_step_key=step_key,
@@ -228,9 +204,8 @@ async def run_multi_step_form(client: PolosClient):
         )
         print("Resume event published!")
 
-    # Wait a moment for completion and get final status
     await asyncio.sleep(2)
-    execution = await client.get_execution(handle.id)
+    execution = await polos.get_execution(handle.id)
 
     if execution.get("status") == "completed":
         print_section("Form Completed")
@@ -259,11 +234,10 @@ async def run_multi_step_form(client: PolosClient):
         print(f"Final status: {execution.get('status')}")
 
 
-async def run_document_review(client: PolosClient):
+async def run_document_review(polos):
     """Run the document review workflow with interactive resume."""
     print_header("Document Review Workflow Demo")
 
-    # Get document details
     print("\nEnter document details:")
     document_id = input("  Document ID [DOC-001]: ").strip() or "DOC-001"
     document_title = input("  Document title [Q4 Report]: ").strip() or "Q4 Report"
@@ -276,23 +250,19 @@ async def run_document_review(client: PolosClient):
         reviewers=reviewers,
     )
 
-    # Start the workflow
     print_section("Starting workflow")
     print(f"Starting document review for: {document_title}")
     print(f"Reviewers: {', '.join(reviewers)}")
 
-    handle = await document_review.invoke(client, payload)
+    handle = await document_review.invoke(polos, payload)
     print(f"Execution ID: {handle.id}")
 
-    # Process each reviewer
     for i, reviewer in enumerate(reviewers):
-        # Build the suspend step key matching the workflow
         suspend_step_key = f"review_{i}_{reviewer}"
 
         print(f"\nWaiting for reviewer: {reviewer}")
 
-        # Stream events until we receive the suspend event
-        async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+        async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
             if event.event_type.startswith("suspend_"):
                 suspend_data = event.data
                 print(f"\n  Reviewer {suspend_data.get('reviewer_number')} of {suspend_data.get('total_reviewers')}")
@@ -300,7 +270,6 @@ async def run_document_review(client: PolosClient):
                 print(f"  {suspend_data.get('prompt')}")
                 break
 
-        # Get review from user (simulating reviewer)
         print(f"\n[Acting as {reviewer}]")
         approved = get_yes_no(f"  Does {reviewer} approve?")
         comments = input("  Comments (optional): ").strip() or None
@@ -313,9 +282,8 @@ async def run_document_review(client: PolosClient):
             "rating": rating,
         }
 
-        # Resume
         print(f"\nSubmitting {reviewer}'s review...")
-        await client.resume(
+        await polos.resume(
             suspend_workflow_id=handle.root_workflow_id,
             suspend_execution_id=handle.id,
             suspend_step_key=suspend_step_key,
@@ -323,9 +291,8 @@ async def run_document_review(client: PolosClient):
         )
         print("Resume event published!")
 
-    # Wait a moment for completion and get final status
     await asyncio.sleep(2)
-    execution = await client.get_execution(handle.id)
+    execution = await polos.get_execution(handle.id)
 
     if execution.get("status") == "completed":
         print_section("Review Completed")
@@ -347,50 +314,37 @@ async def run_document_review(client: PolosClient):
 
 async def main():
     """Main entry point."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     print_header("Suspend/Resume Workflow Demo")
     print("\nThis demo shows how workflows can pause for user input and resume.")
-    print("Make sure the worker is running: python worker.py")
 
-    while True:
-        choice = get_user_choice(
-            "Select a workflow to run:",
-            [
-                "Approval Workflow - Single approval with suspend/resume",
-                "Multi-Step Form - Collect data across 3 steps",
-                "Document Review - Multiple reviewers in sequence",
-                "Exit",
-            ],
-        )
+    async with Polos(log_file="polos.log") as polos:
+        while True:
+            choice = get_user_choice(
+                "Select a workflow to run:",
+                [
+                    "Approval Workflow - Single approval with suspend/resume",
+                    "Multi-Step Form - Collect data across 3 steps",
+                    "Document Review - Multiple reviewers in sequence",
+                    "Exit",
+                ],
+            )
 
-        try:
-            if choice == 1:
-                await run_approval_workflow(client)
-            elif choice == 2:
-                await run_multi_step_form(client)
-            elif choice == 3:
-                await run_document_review(client)
-            elif choice == 4:
-                print("\nGoodbye!")
-                break
-        except Exception as e:
-            print(f"\nError: {e}")
-            import traceback
-            traceback.print_exc()
-            print("Make sure the worker is running and try again.")
+            try:
+                if choice == 1:
+                    await run_approval_workflow(polos)
+                elif choice == 2:
+                    await run_multi_step_form(polos)
+                elif choice == 3:
+                    await run_document_review(polos)
+                elif choice == 4:
+                    print("\nGoodbye!")
+                    break
+            except Exception as e:
+                print(f"\nError: {e}")
+                import traceback
+                traceback.print_exc()
 
-        print("\n" + "-" * 60)
+            print("\n" + "-" * 60)
 
 
 if __name__ == "__main__":

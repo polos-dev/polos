@@ -6,25 +6,16 @@ that don't match the allowlist suspend for approval. This script catches
 those suspend events, shows the command to the user, and collects their
 decision (approve / reject with feedback) before resuming.
 
-Run the worker first:
-    python worker.py
-
-Then run this script:
+Run with:
     python main.py
-
-Environment variables:
-    POLOS_PROJECT_ID - Your project ID (required)
-    POLOS_API_URL    - Orchestrator URL (default: http://localhost:8080)
-    POLOS_API_KEY    - API key for authentication (optional for local dev)
 """
 
 import asyncio
-import os
 import sys
 import uuid
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 from polos.features import events
 
 from agents import coding_agent
@@ -59,12 +50,12 @@ def ask_yes_no(prompt: str) -> bool:
 # -- Event handling -----------------------------------------------------------
 
 
-async def stream_events(client: PolosClient, handle):
+async def stream_events(polos, handle):
     """Yield suspend events from the workflow stream.
 
     Non-suspend events (text deltas, tool calls) are printed as side effects.
     """
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type and event_type.startswith("suspend_"):
@@ -84,7 +75,7 @@ async def stream_events(client: PolosClient, handle):
 # -- Approval UI --------------------------------------------------------------
 
 
-async def handle_approval(client: PolosClient, handle, suspend: dict) -> None:
+async def handle_approval(polos, handle, suspend: dict) -> None:
     """Show an approval prompt in the terminal and collect the user's decision."""
     form = suspend["data"].get("_form", {}) if isinstance(suspend["data"], dict) else {}
     context = form.get("context", {})
@@ -119,7 +110,7 @@ async def handle_approval(client: PolosClient, handle, suspend: dict) -> None:
     else:
         print(f"\n  -> Rejected{' with feedback' if feedback else ''}. Resuming workflow...\n")
 
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend["step_key"],
@@ -130,7 +121,7 @@ async def handle_approval(client: PolosClient, handle, suspend: dict) -> None:
 # -- Ask-user UI --------------------------------------------------------------
 
 
-async def handle_ask_user(client: PolosClient, handle, suspend: dict) -> None:
+async def handle_ask_user(polos, handle, suspend: dict) -> None:
     """Show the agent's question in the terminal and collect the user's answer."""
     form = suspend["data"].get("_form", {}) if isinstance(suspend["data"], dict) else {}
     title = str(form.get("title", "Agent Question"))
@@ -169,7 +160,7 @@ async def handle_ask_user(client: PolosClient, handle, suspend: dict) -> None:
             resume_data[field["key"]] = int(answer) if field.get("type") == "number" else answer
 
     print("\n  -> Sending response to agent...\n")
-    await client.resume(
+    await polos.resume(
         suspend_workflow_id=handle.root_workflow_id,
         suspend_execution_id=handle.id,
         suspend_step_key=suspend["step_key"],
@@ -181,76 +172,60 @@ async def handle_ask_user(client: PolosClient, handle, suspend: dict) -> None:
 
 
 async def main() -> None:
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). "
-            "You can get this from the output printed by `polos-server start` or from the UI page at "
-            "http://localhost:5173/projects/settings (the ID will be below the project name 'default')"
+    async with Polos(log_file="polos.log") as polos:
+        print_banner("Exec Security Demo")
+        print("\n  This demo shows how exec security works with an allowlist.")
+        print("  Commands matching the allowlist (node, cat, echo, ls) run automatically.")
+        print("  Everything else pauses for your approval.\n")
+        print("  You can reject a command and provide feedback -- the agent will")
+        print("  read your feedback and try a different approach.\n")
+
+        task = (
+            "Create a file called greet.js that takes a name argument and prints a greeting. "
+            "Run it with node to test it. "
+            'Then install the "chalk" npm package and update greet.js to print the greeting in color. '
+            "Run it again to verify it works."
         )
 
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
+        print(f"  Task: {task}\n")
+        print("-" * 60)
 
-    print_banner("Exec Security Demo")
-    print("\n  This demo shows how exec security works with an allowlist.")
-    print("  Commands matching the allowlist (node, cat, echo, ls) run automatically.")
-    print("  Everything else pauses for your approval.\n")
-    print("  You can reject a command and provide feedback -- the agent will")
-    print("  read your feedback and try a different approach.\n")
-    print("  Make sure the worker is running: python worker.py\n")
+        session_id = str(uuid.uuid4())
 
-    task = (
-        "Create a file called greet.js that takes a name argument and prints a greeting. "
-        "Run it with node to test it. "
-        'Then install the "chalk" npm package and update greet.js to print the greeting in color. '
-        "Run it again to verify it works."
-    )
+        print("\nInvoking agent...")
+        handle = await polos.invoke(
+            coding_agent.id, {"input": task, "streaming": True}, session_id=session_id
+        )
+        print(f"Execution ID: {handle.id}")
+        print("Streaming agent activity...\n")
 
-    print(f"  Task: {task}\n")
-    print("-" * 60)
+        async for suspend in stream_events(polos, handle):
+            if suspend["step_key"].startswith("approve_exec"):
+                await handle_approval(polos, handle, suspend)
+            elif suspend["step_key"].startswith("ask_user"):
+                await handle_ask_user(polos, handle, suspend)
+            else:
+                print(f"Received unexpected suspend: {suspend['step_key']}")
 
-    session_id = str(uuid.uuid4())
+        # Fetch final result
+        print("-" * 60)
+        print("\nFetching final result...")
 
-    print("\nInvoking agent...")
-    handle = await client.invoke(
-        coding_agent.id, {"input": task, "streaming": True}, session_id=session_id
-    )
-    print(f"Execution ID: {handle.id}")
-    print("Streaming agent activity...\n")
+        await asyncio.sleep(2)
+        execution = await polos.get_execution(handle.id)
 
-    # Event loop: single persistent stream so concurrent suspends are never missed
-    async for suspend in stream_events(client, handle):
-        if suspend["step_key"].startswith("approve_exec"):
-            await handle_approval(client, handle, suspend)
-        elif suspend["step_key"].startswith("ask_user"):
-            await handle_ask_user(client, handle, suspend)
+        if execution.get("status") == "completed":
+            print_banner("Agent Completed")
+            result = execution.get("result", "")
+            if isinstance(result, str):
+                print(f"\n{result}\n")
+            else:
+                import json
+                print(f"\n{json.dumps(result, indent=2)}\n")
         else:
-            print(f"Received unexpected suspend: {suspend['step_key']}")
-
-    # Fetch final result
-    print("-" * 60)
-    print("\nFetching final result...")
-
-    await asyncio.sleep(2)
-    execution = await client.get_execution(handle.id)
-
-    if execution.get("status") == "completed":
-        print_banner("Agent Completed")
-        result = execution.get("result", "")
-        if isinstance(result, str):
-            print(f"\n{result}\n")
-        else:
-            import json
-
-            print(f"\n{json.dumps(result, indent=2)}\n")
-    else:
-        print(f"\nFinal status: {execution.get('status')}")
-        if execution.get("result"):
-            print(execution["result"])
+            print(f"\nFinal status: {execution.get('status')}")
+            if execution.get("result"):
+                print(execution["result"])
 
 
 if __name__ == "__main__":

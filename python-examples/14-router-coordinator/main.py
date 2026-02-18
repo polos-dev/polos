@@ -1,19 +1,15 @@
 """
-Client demonstrating the Blog Review workflow with agent orchestration.
+Demonstrate the Blog Review workflow with agent orchestration.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
 import json
 
 from dotenv import load_dotenv
-from polos import PolosClient, events
+from polos import Polos, events
 
 from workflows import generate_blog, GenerateBlogPayload
 
@@ -32,7 +28,7 @@ def print_section(title: str):
     print(f"\n--- {title} ---")
 
 
-async def demo_generate_blog(client: PolosClient):
+async def demo_generate_blog(polos):
     """Demonstrate the generate_blog workflow with event streaming."""
     print_header("Generate Blog Demo")
     print("This workflow:")
@@ -48,9 +44,8 @@ async def demo_generate_blog(client: PolosClient):
     print(f"  Topic: {topic}")
     print(f"  Instructions: {additional_instructions}")
 
-    # Invoke the workflow
     handle = await generate_blog.invoke(
-        client,
+        polos,
         GenerateBlogPayload(
             topic=topic,
             additional_instructions=additional_instructions,
@@ -61,8 +56,7 @@ async def demo_generate_blog(client: PolosClient):
     print("\n  Streaming events...")
     print("-" * 60)
 
-    # Stream workflow events and print agent_finish and workflow_finish events
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type == "agent_finish":
@@ -86,7 +80,7 @@ async def demo_generate_blog(client: PolosClient):
             print(f"\n[STEP FINISH] {step_name}")
 
 
-async def demo_blog_review_only(client: PolosClient):
+async def demo_blog_review_only(polos):
     """Demonstrate the blog_review workflow directly."""
     from workflows import blog_review, BlogReviewPayload
 
@@ -109,9 +103,8 @@ async def demo_blog_review_only(client: PolosClient):
     print_section("Invoking blog_review workflow")
     print("  Text: (contains intentional errors for demonstration)")
 
-    # Invoke the workflow
     handle = await blog_review.invoke(
-        client,
+        polos,
         BlogReviewPayload(text=sample_text.strip()),
     )
 
@@ -119,8 +112,7 @@ async def demo_blog_review_only(client: PolosClient):
     print("\n  Streaming events...")
     print("-" * 60)
 
-    # Stream workflow events
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
+    async for event in events.stream_workflow(polos, handle.root_workflow_id, handle.id):
         event_type = event.event_type
 
         if event_type == "agent_finish":
@@ -137,42 +129,26 @@ async def demo_blog_review_only(client: PolosClient):
 
 async def main():
     """Run blog review demos."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     print("=" * 60)
     print("Blog Review Workflow Examples")
     print("=" * 60)
-    print("\nMake sure the worker is running: python worker.py")
     print("\nThis demo showcases agent orchestration patterns:")
     print("  1. Generate blog - creates and reviews a blog post")
     print("  2. Blog review only - reviews existing text")
 
-    try:
-        # Demo 1: Generate and review a blog
-        await demo_generate_blog(client)
+    async with Polos(log_file="polos.log") as polos:
+        try:
+            await demo_generate_blog(polos)
+            await demo_blog_review_only(polos)
 
-        # Demo 2: Review existing text
-        await demo_blog_review_only(client)
+            print("\n" + "=" * 60)
+            print("All demos completed!")
+            print("=" * 60)
 
-        print("\n" + "=" * 60)
-        print("All demos completed!")
-        print("=" * 60)
-
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        print("\nMake sure the worker is running and try again.")
+        except Exception as e:
+            print(f"\nError: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

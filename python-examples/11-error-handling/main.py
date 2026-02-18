@@ -1,18 +1,14 @@
 """
-Client demonstrating error handling patterns in workflows.
+Demonstrate error handling patterns in workflows.
 
-Run the worker first:
-    python worker.py
-
-Then run this client:
+Run with:
     python main.py
 """
 
 import asyncio
-import os
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 
 from workflows import (
     retry_example,
@@ -38,17 +34,16 @@ def print_section(title: str):
     print(f"\n--- {title} ---")
 
 
-async def demo_retry_example(client: PolosClient):
+async def demo_retry_example(polos):
     """Demonstrate automatic retry behavior."""
     print_header("Retry Example Demo")
     print("This workflow demonstrates automatic retry with exponential backoff.")
     print("The step may fail randomly but will be retried up to 3 times.")
 
-    # Low failure rate - should succeed
     print_section("Low failure rate (10%)")
     try:
         result = await retry_example.run(
-            client,
+            polos,
             RetryPayload(failure_rate=0.1, operation="low_risk_process"),
         )
         print(f"  Status: {result['status']}")
@@ -56,11 +51,10 @@ async def demo_retry_example(client: PolosClient):
     except Exception as e:
         print(f"  Failed after retries: {e}")
 
-    # High failure rate - likely to fail even with retries
     print_section("High failure rate (90%)")
     try:
         result = await retry_example.run(
-            client,
+            polos,
             RetryPayload(failure_rate=0.9, operation="high_risk_process"),
         )
         print(f"  Status: {result['status']}")
@@ -69,7 +63,7 @@ async def demo_retry_example(client: PolosClient):
         print(f"  Failed after retries (expected): {e}")
 
 
-async def demo_error_recovery(client: PolosClient):
+async def demo_error_recovery(polos):
     """Demonstrate error recovery patterns."""
     print_header("Error Recovery Demo")
     print("This workflow processes items and continues even if some fail.")
@@ -77,7 +71,7 @@ async def demo_error_recovery(client: PolosClient):
 
     print_section("Processing mixed items")
     result = await error_recovery.run(
-        client,
+        polos,
         {"items": ["item1", "item2", "fail_item", "item3", "another_fail"]},
     )
 
@@ -95,25 +89,23 @@ async def demo_error_recovery(client: PolosClient):
             print(f"    - {e['item']}: {e['error'][:50]}...")
 
 
-async def demo_fallback_pattern(client: PolosClient):
+async def demo_fallback_pattern(polos):
     """Demonstrate fallback pattern."""
     print_header("Fallback Pattern Demo")
     print("This workflow tries primary method first, then falls back if it fails.")
 
-    # Primary method succeeds
     print_section("Primary method succeeds")
     result = await fallback_pattern.run(
-        client,
+        polos,
         {"data": {"value": "test_data"}},
     )
     print(f"  Method used: {result['method']}")
     if 'result' in result:
         print(f"  Result: {result['result']}")
 
-    # Force primary to fail, use fallback
     print_section("Primary fails, using fallback")
     result = await fallback_pattern.run(
-        client,
+        polos,
         {"data": {"value": "test_data", "force_failure": True}},
     )
     print(f"  Method used: {result['method']}")
@@ -124,7 +116,7 @@ async def demo_fallback_pattern(client: PolosClient):
             print("  (Running in degraded mode)")
 
 
-async def demo_circuit_breaker(client: PolosClient):
+async def demo_circuit_breaker(polos):
     """Demonstrate circuit breaker pattern."""
     print_header("Circuit Breaker Demo")
     print("This workflow stops processing after too many consecutive failures.")
@@ -136,13 +128,13 @@ async def demo_circuit_breaker(client: PolosClient):
         {"id": 2, "name": "item2"},
         {"id": 3, "name": "item3", "should_fail": True},
         {"id": 4, "name": "item4", "should_fail": True},
-        {"id": 5, "name": "item5", "should_fail": True},  # This triggers circuit open
-        {"id": 6, "name": "item6"},  # Will be skipped
-        {"id": 7, "name": "item7"},  # Will be skipped
+        {"id": 5, "name": "item5", "should_fail": True},
+        {"id": 6, "name": "item6"},
+        {"id": 7, "name": "item7"},
     ]
 
     result = await circuit_breaker.run(
-        client,
+        polos,
         {"items": items, "failure_threshold": 3},
     )
 
@@ -156,25 +148,23 @@ async def demo_circuit_breaker(client: PolosClient):
         print(f"    - Item {item_id}: {status}{reason}")
 
 
-async def demo_compensation_pattern(client: PolosClient):
+async def demo_compensation_pattern(polos):
     """Demonstrate compensation (rollback) pattern."""
     print_header("Compensation Pattern Demo")
     print("This workflow performs a saga with compensation on failure.")
     print("Steps: reserve_inventory -> charge_payment -> send_confirmation")
 
-    # Successful case
     print_section("Successful transaction")
     result = await compensation_pattern.run(
-        client,
+        polos,
         {"order_id": "ORDER-001"},
     )
     print(f"  Status: {result['status']}")
     print(f"  Completed steps: {result.get('completed', [])}")
 
-    # Failure case - confirmation fails, triggers rollback
     print_section("Failed transaction with rollback")
     result = await compensation_pattern.run(
-        client,
+        polos,
         {"order_id": "ORDER-002", "fail_confirmation": True},
     )
     print(f"  Status: {result['status']}")
@@ -185,45 +175,26 @@ async def demo_compensation_pattern(client: PolosClient):
 
 async def main():
     """Run all error handling demos."""
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Get it from the Polos UI at http://localhost:5173/projects/settings"
-        )
-
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
     print("=" * 60)
     print("Error Handling Workflow Examples")
     print("=" * 60)
-    print("\nMake sure the worker is running: python worker.py")
-    print("\nThis demo showcases various error handling patterns:")
-    print("  1. Retry with exponential backoff")
-    print("  2. Error recovery (continue on failure)")
-    print("  3. Fallback pattern (primary/secondary)")
-    print("  4. Circuit breaker (fail fast)")
-    print("  5. Compensation pattern (saga rollback)")
 
-    try:
-        await demo_retry_example(client)
-        await demo_error_recovery(client)
-        await demo_fallback_pattern(client)
-        await demo_circuit_breaker(client)
-        await demo_compensation_pattern(client)
+    async with Polos(log_file="polos.log") as polos:
+        try:
+            await demo_retry_example(polos)
+            await demo_error_recovery(polos)
+            await demo_fallback_pattern(polos)
+            await demo_circuit_breaker(polos)
+            await demo_compensation_pattern(polos)
 
-        print("\n" + "=" * 60)
-        print("All demos completed!")
-        print("=" * 60)
+            print("\n" + "=" * 60)
+            print("All demos completed!")
+            print("=" * 60)
 
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        print("\nMake sure the worker is running and try again.")
+        except Exception as e:
+            print(f"\nError: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

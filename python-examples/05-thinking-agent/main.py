@@ -1,21 +1,14 @@
 """
-Run the thinking agent.
-
-This script invokes the thinking agent and waits for the result.
+Run the thinking agent with streaming.
 
 Run with:
     python main.py
-
-Environment variables:
-    POLOS_PROJECT_ID - Your project ID (required)
-    POLOS_API_URL - Orchestrator URL (default: http://localhost:8080)
 """
 
 import asyncio
-import os
 
 from dotenv import load_dotenv
-from polos import PolosClient
+from polos import Polos
 
 from agents import thinking_agent
 
@@ -24,31 +17,16 @@ load_dotenv()
 
 async def main():
     """Run the thinking agent."""
-    # Get project_id from environment
-    project_id = os.getenv("POLOS_PROJECT_ID")
-    if not project_id:
-        raise ValueError(
-            "POLOS_PROJECT_ID environment variable is required. "
-            "Set it to your project ID (e.g., export POLOS_PROJECT_ID=my-project). "
-            "You can get this from the output printed by `polos-server start` or from the UI page at "
-            "http://localhost:5173/projects/settings (the ID will be below the project name 'default')"
+    async with Polos(log_file="polos.log") as polos:
+        print("Invoking thinking agent...")
+
+        result = await thinking_agent.stream(
+            polos,
+            "A farmer has 17 sheep. All but 9 run away. How many sheep does the farmer have left?"
         )
 
-    # Create Polos client
-    client = PolosClient(
-        project_id=project_id,
-        api_url=os.getenv("POLOS_API_URL", "http://localhost:8080"),
-    )
-
-    print("Invoking thinking agent...")
-
-    result = await thinking_agent.stream(
-        client,
-        "A farmer has 17 sheep. All but 9 run away. How many sheep does the farmer have left?"
-    )
-
-    async for chunk in result.text_chunks:
-        print(chunk, end="", flush=True)
+        async for chunk in result.text_chunks:
+            print(chunk, end="", flush=True)
 
 
 if __name__ == "__main__":

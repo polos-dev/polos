@@ -30,6 +30,7 @@ export interface WorkerExecutionData {
   otelSpanId?: string | undefined;
   initialState?: Record<string, unknown> | undefined;
   runTimeoutSeconds?: number | undefined;
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**
@@ -155,6 +156,12 @@ export class WorkerServer {
           otelSpanId: body.otel_span_id ?? undefined,
           initialState: body.initial_state ?? undefined,
           runTimeoutSeconds: body.run_timeout_seconds ?? undefined,
+          channelContext: body.channel_context
+            ? {
+                channelId: body.channel_context['channel_id'] as string,
+                source: body.channel_context['source'] as Record<string, unknown>,
+              }
+            : undefined,
         };
 
         // Increment execution count

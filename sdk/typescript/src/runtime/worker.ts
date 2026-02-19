@@ -10,7 +10,8 @@
 import type { Workflow } from '../core/workflow.js';
 import { isToolWorkflow, type ToolWorkflow } from '../core/tool.js';
 import { isAgentWorkflow, type AgentWorkflow } from '../agents/agent.js';
-import type { Channel } from '../channels/channel.js';
+import type { Channel, ChannelContext, ChannelOutputMode } from '../channels/channel.js';
+import type { StreamEvent } from '../types/events.js';
 import { globalRegistry } from '../core/registry.js';
 import { StepExecutionError } from '../core/step.js';
 import type {
@@ -790,7 +791,12 @@ export class Worker {
         initialState: data.initialState,
         runTimeoutSeconds: data.runTimeoutSeconds,
         createdAt: data.createdAt,
+        channelContext: data.channelContext,
       };
+
+      // Resolve channels: workflow-level overrides channelContext overrides worker-level
+      const hasWorkflowChannels = workflow.config.channels !== undefined;
+      const resolvedChannels = workflow.config.channels ?? this.channels;
 
       // Execute workflow
       result = await executeWorkflow({
@@ -800,9 +806,15 @@ export class Worker {
         orchestratorClient: this.orchestratorClient,
         workerId: this.getWorkerIdOrThrow(),
         abortSignal: abortController.signal,
-        channels: this.channels,
+        channels: resolvedChannels,
         sandboxManager: this.sandboxManager,
+        channelContext: hasWorkflowChannels ? undefined : data.channelContext,
       });
+
+      // Start channel bridge for output streaming (always uses channelContext, independent of channel resolution)
+      if (data.channelContext) {
+        this.startChannelBridge(executionId, workflowId, data.channelContext, workflow);
+      }
 
       // Handle result
       await this.handleExecutionResult(executionId, workflowId, context, result);
@@ -983,4 +995,68 @@ export class Worker {
       logger.error(`Failed to confirm cancellation: ${executionId}`, { error: String(error) });
     }
   }
+
+  /**
+   * Start a channel bridge that streams execution events back to the originating channel.
+   */
+  private startChannelBridge(
+    executionId: string,
+    workflowId: string,
+    channelCtx: { channelId: string; source: Record<string, unknown> },
+    workflow: Workflow
+  ): void {
+    const channel = this.channels.find((ch) => ch.id === channelCtx.channelId);
+    if (!channel?.sendOutput) return;
+
+    const outputMode: ChannelOutputMode =
+      ((workflow.config as unknown as Record<string, unknown>)['channelOutputMode'] as
+        | ChannelOutputMode
+        | undefined) ??
+      channel.outputMode ??
+      'per_step';
+    if (outputMode === 'none') return;
+
+    const execution = this.activeExecutions.get(executionId);
+    if (!execution) return;
+
+    const rootExecutionId = execution.abortController.signal.aborted ? executionId : executionId;
+    const rootWorkflowId = workflowId;
+
+    void (async () => {
+      try {
+        const stream = this.orchestratorClient.streamEvents({
+          workflowId: rootWorkflowId,
+          workflowRunId: rootExecutionId,
+        });
+        for await (const event of stream) {
+          if (execution.abortController.signal.aborted) break;
+          if (shouldForwardEvent(event, outputMode)) {
+            await channel.sendOutput?.(channelCtx as ChannelContext, event);
+          }
+        }
+      } catch (err) {
+        logger.warn('Channel bridge error', { error: String(err), executionId });
+      }
+    })();
+  }
+}
+
+/**
+ * Determine whether an event should be forwarded based on the output mode.
+ */
+function shouldForwardEvent(event: StreamEvent, mode: ChannelOutputMode): boolean {
+  const eventType = event.eventType;
+  if (mode === 'per_step') {
+    return (
+      eventType === 'text_delta' ||
+      eventType === 'tool_call' ||
+      eventType === 'step_finish' ||
+      eventType === 'workflow_finish' ||
+      eventType === 'agent_finish'
+    );
+  }
+  if (mode === 'final') {
+    return eventType === 'workflow_finish' || eventType === 'agent_finish';
+  }
+  return false;
 }

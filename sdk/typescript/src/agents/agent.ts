@@ -7,8 +7,8 @@
  */
 
 import type { LanguageModel } from 'ai';
-import type { ZodSchema, ZodTypeDef } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { type ZodType, toJSONSchema } from 'zod';
+import type { Channel } from '../channels/channel.js';
 import type { WorkflowContext } from '../core/context.js';
 import type {
   QueueConfig,
@@ -63,7 +63,7 @@ export interface DefineAgentConfig {
   /** Conditions to stop agent execution */
   stopConditions?: StopCondition[] | undefined;
   /** Zod schema for structured output */
-  outputSchema?: ZodSchema<unknown, ZodTypeDef, unknown> | undefined;
+  outputSchema?: ZodType | undefined;
   /** Hook(s) to run before workflow execution */
   onStart?: HookOrHandler | undefined;
   /** Hook(s) to run after workflow completion */
@@ -84,6 +84,8 @@ export interface DefineAgentConfig {
   compaction?: CompactionConfig | undefined;
   /** Publish text_delta and tool_call events to the workflow topic for all invocations */
   streamToWorkflow?: boolean | undefined;
+  /** Notification channels for suspend events. Overrides Worker-level channels. */
+  channels?: Channel[] | undefined;
 }
 
 /**
@@ -216,7 +218,13 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
 
   // Convert outputSchema to JSON schema if provided
   const outputSchemaJson = config.outputSchema
-    ? zodToJsonSchema(config.outputSchema, { target: 'openApi3' })
+    ? (() => {
+        const { $schema: _, ...rest } = toJSONSchema(config.outputSchema) as Record<
+          string,
+          unknown
+        >;
+        return rest;
+      })()
     : undefined;
 
   // Create handler closure
@@ -268,6 +276,7 @@ export function defineAgent(config: DefineAgentConfig): AgentWorkflow {
       queue: config.queue,
       onStart: config.onStart,
       onEnd: config.onEnd,
+      channels: config.channels,
     },
     handler as WorkflowHandler<unknown, unknown, unknown>
   );

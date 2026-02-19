@@ -7,7 +7,7 @@
 
 import { generateText, streamText, Output } from 'ai';
 import type { ModelMessage as CoreMessage, LanguageModel } from 'ai';
-import type { ZodSchema } from 'zod';
+import type { ZodType } from 'zod';
 import type { LLMGenerateOptions, LLMResponse, LLMStreamEvent, LLMToolCall } from './types.js';
 import {
   convertToolsToVercel,
@@ -128,7 +128,7 @@ function buildGenerateArgs(
   if (options.maxTokens !== undefined) args['maxTokens'] = options.maxTokens;
   if (options.topP !== undefined) args['topP'] = options.topP;
   if (options.outputSchema) {
-    args['experimental_output'] = Output.object({ schema: options.outputSchema as ZodSchema });
+    args['experimental_output'] = Output.object({ schema: options.outputSchema as ZodType });
   }
   applyAnthropicCacheControl(args, model);
   return args;

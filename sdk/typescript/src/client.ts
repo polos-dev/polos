@@ -54,6 +54,8 @@ export interface ClientInvokeOptions {
   rootExecutionId?: string | undefined;
   /** Step key (when invoked from a step) */
   stepKey?: string | undefined;
+  /** Channel context for bidirectional channels (e.g., originating Slack thread) */
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**
@@ -318,6 +320,7 @@ export class PolosClient {
       parentExecutionId: options?.parentExecutionId,
       rootExecutionId: options?.rootExecutionId,
       stepKey: options?.stepKey,
+      channelContext: options?.channelContext,
     });
 
     return new ExecutionHandle(

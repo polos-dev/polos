@@ -218,8 +218,19 @@ export class ManagedSandbox implements Sandbox {
         await env.initialize(labels);
         return env;
       }
-      case 'local':
-        return new LocalEnvironment(this.config.local, this.config.exec?.maxOutputChars);
+      case 'local': {
+        const localCwd = this.config.local?.cwd ?? this._getDefaultWorkspaceDir();
+        await fs.mkdir(localCwd, { recursive: true });
+        // Default pathRestriction to cwd; set to false to explicitly disable
+        const pathRestriction =
+          this.config.local?.pathRestriction === false
+            ? undefined
+            : (this.config.local?.pathRestriction ?? localCwd);
+        const localConfig = { ...this.config.local, cwd: localCwd, pathRestriction };
+        const env = new LocalEnvironment(localConfig, this.config.exec?.maxOutputChars);
+        await env.initialize();
+        return env;
+      }
       case 'e2b':
         throw new Error('E2B environment is not yet implemented.');
       default:

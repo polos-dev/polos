@@ -176,10 +176,14 @@ export interface E2BEnvironmentConfig {
  * Configuration for a local execution environment.
  */
 export interface LocalEnvironmentConfig {
-  /** Working directory (default: process.cwd()) */
+  /** Working directory (default: auto-provisioned workspace) */
   cwd?: string | undefined;
-  /** Restrict file operations to this directory */
-  pathRestriction?: string | undefined;
+  /**
+   * Restrict file operations to this directory.
+   * Defaults to `cwd` when running inside a managed sandbox.
+   * Set to `false` to explicitly disable path restriction.
+   */
+  pathRestriction?: string | false | undefined;
 }
 
 /**

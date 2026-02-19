@@ -6,8 +6,8 @@
  * LLM-specific metadata (description, JSON schema parameters).
  */
 
-import type { ZodSchema, ZodTypeDef } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { type ZodType, toJSONSchema } from 'zod';
+import type { Channel } from '../channels/channel.js';
 import type { WorkflowContext } from './context.js';
 import type { QueueConfig, WorkflowHandler, Workflow } from './workflow.js';
 import { defineWorkflow } from './workflow.js';
@@ -42,11 +42,11 @@ export interface DefineToolConfig<TInput = unknown, TOutput = unknown, TState = 
   /** Tool description shown to LLMs */
   description: string;
   /** Zod schema for input validation (optional — some tools take no input) */
-  inputSchema?: ZodSchema<TInput, ZodTypeDef, unknown> | undefined;
+  inputSchema?: ZodType<TInput> | undefined;
   /** Zod schema for output validation */
-  outputSchema?: ZodSchema<TOutput, ZodTypeDef, unknown> | undefined;
+  outputSchema?: ZodType<TOutput> | undefined;
   /** Zod schema for state validation and defaults */
-  stateSchema?: ZodSchema<TState, ZodTypeDef, unknown> | undefined;
+  stateSchema?: ZodType<TState> | undefined;
   /** Queue assignment */
   queue?: string | QueueConfig | undefined;
   /** Hook(s) to run before tool execution */
@@ -65,6 +65,8 @@ export interface DefineToolConfig<TInput = unknown, TOutput = unknown, TState = 
   autoRegister?: boolean | undefined;
   /** Require human approval before tool execution. @default undefined (no approval) */
   approval?: ToolApproval | undefined;
+  /** Notification channels for suspend events. Overrides Worker-level channels. */
+  channels?: Channel[] | undefined;
 }
 
 // ── ToolWorkflow ─────────────────────────────────────────────────────
@@ -143,7 +145,10 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
 ): ToolWorkflow<TInput, TOutput, TState> {
   // Derive JSON schema parameters from inputSchema
   const toolParameters: Record<string, unknown> = config.inputSchema
-    ? (zodToJsonSchema(config.inputSchema, { target: 'openApi3' }) as Record<string, unknown>)
+    ? (() => {
+        const { $schema: _, ...rest } = toJSONSchema(config.inputSchema) as Record<string, unknown>;
+        return rest;
+      })()
     : { type: 'object', properties: {} };
 
   // Wrap handler with approval gate when configured
@@ -205,6 +210,7 @@ export function defineTool<TInput = unknown, TOutput = unknown, TState = unknown
       queue: config.queue,
       onStart: config.onStart,
       onEnd: config.onEnd,
+      channels: config.channels,
     },
     effectiveHandler as WorkflowHandler<TInput, TState, TOutput>,
     config.autoRegister === undefined ? undefined : { autoRegister: config.autoRegister }

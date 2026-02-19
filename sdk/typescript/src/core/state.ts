@@ -4,7 +4,7 @@
  * Handles state initialization, validation, and serialization using Zod schemas.
  */
 
-import type { ZodSchema, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import { serialize, deserialize } from '../utils/serializer.js';
 
 /**
@@ -20,7 +20,18 @@ export class StateValidationError extends Error {
     message: string,
     public readonly issues: unknown[]
   ) {
-    super(message);
+    const issueDetails = issues
+      .map((issue) => {
+        if (issue && typeof issue === 'object') {
+          const i = issue as Record<string, unknown>;
+          const path = Array.isArray(i['path']) ? (i['path'] as unknown[]).join('.') : '';
+          const msg = typeof i['message'] === 'string' ? i['message'] : '';
+          return path ? `${path}: ${msg}` : msg;
+        }
+        return String(issue);
+      })
+      .join('; ');
+    super(issueDetails ? `${message}: ${issueDetails}` : message);
     this.name = 'StateValidationError';
   }
 }
@@ -42,7 +53,7 @@ export class StateSizeError extends Error {
  * Initialize state from a Zod schema.
  * Uses schema defaults to create the initial state.
  */
-export function initializeState<TState>(schema: ZodSchema<TState, ZodTypeDef, unknown>): TState {
+export function initializeState<TState>(schema: ZodType<TState>): TState {
   // Parse an empty object to get defaults
   const result = schema.safeParse({});
 
@@ -64,10 +75,7 @@ export function initializeState<TState>(schema: ZodSchema<TState, ZodTypeDef, un
 /**
  * Validate state against a Zod schema.
  */
-export function validateState<TState>(
-  state: unknown,
-  schema: ZodSchema<TState, ZodTypeDef, unknown>
-): TState {
+export function validateState<TState>(state: unknown, schema: ZodType<TState>): TState {
   const result = schema.safeParse(state);
 
   if (!result.success) {
@@ -96,10 +104,7 @@ export function serializeState<TState>(state: TState): string {
 /**
  * Deserialize state from storage.
  */
-export function deserializeState<TState>(
-  serialized: string,
-  schema?: ZodSchema<TState, ZodTypeDef, unknown>
-): TState {
+export function deserializeState<TState>(serialized: string, schema?: ZodType<TState>): TState {
   const state = deserialize<TState>(serialized);
 
   if (schema) {

@@ -5,7 +5,8 @@
  * Uses native `fetch` (Node 18+) — no @slack/web-api dependency required.
  */
 
-import type { Channel, SuspendNotification } from './channel.js';
+import type { Channel, ChannelContext, ChannelOutputMode, SuspendNotification } from './channel.js';
+import type { StreamEvent } from '../types/events.js';
 
 /**
  * Configuration for the Slack notification channel.
@@ -15,6 +16,8 @@ export interface SlackChannelConfig {
   botToken: string;
   /** Default Slack channel for notifications (e.g., "#agent-notifications") */
   defaultChannel: string;
+  /** Slack signing secret for verifying inbound webhooks */
+  signingSecret?: string;
 }
 
 /** Minimal Slack Block Kit block type. */
@@ -30,6 +33,7 @@ interface SlackBlock {
  */
 export class SlackChannel implements Channel {
   readonly id = 'slack';
+  readonly outputMode: ChannelOutputMode = 'per_step';
   private readonly config: SlackChannelConfig;
 
   constructor(config: SlackChannelConfig) {
@@ -49,8 +53,29 @@ export class SlackChannel implements Channel {
     const blocks = this.buildBlocks(notification);
     const text = notification.title ?? 'Agent needs your input';
 
-    const body: Record<string, unknown> = { channel, text, blocks };
+    await this.postMessage(channel, threadTs, text, blocks);
+  }
+
+  async sendOutput(context: ChannelContext, event: StreamEvent): Promise<void> {
+    const channel = context.source['channel'] as string;
+    const threadTs = context.source['threadTs'] as string | undefined;
+    if (!channel) return;
+
+    const text = this.formatOutputEvent(event);
+    if (!text) return;
+
+    await this.postMessage(channel, threadTs, text);
+  }
+
+  private async postMessage(
+    channel: string,
+    threadTs: string | undefined,
+    text: string,
+    blocks?: SlackBlock[]
+  ): Promise<void> {
+    const body: Record<string, unknown> = { channel, text };
     if (threadTs) body['thread_ts'] = threadTs;
+    if (blocks) body['blocks'] = blocks;
 
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
@@ -65,6 +90,49 @@ export class SlackChannel implements Channel {
     if (!data.ok) {
       throw new Error(`Slack API error: ${data.error ?? 'unknown'}`);
     }
+  }
+
+  private formatOutputEvent(event: StreamEvent): string | null {
+    const eventType = event.eventType;
+
+    if (eventType === 'workflow_finish' || eventType === 'agent_finish') {
+      const metadata = event.data['_metadata'] as Record<string, unknown> | undefined;
+      const result = event.data['result'];
+      const error = event.data['error'] as string | undefined;
+      const workflowId = metadata?.['workflow_id'] as string | undefined;
+      if (error) {
+        return `\u274C *${workflowId ?? 'Workflow'} failed:* ${error}`;
+      }
+      const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      if (resultStr) {
+        return `\u2705 *${workflowId ?? 'Workflow'} finished:*\n${resultStr}`;
+      }
+      return `\u2705 *${workflowId ?? 'Workflow'} finished*`;
+    }
+
+    if (eventType === 'tool_call') {
+      const toolCall = event.data['tool_call'] as Record<string, unknown> | undefined;
+      if (toolCall) {
+        const fn = toolCall['function'] as Record<string, unknown> | undefined;
+        const name = fn?.['name'] as string | undefined;
+        if (name) {
+          return `\uD83D\uDD27 Calling tool: \`${name}\``;
+        }
+      }
+      return null;
+    }
+
+    if (eventType === 'step_finish') {
+      const stepKey = event.data['step_key'] as string | undefined;
+      const error = event.data['error'] as string | undefined;
+      if (error) {
+        return `\u26A0\uFE0F Step \`${stepKey ?? 'unknown'}\` failed: ${error}`;
+      }
+      return null;
+    }
+
+    // text_delta: skip individual deltas to avoid noise
+    return null;
   }
 
   private buildBlocks(n: SuspendNotification): SlackBlock[] {
@@ -112,19 +180,62 @@ export class SlackChannel implements Channel {
       });
     }
 
-    // Action button — link to approval page
-    blocks.push({
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Respond' },
-          url: n.approvalUrl,
-          style: 'primary',
-        },
-      ],
-    });
+    // Action buttons — inline Approve/Reject for simple approvals, link button otherwise
+    if (this.isSimpleApproval(n)) {
+      const approveValue = JSON.stringify({
+        executionId: n.executionId,
+        stepKey: n.stepKey,
+        approved: true,
+      });
+      const rejectValue = JSON.stringify({
+        executionId: n.executionId,
+        stepKey: n.stepKey,
+        approved: false,
+      });
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            action_id: 'polos_approve',
+            text: { type: 'plain_text', text: 'Approve' },
+            style: 'primary',
+            value: approveValue,
+          },
+          {
+            type: 'button',
+            action_id: 'polos_reject',
+            text: { type: 'plain_text', text: 'Reject' },
+            style: 'danger',
+            value: rejectValue,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'View Details' },
+            url: n.approvalUrl,
+          },
+        ],
+      });
+    } else {
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Respond' },
+            url: n.approvalUrl,
+            style: 'primary',
+          },
+        ],
+      });
+    }
 
     return blocks;
+  }
+
+  private isSimpleApproval(n: SuspendNotification): boolean {
+    const fields = n.formFields;
+    if (!fields || fields.length === 0) return false;
+    return fields.some((f) => f['key'] === 'approved' && f['type'] === 'boolean');
   }
 }

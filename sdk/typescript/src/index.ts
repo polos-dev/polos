@@ -335,5 +335,7 @@ export {
   SlackChannel,
   type SlackChannelConfig,
   type Channel,
+  type ChannelContext,
+  type ChannelOutputMode,
   type SuspendNotification,
 } from './channels/index.js';

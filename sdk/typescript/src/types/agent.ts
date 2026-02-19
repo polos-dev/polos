@@ -12,7 +12,7 @@ import type { LanguageModel, ModelMessage } from 'ai';
 
 // Backwards-compat alias: CoreMessage was renamed to ModelMessage in ai v6
 type CoreMessage = ModelMessage;
-import type { ZodSchema } from 'zod';
+import type { ZodType } from 'zod';
 import type { WorkflowContext, QueueConfig, Hook } from './workflow.js';
 import type { TokenUsage, ToolCall } from './llm.js';
 
@@ -25,9 +25,9 @@ export interface Tool<TInput = unknown, TOutput = unknown> {
   /** Tool description (shown to LLM) */
   description: string;
   /** Zod schema for input validation */
-  inputSchema: ZodSchema<TInput>;
+  inputSchema: ZodType<TInput>;
   /** Zod schema for output validation */
-  outputSchema: ZodSchema<TOutput>;
+  outputSchema: ZodType<TOutput>;
   /** Tool handler function */
   handler: ToolHandler<TInput, TOutput>;
 }
@@ -49,9 +49,9 @@ export interface ToolConfig<TInput = unknown, TOutput = unknown> {
   /** Tool description (shown to LLM) */
   description: string;
   /** Zod schema for input validation */
-  inputSchema: ZodSchema<TInput>;
+  inputSchema: ZodType<TInput>;
   /** Zod schema for output validation */
-  outputSchema: ZodSchema<TOutput>;
+  outputSchema: ZodType<TOutput>;
 }
 
 /**
@@ -136,7 +136,7 @@ export interface AgentConfig<TOutput = string, TState = unknown> {
   queue?: string | QueueConfig;
 
   /** Zod schema for structured output */
-  outputSchema?: ZodSchema<TOutput>;
+  outputSchema?: ZodType<TOutput>;
 
   /** Lifecycle hooks */
   onStart?: Hook<string, TState>;

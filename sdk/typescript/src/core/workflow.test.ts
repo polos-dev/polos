@@ -98,4 +98,22 @@ describe('defineWorkflow', () => {
     const wf = defineWorkflow({ id: 'handler-wf' }, handler, { autoRegister: false });
     assert.strictEqual(wf.handler, handler);
   });
+
+  it('accepts channels in config', () => {
+    const fakeChannel = { id: 'test-channel', notify: async () => {} };
+    const wf = defineWorkflow({ id: 'channels-wf', channels: [fakeChannel] }, async () => 'ok', {
+      autoRegister: false,
+    });
+
+    assert.strictEqual(wf.config.channels?.length, 1);
+    assert.strictEqual(wf.config.channels?.[0]?.id, 'test-channel');
+  });
+
+  it('channels defaults to undefined when not provided', () => {
+    const wf = defineWorkflow({ id: 'no-channels-wf' }, async () => 'ok', {
+      autoRegister: false,
+    });
+
+    assert.strictEqual(wf.config.channels, undefined);
+  });
 });

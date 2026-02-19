@@ -680,6 +680,11 @@ export class OrchestratorClient {
     if (request.initialState !== undefined) body['initial_state'] = request.initialState;
     if (request.runTimeoutSeconds !== undefined)
       body['run_timeout_seconds'] = request.runTimeoutSeconds;
+    if (request.channelContext !== undefined)
+      body['channel_context'] = {
+        channel_id: request.channelContext.channelId,
+        source: request.channelContext.source,
+      };
 
     return this.request<InvokeWorkflowResponse>('POST', `/api/v1/workflows/${workflowId}/run`, {
       body,

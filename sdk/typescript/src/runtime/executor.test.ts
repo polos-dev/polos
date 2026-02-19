@@ -5,6 +5,7 @@ import { executeWorkflow } from './executor.js';
 import type { ExecutionContext, StepOutput } from './orchestrator-types.js';
 import type { OrchestratorClient } from './orchestrator-client.js';
 import type { Workflow } from '../core/workflow.js';
+import type { Channel } from '../channels/channel.js';
 import { WaitError, StepExecutionError } from '../core/step.js';
 import { HookResult } from '../middleware/hook.js';
 import { z } from 'zod';
@@ -682,6 +683,150 @@ describe('step.suspend', () => {
     const setWaitingCalls = (mockClient.setWaiting as unknown as ReturnType<typeof mock.fn>).mock
       .calls;
     assert.ok(setWaitingCalls.length >= 1);
+  });
+
+  it('uses workflow-level channels when provided', async () => {
+    const mockClient = createMockOrchestratorClient();
+    const notifyCalls: string[] = [];
+
+    const workflowChannel: Channel = {
+      id: 'workflow-channel',
+      notify: async () => {
+        notifyCalls.push('workflow-channel');
+      },
+    };
+
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        await ctx.step.suspend('approval', { data: { requestId: '1' } });
+        return 'resumed';
+      },
+    });
+
+    await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+      channels: [workflowChannel],
+    });
+
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.strictEqual(notifyCalls[0], 'workflow-channel');
+  });
+
+  it('includes channelContext in SuspendNotification', async () => {
+    const mockClient = createMockOrchestratorClient();
+    let capturedNotification: Record<string, unknown> | undefined;
+
+    const testChannel: Channel = {
+      id: 'slack',
+      notify: async (n) => {
+        capturedNotification = n as unknown as Record<string, unknown>;
+      },
+    };
+
+    const channelContext = {
+      channelId: 'slack',
+      source: { channel: '#general', threadTs: '1234.5678' },
+    };
+
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        await ctx.step.suspend('approval', { data: { requestId: '1' } });
+        return 'resumed';
+      },
+    });
+
+    await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+      channels: [testChannel],
+      channelContext,
+    });
+
+    assert.ok(capturedNotification, 'Expected notification to be sent');
+    assert.deepStrictEqual(capturedNotification['channelContext'], channelContext);
+  });
+
+  it('injects channelContext.source as channelOverrides for matching channel', async () => {
+    const mockClient = createMockOrchestratorClient();
+    let capturedOverrides: Record<string, unknown> | undefined;
+
+    const testChannel: Channel = {
+      id: 'slack',
+      notify: async (n) => {
+        capturedOverrides = n.channelOverrides;
+      },
+    };
+
+    const channelContext = {
+      channelId: 'slack',
+      source: { channel: '#general', threadTs: '1234.5678' },
+    };
+
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        await ctx.step.suspend('approval', { data: { requestId: '1' } });
+        return 'resumed';
+      },
+    });
+
+    await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+      channels: [testChannel],
+      channelContext,
+    });
+
+    assert.ok(capturedOverrides, 'Expected channelOverrides to be set');
+    assert.strictEqual(capturedOverrides['channel'], '#general');
+    assert.strictEqual(capturedOverrides['threadTs'], '1234.5678');
+  });
+
+  it('notifies all channels without _notify.channels filtering', async () => {
+    const mockClient = createMockOrchestratorClient();
+    const notifyCalls: string[] = [];
+
+    const ch1: Channel = {
+      id: 'slack',
+      notify: async () => {
+        notifyCalls.push('slack');
+      },
+    };
+    const ch2: Channel = {
+      id: 'discord',
+      notify: async () => {
+        notifyCalls.push('discord');
+      },
+    };
+
+    const workflow = createWorkflow({
+      handler: async (ctx) => {
+        await ctx.step.suspend('approval', { data: { requestId: '1' } });
+        return 'resumed';
+      },
+    });
+
+    await executeWorkflow({
+      workflow,
+      payload: {},
+      context: createExecContext(),
+      orchestratorClient: mockClient,
+      workerId: 'worker-1',
+      channels: [ch1, ch2],
+    });
+
+    assert.strictEqual(notifyCalls.length, 2);
+    assert.ok(notifyCalls.includes('slack'));
+    assert.ok(notifyCalls.includes('discord'));
   });
 });
 

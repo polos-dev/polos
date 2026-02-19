@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { ZodSchema, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import type { Workflow } from '../core/workflow.js';
 import type { WorkflowContext, AgentContext } from '../core/context.js';
 import type { AgentWorkflow } from '../agents/agent.js';
@@ -26,7 +26,7 @@ import { StepExecutionError, WaitError, isWaitError } from '../core/step.js';
 import type { WorkflowHandle, WorkflowStatus } from '../core/workflow.js';
 import type { OrchestratorClient } from './orchestrator-client.js';
 import type { ExecutionContext, StepOutput, BatchWorkflowEntry } from './orchestrator-types.js';
-import type { Channel, SuspendNotification } from '../channels/channel.js';
+import type { Channel, ChannelContext, SuspendNotification } from '../channels/channel.js';
 import { executeHookChain } from '../middleware/hook-executor.js';
 import { normalizeHooks } from '../middleware/hook.js';
 import { initializeState, validateState, serializeState } from '../core/state.js';
@@ -77,6 +77,8 @@ export interface ExecuteWorkflowOptions {
   channels?: Channel[] | undefined;
   /** Sandbox manager for managed sandbox lifecycle */
   sandboxManager?: SandboxManager | undefined;
+  /** Originating channel context for bidirectional channels */
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**
@@ -168,7 +170,8 @@ function createOrchestratorStepHelper(
   execCtx: StepExecutionContext,
   workerId: string,
   abortSignal?: AbortSignal,
-  channels?: Channel[]
+  channels?: Channel[],
+  channelContext?: { channelId: string; source: Record<string, unknown> }
 ): StepHelper {
   // --- Abort check ---
   const checkAborted = (): void => {
@@ -899,53 +902,55 @@ function createOrchestratorStepHelper(
         const formData = eventRecord['_form'] as Record<string, unknown> | undefined;
         const notifyConfig = eventRecord['_notify'] as Record<string, unknown> | undefined;
 
-        // _notify.channels filters the already-resolved set
-        const allowedChannels = notifyConfig?.['channels'] as string[] | undefined;
-        const activeChannels = allowedChannels
-          ? channels.filter((ch) => allowedChannels.includes(ch.id))
-          : channels;
+        const titleVal = formData?.['title'] as string | undefined;
+        const notifyMessage = notifyConfig?.['message'] as string | undefined;
+        const formDescription = formData?.['description'] as string | undefined;
+        const descriptionVal = notifyMessage ?? formDescription;
+        const sourceVal = eventRecord['_source'] as string | undefined;
+        const toolVal = eventRecord['_tool'] as string | undefined;
+        const contextVal = formData?.['context'] as Record<string, unknown> | undefined;
+        const formFieldsVal = formData?.['fields'] as Record<string, unknown>[] | undefined;
+        const expiresAtVal = (formData?.['expiresAt'] ?? formData?.['expires_at']) as
+          | string
+          | undefined;
 
-        if (activeChannels.length > 0) {
-          const titleVal = formData?.['title'] as string | undefined;
-          const notifyMessage = notifyConfig?.['message'] as string | undefined;
-          const formDescription = formData?.['description'] as string | undefined;
-          const descriptionVal = notifyMessage ?? formDescription;
-          const sourceVal = eventRecord['_source'] as string | undefined;
-          const toolVal = eventRecord['_tool'] as string | undefined;
-          const contextVal = formData?.['context'] as Record<string, unknown> | undefined;
-          const expiresAtVal = (formData?.['expiresAt'] ?? formData?.['expires_at']) as
-            | string
-            | undefined;
-
-          const notification: SuspendNotification = {
-            workflowId: execCtx.rootWorkflowId,
-            executionId: execCtx.rootExecutionId,
-            stepKey: key,
-            approvalUrl,
-          };
-          if (titleVal !== undefined) notification.title = titleVal;
-          if (descriptionVal !== undefined) notification.description = descriptionVal;
-          if (sourceVal !== undefined) notification.source = sourceVal;
-          if (toolVal !== undefined) notification.tool = toolVal;
-          if (contextVal !== undefined) notification.context = contextVal;
-          if (expiresAtVal !== undefined) notification.expiresAt = expiresAtVal;
-
-          // Fire all notifications concurrently — failures logged, never block suspend
-          await Promise.allSettled(
-            activeChannels.map(async (ch) => {
-              try {
-                const overrides = notifyConfig?.[ch.id] as Record<string, unknown> | undefined;
-                const n =
-                  overrides !== undefined
-                    ? { ...notification, channelOverrides: overrides }
-                    : notification;
-                await ch.notify(n);
-              } catch (err) {
-                logger.warn(`Channel ${ch.id} notification failed`, { error: String(err) });
-              }
-            })
-          );
+        const notification: SuspendNotification = {
+          workflowId: execCtx.rootWorkflowId,
+          executionId: execCtx.rootExecutionId,
+          stepKey: key,
+          approvalUrl,
+        };
+        if (titleVal !== undefined) notification.title = titleVal;
+        if (descriptionVal !== undefined) notification.description = descriptionVal;
+        if (sourceVal !== undefined) notification.source = sourceVal;
+        if (toolVal !== undefined) notification.tool = toolVal;
+        if (contextVal !== undefined) notification.context = contextVal;
+        if (formFieldsVal !== undefined) notification.formFields = formFieldsVal;
+        if (expiresAtVal !== undefined) notification.expiresAt = expiresAtVal;
+        if (channelContext !== undefined) {
+          notification.channelContext = channelContext as ChannelContext;
         }
+
+        // Fire all notifications concurrently — failures logged, never block suspend
+        await Promise.allSettled(
+          channels.map(async (ch) => {
+            try {
+              // Per-channel overrides: merge _notify.[channelId] overrides
+              // + inject channelContext.source for matching channel
+              let overrides = notifyConfig?.[ch.id] as Record<string, unknown> | undefined;
+              if (ch.id === channelContext?.channelId) {
+                overrides = { ...channelContext.source, ...overrides };
+              }
+              const n =
+                overrides !== undefined
+                  ? { ...notification, channelOverrides: overrides }
+                  : notification;
+              await ch.notify(n);
+            } catch (err) {
+              logger.warn(`Channel ${ch.id} notification failed`, { error: String(err) });
+            }
+          })
+        );
       }
 
       throw new WaitError(`Waiting for resume event: ${topic}`, { topic });
@@ -1145,6 +1150,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     abortSignal,
     channels,
     sandboxManager,
+    channelContext,
   } = options;
 
   let state: Record<string, unknown> = {};
@@ -1172,14 +1178,20 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     if (context.initialState) {
       state = context.initialState;
     } else if (workflow.stateSchema) {
-      state = initializeState(
-        workflow.stateSchema as ZodSchema<Record<string, unknown>, ZodTypeDef, unknown>
-      );
+      state = initializeState(workflow.stateSchema as ZodType<Record<string, unknown>>);
     }
 
     // Validate payload if schema provided
     if (workflow.payloadSchema) {
-      validatedPayload = validateState(payload, workflow.payloadSchema);
+      try {
+        validatedPayload = validateState(payload, workflow.payloadSchema);
+      } catch (err) {
+        logger.error(`Payload validation failed for workflow "${workflow.id}"`, {
+          payload: JSON.stringify(payload).slice(0, 500),
+          error: String(err),
+        });
+        throw err;
+      }
     }
 
     // Compute effective root IDs
@@ -1202,7 +1214,8 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
       },
       workerId,
       abortSignal,
-      channels
+      channels,
+      channelContext
     );
 
     // Create workflow context
@@ -1413,7 +1426,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         if (workflow.stateSchema) {
           state = validateState(
             ctx.state,
-            workflow.stateSchema as ZodSchema<Record<string, unknown>, ZodTypeDef, unknown>
+            workflow.stateSchema as ZodType<Record<string, unknown>>
           );
         } else {
           state = ctx.state;

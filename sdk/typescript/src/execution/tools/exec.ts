@@ -113,7 +113,7 @@ export function createExecTool(
       inputSchema: z.object({
         command: z.string().describe('The shell command to execute'),
         cwd: z.string().optional().describe('Working directory for the command'),
-        env: z.record(z.string()).optional().describe('Environment variables to set'),
+        env: z.record(z.string(), z.string()).optional().describe('Environment variables to set'),
         timeout: z.number().optional().describe('Timeout in seconds (default: 300)'),
       }),
     },

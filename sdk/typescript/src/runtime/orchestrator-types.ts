@@ -109,6 +109,7 @@ export interface ExecutionContext {
   initialState?: Record<string, unknown> | undefined;
   runTimeoutSeconds?: number | undefined;
   createdAt?: string | undefined;
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**
@@ -189,6 +190,7 @@ export interface ExecuteRequest {
   otel_span_id?: string | null;
   initial_state?: Record<string, unknown> | null;
   run_timeout_seconds?: number | null;
+  channel_context?: Record<string, unknown> | null;
 }
 
 /**
@@ -319,6 +321,7 @@ export interface InvokeWorkflowRequest {
   otelTraceparent?: string | undefined;
   initialState?: Record<string, unknown> | undefined;
   runTimeoutSeconds?: number | undefined;
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**

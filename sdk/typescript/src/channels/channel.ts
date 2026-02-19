@@ -6,6 +6,27 @@
  * should be stateless and safe to call concurrently.
  */
 
+import type { StreamEvent } from '../types/events.js';
+
+/**
+ * Originating channel context — identifies where a trigger came from
+ * so that output and notifications can be routed back.
+ */
+export interface ChannelContext {
+  /** Channel type: "slack", "discord", etc. */
+  channelId: string;
+  /** Channel-specific source metadata (e.g., { channel: "#general", threadTs: "..." }) */
+  source: Record<string, unknown>;
+}
+
+/**
+ * Controls how output events are streamed back to the originating channel.
+ * - `per_step`: Stream text_delta, tool_call, step_finish, and finish events
+ * - `final`: Only stream workflow_finish / agent_finish events
+ * - `none`: Do not stream output
+ */
+export type ChannelOutputMode = 'per_step' | 'final' | 'none';
+
 /**
  * Data passed to channels when an agent suspends for user input.
  */
@@ -28,10 +49,14 @@ export interface SuspendNotification {
   tool?: string;
   /** Read-only context data from _form */
   context?: Record<string, unknown>;
+  /** Form field definitions from _form.fields */
+  formFields?: Record<string, unknown>[];
   /** ISO timestamp when the approval expires */
   expiresAt?: string;
   /** Channel-specific overrides from _notify */
   channelOverrides?: Record<string, unknown>;
+  /** Originating channel context — used for thread routing */
+  channelContext?: ChannelContext;
 }
 
 /**
@@ -50,4 +75,10 @@ export interface Channel {
    * Implementations should throw on failure — the SDK catches and logs errors.
    */
   notify(notification: SuspendNotification): Promise<void>;
+
+  /** Default output mode for this channel. */
+  readonly outputMode?: ChannelOutputMode;
+
+  /** Send output events back to the originating channel. */
+  sendOutput?(context: ChannelContext, event: StreamEvent): Promise<void>;
 }

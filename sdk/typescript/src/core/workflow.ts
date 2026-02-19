@@ -4,8 +4,9 @@
  * Provides the defineWorkflow function for creating typed, durable workflows.
  */
 
-import type { ZodSchema, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import type { WorkflowContext } from './context.js';
+import type { Channel } from '../channels/channel.js';
 import { globalRegistry } from './registry.js';
 import { assertNotInExecutionContext } from '../runtime/execution-context.js';
 
@@ -69,11 +70,11 @@ export interface WorkflowConfig<TPayload = unknown, TState = unknown, TResult = 
   /** Batch timeout in seconds for event-triggered workflows */
   batchTimeoutSeconds?: number | undefined;
   /** Zod schema for payload validation */
-  payloadSchema?: ZodSchema<TPayload, ZodTypeDef, unknown> | undefined;
+  payloadSchema?: ZodType<TPayload> | undefined;
   /** Zod schema for state validation and defaults */
-  stateSchema?: ZodSchema<TState, ZodTypeDef, unknown> | undefined;
+  stateSchema?: ZodType<TState> | undefined;
   /** Zod schema for output/result validation */
-  outputSchema?: ZodSchema<TResult, ZodTypeDef, unknown> | undefined;
+  outputSchema?: ZodType<TResult> | undefined;
   /** Hook(s) to run before workflow execution (bare function or Hook object) */
   onStart?:
     | HookHandler<TPayload, TState>
@@ -86,6 +87,8 @@ export interface WorkflowConfig<TPayload = unknown, TState = unknown, TResult = 
     | HookObject<TPayload, TState>
     | (HookHandler<TPayload, TState> | HookObject<TPayload, TState>)[]
     | undefined;
+  /** Notification channels for suspend events. Overrides Worker-level channels. */
+  channels?: Channel[] | undefined;
 }
 
 /**
@@ -171,11 +174,11 @@ export interface Workflow<TPayload = unknown, TState = unknown, TResult = unknow
   /** Workflow handler function */
   readonly handler: WorkflowHandler<TPayload, TState, TResult>;
   /** Payload schema (if provided) */
-  readonly payloadSchema?: ZodSchema<TPayload, ZodTypeDef, unknown> | undefined;
+  readonly payloadSchema?: ZodType<TPayload> | undefined;
   /** State schema (if provided) */
-  readonly stateSchema?: ZodSchema<TState, ZodTypeDef, unknown> | undefined;
+  readonly stateSchema?: ZodType<TState> | undefined;
   /** Output schema (if provided) */
-  readonly outputSchema?: ZodSchema<TResult, ZodTypeDef, unknown> | undefined;
+  readonly outputSchema?: ZodType<TResult> | undefined;
   /**
    * Run workflow and wait for result (invoke + poll until complete).
    * Cannot be called from within a workflow; use step.invokeAndWait() instead.

@@ -130,7 +130,6 @@ impl OrchestratorClient {
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(5))
             .build()
             .expect("Failed to build HTTP client");

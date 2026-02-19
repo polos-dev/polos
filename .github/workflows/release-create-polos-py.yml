@@ -1,0 +1,119 @@
+name: Release create-polos (Python)
+
+on:
+  push:
+    tags:
+      - 'polos-installer-py-v*'
+
+jobs:
+  build:
+    name: Build create-polos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build hatchling twine
+
+      - name: Get version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/polos-installer-py-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Build package
+        run: |
+          cd create-polos-py
+          python -m build
+
+      - name: Check package
+        run: |
+          cd create-polos-py
+          python -m twine check dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-polos-py
+          path: create-polos-py/dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create Release and Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: create-polos-py
+          path: dist
+
+      - name: Get version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/polos-installer-py-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          CURRENT_TAG="polos-installer-py-v${{ steps.tag.outputs.version }}"
+          # Find previous polos-installer-py-v tag
+          PREV_TAG=$(git tag -l "polos-installer-py-v*" --sort=-version:refname | sed -n "2p" || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            NOTES=$(git log --pretty=format:"- %s (%h)" ${CURRENT_TAG} 2>/dev/null || echo "Initial release")
+          else
+            NOTES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null || echo "No commits found")
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          name: create-polos (Python) v${{ steps.tag.outputs.version }}
+          body: |
+            ## create-polos (Python) v${{ steps.tag.outputs.version }}
+
+            ### Changes
+            ${{ steps.release_notes.outputs.notes }}
+
+            ### Installation
+            ```bash
+            pip install create-polos==${{ steps.tag.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install twine
+          python -m twine upload dist/*

@@ -78,7 +78,7 @@ jobs:
         env:
           CARGO_TARGET_DIR: ../target
 
-      - name: Build polos-server
+      - name: Build polos CLI
         run: |
           cd server
           if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
@@ -93,26 +93,26 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
-            strip target/${{ matrix.target }}/release/polos-server
+            strip target/${{ matrix.target }}/release/polos
             strip target/${{ matrix.target }}/release/polos-orchestrator
           elif [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos-server
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos
             aarch64-linux-gnu-strip target/${{ matrix.target }}/release/polos-orchestrator
           fi
 
       - name: Strip binaries (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          strip target/${{ matrix.target }}/release/polos-server
+          strip target/${{ matrix.target }}/release/polos
           strip target/${{ matrix.target }}/release/polos-orchestrator
 
       - name: Create distribution tarball
         run: |
           mkdir -p dist/bin dist/ui
-          cp target/${{ matrix.target }}/release/polos-server dist/bin/
+          cp target/${{ matrix.target }}/release/polos dist/bin/
           cp target/${{ matrix.target }}/release/polos-orchestrator dist/bin/
           cp -r ui/dist/* dist/ui/
-          chmod +x dist/bin/polos-server dist/bin/polos-orchestrator
+          chmod +x dist/bin/polos dist/bin/polos-orchestrator
           tar -czvf polos-${{ matrix.platform }}.tar.gz -C dist .
 
       - name: Create checksum

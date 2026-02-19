@@ -29,7 +29,7 @@ They can:
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

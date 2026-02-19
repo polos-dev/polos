@@ -91,7 +91,7 @@ Watch a coding agent built with Polos - sandboxed execution, tool calls, and rea
 
 ```bash
 curl -fsSL https://install.polos.dev/install.sh | bash
-polos-server start
+polos server start
 ```
 
 Copy the project ID displayed when you start the server. You'll need it in the next steps.

@@ -19,7 +19,7 @@ This example demonstrates how to stream responses from agents in real-time.
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

@@ -18,11 +18,11 @@ A simple example demonstrating the basics of Polos:
 Install and start the Polos server (orchestrator):
 
 ```bash
-# Install polos-server
+# Install polos
 curl -fsSL https://install.polos.dev/install.sh | bash
 
 # Start the server
-polos-server start
+polos server start
 ```
 
 Example output:
@@ -55,7 +55,7 @@ Create a `.env` file:
 
 ```bash
 # Required: Your project ID.
-# You can get this from the output printed by `polos-server start` or from the UI page at
+# You can get this from the output printed by `polos server start` or from the UI page at
 # http://localhost:5173/projects/settings (the ID will be below the project name 'default')
 POLOS_PROJECT_ID=my-project
 

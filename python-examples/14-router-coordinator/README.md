@@ -30,7 +30,7 @@ Teams coordinate multiple agents, tools, and workflows:
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

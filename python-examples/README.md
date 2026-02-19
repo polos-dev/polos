@@ -9,7 +9,7 @@ Each folder contains an independently executable example with its own `pyproject
 1. **Polos Server** - Install and start the orchestrator:
    ```bash
    curl -fsSL https://install.polos.dev/install.sh | bash
-   polos-server start
+   polos server start
    ```
 
 2. **Python 3.10+**
@@ -65,7 +65,7 @@ Each folder contains an independently executable example with its own `pyproject
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Navigate to an example:

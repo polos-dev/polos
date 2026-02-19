@@ -1,6 +1,6 @@
 # Installer Documentation
 
-This directory contains the installer script and web page for `polos-server`.
+This directory contains the installer script and web page for the Polos CLI.
 
 ## Files
 

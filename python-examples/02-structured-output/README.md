@@ -18,7 +18,7 @@ This example demonstrates how to use Pydantic models to get structured, typed re
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

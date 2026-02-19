@@ -4,14 +4,11 @@ Uses env='local' instead of Docker -- commands run directly on your
 machine. Exec security defaults to 'approval-always' since there's no
 container isolation: every shell command suspends for user approval.
 
-File operations (read, write, edit) use path_restriction to prevent
-the agent from accessing files outside the workspace directory.
-
+The workspace directory is auto-provisioned at
+``~/.polos/workspaces/{projectId}/{sessionId}`` -- no manual ``cwd`` needed.
 The sandbox lifecycle is fully managed -- the environment is created
 lazily on first tool use and cleaned up when the execution completes.
 """
-
-import os
 
 from polos import (
     Agent,
@@ -19,20 +16,13 @@ from polos import (
     MaxStepsConfig,
     sandbox_tools,
     SandboxToolsConfig,
-    LocalEnvironmentConfig,
 )
 
-# Workspace directory -- the agent operates here
-workspace_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
-
-# Create sandbox tools that run locally on the host
+# Create sandbox tools that run locally on the host.
+# The working directory is auto-provisioned per execution -- no need to set cwd.
 tools = sandbox_tools(
     SandboxToolsConfig(
         env="local",
-        local=LocalEnvironmentConfig(
-            cwd=workspace_dir,
-            path_restriction=workspace_dir,  # prevent file access outside workspace
-        ),
         # Exec defaults to 'approval-always' for local mode.
         # Write and edit also require approval (file_approval defaults to 'always').
         # You can override these defaults:
@@ -51,12 +41,11 @@ coding_agent = Agent(
     provider="anthropic",
     model="claude-sonnet-4-5",
     system_prompt=(
-        f"You are a coding agent with access to the local filesystem. "
-        f"You can create files, edit code, run shell commands, and search the codebase. "
-        f"Your workspace is at {workspace_dir}. "
-        f"Use the tools to complete the task, then summarize what you did and show the output. "
-        f"Always verify your work by running the code after writing it. "
-        f"In your final response, include the actual output from running the code."
+        "You are a coding agent with access to the local filesystem. "
+        "You can create files, edit code, run shell commands, and search the codebase. "
+        "Use the tools to complete the task, then summarize what you did and show the output. "
+        "Always verify your work by running the code after writing it. "
+        "In your final response, include the actual output from running the code."
     ),
     tools=tools,
     stop_conditions=[max_steps(MaxStepsConfig(count=30))],

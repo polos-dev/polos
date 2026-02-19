@@ -1,4 +1,4 @@
-# Building and Releasing Polos Server
+# Building and Releasing Polos CLI
 
 ## Local Build (for testing)
 
@@ -12,7 +12,7 @@
 **Note:** The build process is automated. The `build.rs` script will automatically:
 - Build the orchestrator if needed
 - Build the UI with `VITE_POLOS_LOCAL_MODE=true` if the `ui/dist` directory doesn't exist
-- Embed both into the final `polos-server` binary
+- Embed both into the final `polos` binary
 
 1. **Build the server** (this will handle orchestrator and UI automatically):
    ```bash
@@ -20,13 +20,13 @@
    cargo build --release
    ```
 
-   The binary will be at: `server/target/release/polos-server` (or `server/target/release/polos-server.exe` on Windows)
+   The binary will be at: `server/target/release/polos` (or `server/target/release/polos.exe` on Windows)
 
 **Optional - Manual Build Steps:**
 
 If you want to build components separately:
 
-1. **Build the UI** (with local mode enabled for `polos-server`):
+1. **Build the UI** (with local mode enabled):
    ```bash
    cd ui
    npm install
@@ -49,7 +49,7 @@ If you want to build components separately:
 
 4. **Test locally**:
    ```bash
-   ./server/target/release/polos-server start
+   ./server/target/release/polos server start
    ```
 
 ## Creating a GitHub Release
@@ -89,10 +89,10 @@ The GitHub Actions workflow automatically builds binaries for all platforms when
    - Once the workflow completes, go to "Releases" in your GitHub repository
    - You should see a new release with the tag name
    - The release will contain 4 binaries:
-     - `polos-server-darwin-arm64`
-     - `polos-server-darwin-x86_64`
-     - `polos-server-linux-arm64`
-     - `polos-server-linux-x86_64`
+     - `polos-darwin-arm64`
+     - `polos-darwin-x86_64`
+     - `polos-linux-arm64`
+     - `polos-linux-x86_64`
    - Each binary will have a corresponding `checksums.txt` file
 
 ### Version Numbering

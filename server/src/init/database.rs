@@ -31,6 +31,7 @@ pub async fn ensure_database_exists(database_url: &str) -> Result<()> {
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&postgres_url)
         .await
         .context(format!(
@@ -70,6 +71,7 @@ pub async fn ensure_database_exists(database_url: &str) -> Result<()> {
 pub async fn run_migrations(database_url: &str) -> Result<()> {
     let pool = PgPoolOptions::new()
         .max_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(database_url)
         .await
         .context("Failed to connect to database")?;
@@ -151,6 +153,7 @@ pub async fn run_migrations(database_url: &str) -> Result<()> {
 pub async fn get_database_pool(database_url: &str) -> Result<PgPool> {
     let pool = PgPoolOptions::new()
         .max_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(database_url)
         .await
         .context("Failed to connect to database")?;

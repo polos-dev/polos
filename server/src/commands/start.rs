@@ -22,7 +22,7 @@ pub async fn run() -> Result<()> {
 
         if orchestrator_running || ui_running {
             println!("⚠️  Polos server appears to be already running.");
-            println!("   Run 'polos-server status' to check or 'polos-server stop' to stop it.");
+            println!("   Run 'polos server status' to check or 'polos server stop' to stop it.");
             return Ok(());
         } else {
             // Clean up stale PID files
@@ -71,8 +71,8 @@ pub async fn run() -> Result<()> {
     println!("🔑 Project ID:       {}", config.project_id);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
-    println!("To stop the server, run: polos-server stop");
-    println!("To check status, run:    polos-server status");
+    println!("To stop the server, run: polos server stop");
+    println!("To check status, run:    polos server status");
 
     Ok(())
 }
@@ -194,7 +194,7 @@ async fn start_ui_server(config: &ServerConfig) -> Result<u32> {
     Ok(pid)
 }
 
-async fn initialize() -> Result<()> {
+pub async fn initialize() -> Result<()> {
     // Default database URL
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/polos".to_string());

@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::config::ServerConfig;
 
 pub async fn run() -> Result<()> {
-    println!("🛑 Stopping Polos server...");
+    println!("🛑 Stopping Polos server (this may take a few seconds)...");
 
     let pids_dir = ServerConfig::pids_dir()?;
     let orchestrator_pid_file = pids_dir.join("orchestrator.pid");

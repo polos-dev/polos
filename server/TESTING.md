@@ -1,6 +1,6 @@
 # Testing Embedded Binary Fix
 
-This guide helps you test that the orchestrator binary is properly embedded in `polos-server`.
+This guide helps you test that the orchestrator binary is properly embedded in `polos`.
 
 ## Local Testing
 
@@ -19,10 +19,10 @@ Check that the binary was built with the embedded orchestrator:
 
 ```bash
 # Check if the generated orchestrator_binary.rs file exists
-ls -la target/release/build/polos-server-*/out/orchestrator_binary.rs
+ls -la target/release/build/polos-cli-*/out/orchestrator_binary.rs
 
 # Check the binary size (should be larger than before due to embedded orchestrator)
-ls -lh target/release/polos-server
+ls -lh target/release/polos
 ```
 
 ### Step 3: Test Extraction
@@ -31,7 +31,7 @@ Run the server and verify it can extract and run the orchestrator:
 
 ```bash
 # Start the server (this will extract the embedded orchestrator)
-./target/release/polos-server start
+./target/release/polos server start
 
 # You should see:
 # 🚀 Starting Polos server...
@@ -45,7 +45,7 @@ Run the server and verify it can extract and run the orchestrator:
 Check that the orchestrator was extracted to a temp directory:
 
 ```bash
-# While polos-server is running, check temp directory
+# While polos is running, check temp directory
 ls -la /tmp/polos-orchestrator-* 2>/dev/null || echo "No temp files (server may have stopped)"
 
 # The orchestrator should be extracted to something like:
@@ -59,11 +59,11 @@ To simulate the installer scenario, copy the binary to a different location:
 ```bash
 # Copy to a temp directory (simulating installation)
 mkdir -p /tmp/test-polos-install
-cp target/release/polos-server /tmp/test-polos-install/
+cp target/release/polos /tmp/test-polos-install/
 
 # Run from the new location
 cd /tmp/test-polos-install
-./polos-server start
+./polos server start
 
 # Should work without any path errors
 ```
@@ -80,11 +80,11 @@ cargo build --release
 
 # Move to a different location
 mkdir -p ~/test-install
-cp target/release/polos-server ~/test-install/
+cp target/release/polos ~/test-install/
 cd ~/test-install
 
 # Run - should work without any CI build paths
-./polos-server start
+./polos server start
 ```
 
 ## Testing via GitHub Release
@@ -94,7 +94,7 @@ cd ~/test-install
 ```bash
 # Make sure all changes are committed
 git add server/build.rs server/src/utils.rs
-git commit -m "Fix: Embed orchestrator binary directly into polos-server"
+git commit -m "Fix: Embed orchestrator binary directly into polos"
 
 # Create a test tag
 git tag v0.1.11-test
@@ -111,14 +111,14 @@ git push origin v0.1.11-test
 ```bash
 # Download the binary for your platform
 # For macOS ARM64:
-curl -L -o polos-server-test \
-  https://github.com/polos-dev/polos/releases/download/v0.1.11-test/polos-server-darwin-arm64
+curl -L -o polos-test \
+  https://github.com/polos-dev/polos/releases/download/v0.1.11-test/polos-darwin-arm64
 
 # Make executable
-chmod +x polos-server-test
+chmod +x polos-test
 
 # Test it
-./polos-server-test start
+./polos-test server start
 
 # Should work without any path errors
 ```
@@ -135,7 +135,7 @@ curl -fsSL https://install.polos.dev/install.sh | bash -s 0.1.11-test
 curl -fsSL https://polos-dev.github.io/polos/install.sh | bash -s 0.1.11-test
 
 # Verify installation
-polos-server start
+polos server start
 ```
 
 ## Verification Checklist
@@ -211,12 +211,12 @@ echo ""
 
 # Check binary size
 echo "2. Binary size:"
-ls -lh target/release/polos-server
+ls -lh target/release/polos
 echo ""
 
 # Check generated file
 echo "3. Checking generated orchestrator_binary.rs:"
-if ls target/release/build/polos-server-*/out/orchestrator_binary.rs 1> /dev/null 2>&1; then
+if ls target/release/build/polos-cli-*/out/orchestrator_binary.rs 1> /dev/null 2>&1; then
     echo "✅ orchestrator_binary.rs found"
 else
     echo "❌ orchestrator_binary.rs not found"
@@ -227,11 +227,11 @@ echo ""
 # Test extraction
 echo "4. Testing binary extraction..."
 TEMP_DIR=$(mktemp -d)
-cp target/release/polos-server "$TEMP_DIR/"
+cp target/release/polos "$TEMP_DIR/"
 cd "$TEMP_DIR"
 
 # Try to extract (this will fail if binary isn't embedded, but that's ok for testing)
-timeout 5 ./polos-server start 2>&1 | head -5 || true
+timeout 5 ./polos server start 2>&1 | head -5 || true
 
 echo ""
 echo "✅ Local test complete!"

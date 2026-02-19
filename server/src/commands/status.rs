@@ -8,7 +8,7 @@ pub async fn run() -> Result<()> {
     let config = ServerConfig::load()?;
 
     if config.is_none() {
-        println!("Server not initialized. Run 'polos-server start' to initialize.");
+        println!("Server not initialized. Run 'polos server start' to initialize.");
         return Ok(());
     }
 
@@ -23,8 +23,11 @@ pub async fn run() -> Result<()> {
     // Check orchestrator (uses /health endpoint)
     let orchestrator_pid = read_pid(&orchestrator_pid_file);
     let orchestrator_running = orchestrator_pid.map(is_pid_running).unwrap_or(false);
-    let orchestrator_responding =
-        check_http_health(&format!("http://127.0.0.1:{}/health", config.orchestrator_port)).await;
+    let orchestrator_responding = check_http_health(&format!(
+        "http://127.0.0.1:{}/health",
+        config.orchestrator_port
+    ))
+    .await;
 
     print_service_status(
         "Orchestrator",
@@ -87,7 +90,11 @@ fn is_pid_running(pid: u32) -> bool {
 }
 
 async fn check_http_health(url: &str) -> bool {
-    match reqwest::get(url).await {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap_or_default();
+    match client.get(url).send().await {
         Ok(resp) => resp.status().is_success() || resp.status() == 404,
         Err(_) => false,
     }

@@ -1,4 +1,4 @@
-# Polos Server
+# Polos CLI
 
 A single binary that makes it easy to run Polos orchestrator locally.
 
@@ -6,16 +6,16 @@ A single binary that makes it easy to run Polos orchestrator locally.
 
 Download the binary for your platform from [GitHub Releases](https://github.com/polos-dev/polos/releases):
 
-- `polos-server-darwin-arm64` (macOS Apple Silicon)
-- `polos-server-darwin-x86_64` (macOS Intel)
-- `polos-server-linux-arm64` (Linux ARM)
-- `polos-server-linux-x86_64` (Linux x86_64)
+- `polos-darwin-arm64` (macOS Apple Silicon)
+- `polos-darwin-x86_64` (macOS Intel)
+- `polos-linux-arm64` (Linux ARM)
+- `polos-linux-x86_64` (Linux x86_64)
 
 Make it executable and move it to your PATH:
 
 ```bash
-chmod +x polos-server-*
-sudo mv polos-server-* /usr/local/bin/polos-server
+chmod +x polos-*
+sudo mv polos-* /usr/local/bin/polos
 ```
 
 ## Prerequisites
@@ -27,7 +27,7 @@ You can override the database URL with the `DATABASE_URL` environment variable:
 
 ```bash
 export DATABASE_URL="postgres://user:password@localhost/polos"
-polos-server start
+polos server start
 ```
 
 ## Usage
@@ -35,7 +35,7 @@ polos-server start
 ### Start the server
 
 ```bash
-polos-server start
+polos server start
 ```
 
 This will:
@@ -54,7 +54,7 @@ The API key and project ID will be displayed when the server starts.
 ### Check status
 
 ```bash
-polos-server status
+polos server status
 ```
 
 ### Stop the server
@@ -62,16 +62,16 @@ polos-server status
 Press `Ctrl+C` in the terminal where the server is running, or:
 
 ```bash
-polos-server stop
+polos server stop
 ```
 
 ### Reset (delete all data)
 
 ```bash
-polos-server reset
+polos server reset
 ```
 
-**Warning**: This will delete all configuration and data. You'll need to run `polos-server start` again to re-initialize.
+**Warning**: This will delete all configuration and data. You'll need to run `polos server start` again to re-initialize.
 
 ## Configuration
 
@@ -104,11 +104,11 @@ cd ../server
 cargo build --release
 ```
 
-The server binary will be at `target/release/polos-server`.
+The CLI binary will be at `target/release/polos`.
 
 ## Architecture
 
-The `polos-server` binary:
+The `polos` binary:
 - Embeds the orchestrator binary
 - Serves the UI static files (from `ui/dist`)
 - Manages both processes

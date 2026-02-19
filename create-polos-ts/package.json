@@ -1,0 +1,31 @@
+{
+  "name": "create-polos",
+  "version": "0.1.0",
+  "description": "Scaffold a new Polos agent project",
+  "type": "module",
+  "bin": {
+    "create-polos": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "polos",
+    "agents",
+    "scaffolding",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@clack/prompts": "^0.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -24,7 +24,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build hatchling "twine<6"
+          pip install build hatchling twine
 
       - name: Get version from tag
         id: tag
@@ -115,5 +115,5 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           python -m pip install --upgrade pip
-          pip install "twine<6"
+          pip install twine
           python -m twine upload dist/*

@@ -7,7 +7,7 @@ name = "create-polos"
 version = "0.1.0"
 description = "Scaffold a new Polos agent project"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 dependencies = [
     "click>=8.0.0",
     "rich>=13.0.0",

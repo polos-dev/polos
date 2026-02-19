@@ -5,14 +5,13 @@ An agent that can write and execute code directly on the host machine — no Doc
 ## What it demonstrates
 
 - `sandboxTools({ env: 'local' })` creates tools that run on the host instead of inside a container
+- Workspace directory is auto-provisioned at `~/.polos/workspaces/{projectId}/{sessionId}` — no manual `cwd` needed
 - Exec security defaults to `approval-always` — every shell command suspends for user approval
-- `pathRestriction` confines file operations (read, write, edit) to the workspace directory
-- Symlink traversal is blocked when `pathRestriction` is set
 - Same tool interface as Docker (`exec`, `read`, `write`, `edit`, `glob`, `grep`)
 
 ## Prerequisites
 
-- **Polos server** running (`polos-server start`)
+- **Polos server** running (`polos server start`)
 - **Anthropic API key** (or swap to OpenAI in `agents.ts`)
 - **No Docker required**
 
@@ -30,7 +29,7 @@ npm install
 npx tsx main.ts
 ```
 
-Every shell command the agent tries to run will pause and ask for your approval in the terminal. File operations (read, write, edit) run without approval but are restricted to the `workspace/` directory.
+Every shell command the agent tries to run will pause and ask for your approval in the terminal.
 
 ## How it works
 
@@ -39,10 +38,7 @@ import { defineAgent, sandboxTools } from '@polos/sdk';
 
 const tools = sandboxTools({
   env: 'local',
-  local: {
-    cwd: '/path/to/workspace',
-    pathRestriction: '/path/to/workspace',  // confine file access
-  },
+  // cwd is auto-provisioned — no need to set it manually
 });
 
 const agent = defineAgent({
@@ -59,7 +55,6 @@ By default, local mode requires approval for every command. You can use an allow
 ```typescript
 const tools = sandboxTools({
   env: 'local',
-  local: { cwd: workspaceDir, pathRestriction: workspaceDir },
   exec: {
     security: 'allowlist',
     allowlist: ['node *', 'cat *', 'ls *', 'ls', 'echo *'],
@@ -74,6 +69,6 @@ const tools = sandboxTools({
 | Isolation | Container | None (host machine) |
 | Exec security default | No check (sandbox provides isolation) | `approval-always` |
 | File access | Via bind mount | Direct filesystem |
-| Path restriction | Container boundary | `pathRestriction` config |
+| Workspace | Auto-provisioned (bind-mounted) | Auto-provisioned (`~/.polos/workspaces/...`) |
 | Requires Docker | Yes | No |
 | Performance | Container overhead | Native speed |

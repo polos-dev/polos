@@ -18,11 +18,11 @@ A simple example demonstrating the basics of Polos:
 Install and start the Polos server (orchestrator):
 
 ```bash
-# Install polos-server
+# Install polos
 curl -fsSL https://install.polos.dev/install.sh | bash
 
 # Start the server
-polos-server start
+polos server start
 ```
 
 The server runs at `http://localhost:8080` by default.

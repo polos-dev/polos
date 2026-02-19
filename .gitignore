@@ -208,6 +208,9 @@ __marimo__/
 # Ignore all node_modules folders everywhere
 node_modules/
 
+# Ignore package-lock.json in typescript examples
+typescript-examples/**/package-lock.json
+
 .DS_Store
 
 .env

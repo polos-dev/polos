@@ -1,6 +1,9 @@
 # Slack Channel Notifications
 
-This example demonstrates how to send Slack notifications when an agent suspends for user input. When the agent calls `ask_user`, a Slack message appears with a "Respond" button that links to the approval page.
+This example demonstrates Slack notifications when an agent suspends for user input. It shows two notification styles:
+
+- **Tool approval** (`approval: 'always'`) — Slack renders inline **Approve / Reject / View Details** buttons. Clicking Approve or Reject resumes the execution directly from Slack.
+- **ask_user** (freeform text) — Slack renders a **Respond** link button pointing to the approval page, since freeform input can't be captured via a button click.
 
 ## Slack App Setup
 
@@ -11,9 +14,17 @@ This example demonstrates how to send Slack notifications when an agent suspends
 5. Copy the **Bot User OAuth Token** (`xoxb-...`) — this is your `SLACK_BOT_TOKEN`
 6. Invite the bot to your channel: `/invite @Polos Agent` in the channel
 
-> **Tip:** Use channel IDs (e.g., `C0123456789`) instead of names (`#my-channel`) for `SLACK_CHANNEL`. Channel IDs are stable across renames. Find yours by right-clicking a channel in Slack > **View channel details** > copy the ID at the bottom.
+### Interactive Buttons (optional but recommended)
 
-> **Note:** You only need the Bot Token (`xoxb-...`). The App Token (`xapp-...`) is for Socket Mode (receiving events), which is not needed here — we only post notifications.
+To enable the Approve/Reject buttons to actually resume executions from Slack:
+
+1. In your Slack app settings, go to **Interactivity & Shortcuts** and toggle **Interactivity** on
+2. Set the **Request URL** to `https://<your-orchestrator>/slack/interactions`
+3. Go to **Basic Information** and copy the **Signing Secret** — set it as `SLACK_SIGNING_SECRET` on the orchestrator
+
+Without this setup, the buttons still render in Slack but clicks won't be handled. Users can always fall back to the "View Details" link.
+
+> **Tip:** Use channel IDs (e.g., `C0123456789`) instead of names (`#my-channel`) for `SLACK_CHANNEL`. Channel IDs are stable across renames. Find yours by right-clicking a channel in Slack > **View channel details** > copy the ID at the bottom.
 
 ## Running
 
@@ -25,7 +36,10 @@ npm install
 npx tsx main.ts
 ```
 
-The server starts and blocks until Ctrl+C. Trigger the agent via the Polos UI or API. When the agent calls `ask_user`, you'll see a Slack message with a "Respond" button.
+The server starts and blocks until Ctrl+C. Trigger the agent via the Polos UI or API:
+
+- **"Send an email to alice@example.com about the Q1 report"** — the `send_email` tool suspends for approval, Slack shows Approve/Reject buttons
+- **"What should I work on today?"** — the agent calls `ask_user`, Slack shows a Respond link button
 
 ## Thread Support
 

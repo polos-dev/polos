@@ -33,7 +33,7 @@ Hooks are functions that execute at specific points during agent execution:
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

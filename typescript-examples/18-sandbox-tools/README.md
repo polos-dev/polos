@@ -13,7 +13,7 @@ An agent that can write and execute code inside a Docker container using sandbox
 ## Prerequisites
 
 - **Docker** installed and running
-- **Polos server** running (`polos-server start`)
+- **Polos server** running (`polos server start`)
 - **Anthropic API key** (or swap to OpenAI in `agents.ts`)
 
 ## Setup

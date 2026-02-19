@@ -12,7 +12,7 @@ An interactive research agent that searches the web, streams its activity to the
 
 ## Prerequisites
 
-- **Polos server** running (`polos-server start`)
+- **Polos server** running (`polos server start`)
 - **Anthropic API key** (or swap to OpenAI in `agents.ts`)
 - **Tavily API key** — get a free one at [tavily.com](https://tavily.com)
 

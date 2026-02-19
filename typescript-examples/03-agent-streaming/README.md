@@ -17,7 +17,7 @@ This example demonstrates how to consume streaming responses from agents, includ
 
 1. Start the Polos server:
    ```bash
-   polos-server start
+   polos server start
    ```
 
 2. Install dependencies:

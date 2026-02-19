@@ -119,9 +119,16 @@ class E2BEnvironmentConfig(BaseModel):
 class LocalEnvironmentConfig(BaseModel):
     """Configuration for a local execution environment."""
 
-    cwd: str | None = Field(default=None, description="Working directory (default: os.getcwd())")
-    path_restriction: str | None = Field(
-        default=None, description="Restrict file operations to this directory"
+    cwd: str | None = Field(
+        default=None, description="Working directory (default: auto-provisioned workspace)"
+    )
+    path_restriction: str | Literal[False] | None = Field(
+        default=None,
+        description=(
+            "Restrict file operations to this directory. "
+            "Defaults to cwd when running inside a managed sandbox. "
+            "Set to False to explicitly disable path restriction."
+        ),
     )
 
 

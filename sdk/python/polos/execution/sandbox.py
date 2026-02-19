@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from .docker import DockerEnvironment
 from .local import LocalEnvironment
-from .types import DockerEnvironmentConfig, SandboxScope, SandboxToolsConfig
+from .types import DockerEnvironmentConfig, LocalEnvironmentConfig, SandboxScope, SandboxToolsConfig
 
 if TYPE_CHECKING:
     from .environment import ExecutionEnvironment
@@ -246,8 +246,19 @@ class ManagedSandbox:
             return env
 
         elif env_type == "local":
+            local_config = self._config.local or LocalEnvironmentConfig()
+            local_cwd = local_config.cwd or self._get_default_workspace_dir()
+            os.makedirs(local_cwd, exist_ok=True)
+            # Default path_restriction to cwd; set to False to explicitly disable
+            if local_config.path_restriction is False:
+                path_restriction = None
+            else:
+                path_restriction = local_config.path_restriction or local_cwd
+            local_config = local_config.model_copy(
+                update={"cwd": local_cwd, "path_restriction": path_restriction}
+            )
             max_output_chars = self._config.exec.max_output_chars if self._config.exec else None
-            env = LocalEnvironment(self._config.local, max_output_chars)
+            env = LocalEnvironment(local_config, max_output_chars)
             await env.initialize()
             return env
 

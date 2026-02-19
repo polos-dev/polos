@@ -98,18 +98,9 @@ async fn handle_tool_approval(
     {
         for (key, val) in context {
             let val_str = if let Some(s) = val.as_str() {
-                if s.len() > 200 {
-                    format!("{}...", &s[..200])
-                } else {
-                    s.to_string()
-                }
+                truncate_str(s, 200)
             } else {
-                let s = val.to_string();
-                if s.len() > 200 {
-                    format!("{}...", &s[..200])
-                } else {
-                    s
-                }
+                truncate_str(&val.to_string(), 200)
             };
             writeln!(stdout, "  {}: {}", key.dimmed(), val_str)?;
         }
@@ -277,11 +268,7 @@ async fn handle_generic_suspend(
     let display_data = filter_internal_fields(&event.data);
     if !display_data.is_null() {
         let data_str = serde_json::to_string_pretty(&display_data)?;
-        let truncated = if data_str.len() > 200 {
-            format!("{}...", &data_str[..200])
-        } else {
-            data_str
-        };
+        let truncated = truncate_str(&data_str, 200);
         writeln!(stdout, "  Data: {}", truncated.dimmed())?;
     }
 
@@ -303,6 +290,22 @@ async fn handle_generic_suspend(
     };
     writeln!(stdout, "{}", msg.green())?;
     Ok(SuspendResult::Submitted)
+}
+
+// --- Helpers ---
+
+/// Truncate a string to at most `max_len` bytes, ensuring the cut falls on a
+/// UTF-8 char boundary so we never panic on multi-byte characters.
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        return s.to_string();
+    }
+    // Walk backwards from max_len to find a char boundary
+    let mut end = max_len;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &s[..end])
 }
 
 // --- Terminal prompt helpers ---

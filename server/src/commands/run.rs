@@ -351,11 +351,7 @@ fn render_event(
                 } else {
                     serde_json::to_string(r).unwrap_or_default()
                 };
-                if s.len() > 100 {
-                    format!("{}...", &s[..100])
-                } else {
-                    s
-                }
+                truncate_str(&s, 100)
             });
             if let Some(result) = result_str {
                 writeln!(stdout, "  {}", result.dimmed())?;
@@ -386,12 +382,7 @@ fn summarize_tool_args(tool_name: &str, args: Option<&serde_json::Value>) -> Str
                 &parsed
             }
             Err(_) => {
-                let s = if s.len() > 60 {
-                    format!("{}...", &s[..60])
-                } else {
-                    s.to_string()
-                };
-                return s;
+                return truncate_str(s, 60);
             }
         }
     } else {
@@ -410,12 +401,7 @@ fn summarize_tool_args(tool_name: &str, args: Option<&serde_json::Value>) -> Str
         }
         "exec" => {
             if let Some(cmd) = obj.get("command").and_then(|v| v.as_str()) {
-                let cmd = if cmd.len() > 80 {
-                    format!("{}...", &cmd[..80])
-                } else {
-                    cmd.to_string()
-                };
-                return cmd;
+                return truncate_str(cmd, 80);
             }
         }
         "web_search" => {
@@ -427,12 +413,20 @@ fn summarize_tool_args(tool_name: &str, args: Option<&serde_json::Value>) -> Str
     }
 
     // Fallback: show truncated JSON
-    let s = serde_json::to_string(obj).unwrap_or_default();
-    if s.len() > 80 {
-        format!("{}...", &s[..80])
-    } else {
-        s
+    truncate_str(&serde_json::to_string(obj).unwrap_or_default(), 80)
+}
+
+/// Truncate a string to at most `max_len` bytes, ensuring the cut falls on a
+/// UTF-8 char boundary so we never panic on multi-byte characters.
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        return s.to_string();
     }
+    let mut end = max_len;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &s[..end])
 }
 
 fn resolve_input(input: Option<String>, file: Option<String>) -> Result<Option<String>> {

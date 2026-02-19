@@ -1,7 +1,7 @@
 /**
- * Path-based approval for read-only sandbox tools.
+ * Path-based approval for sandbox tools.
  *
- * When pathRestriction is set, read-only tools (read, glob, grep) allow
+ * When pathRestriction is set, tools (read, write, edit, glob, grep) allow
  * operations within the restricted path without approval. Operations
  * outside the restriction suspend for user approval.
  */

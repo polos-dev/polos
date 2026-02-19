@@ -118,15 +118,30 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     else:
         effective_exec_config = config.exec if config else None
 
-    # For local mode, default file-mutating tools (write, edit) to approval-always
-    file_approval = (config.file_approval if config else None) or (
-        "always" if env_type == "local" else None
-    )
-
-    # Path restriction for read-only tools (read, glob, grep) -- approval gate
+    # Path restriction -- used by read, write, edit, glob, grep for approval gating
     path_config: PathRestrictionConfig | None = None
     if config and config.local and config.local.path_restriction:
         path_config = PathRestrictionConfig(path_restriction=config.local.path_restriction)
+
+    # file_approval overrides path-restriction behavior for write/edit.
+    # 'always' = approve every write/edit regardless of path.
+    # 'none' = never approve (skip path restriction too).
+    # None = use path restriction (approve only outside cwd).
+    file_approval = config.file_approval if config else None
+
+    # Build write/edit config: explicit approval overrides path restriction
+    from .tools.write import WriteToolConfig
+    from .tools.edit import EditToolConfig
+
+    if file_approval:
+        write_edit_config_w = WriteToolConfig(approval=file_approval)
+        write_edit_config_e = EditToolConfig(approval=file_approval)
+    elif path_config:
+        write_edit_config_w = WriteToolConfig(path_config=path_config)
+        write_edit_config_e = EditToolConfig(path_config=path_config)
+    else:
+        write_edit_config_w = None
+        write_edit_config_e = None
 
     # Determine which tools to include
     include = set(
@@ -141,9 +156,9 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     if "read" in include:
         tools.append(create_read_tool(get_env, path_config))
     if "write" in include:
-        tools.append(create_write_tool(get_env, file_approval))
+        tools.append(create_write_tool(get_env, write_edit_config_w))
     if "edit" in include:
-        tools.append(create_edit_tool(get_env, file_approval))
+        tools.append(create_edit_tool(get_env, write_edit_config_e))
     if "glob" in include:
         tools.append(create_glob_tool(get_env, path_config))
     if "grep" in include:

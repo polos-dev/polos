@@ -151,9 +151,9 @@ pub async fn run(worker_port: u16) -> Result<()> {
                     }
 
                     if let Ok(Ok(events)) = fs_rx.try_recv() {
-                        let has_relevant = events.iter().any(|e| {
-                            e.kind == DebouncedEventKind::Any && is_source_file(&e.path)
-                        });
+                        let has_relevant = events
+                            .iter()
+                            .any(|e| e.kind == DebouncedEventKind::Any && is_source_file(&e.path));
                         if has_relevant {
                             println!("File change detected. Restarting worker...");
                             match spawn_worker(&cmd, &args, &worker_env) {

@@ -103,13 +103,23 @@ export function sandboxTools(config?: SandboxToolsConfig): ToolWorkflow[] {
       ? { ...config?.exec, security: 'approval-always' }
       : config?.exec;
 
-  // For local mode, default file-mutating tools (write, edit) to approval-always
-  const fileApproval = config?.fileApproval ?? (envType === 'local' ? 'always' : undefined);
-
-  // Path restriction for read-only tools (read, glob, grep) — approval gate
+  // Path restriction — used by read, write, edit, glob, grep for approval gating
   const pathConfig = config?.local?.pathRestriction
     ? { pathRestriction: config.local.pathRestriction }
     : undefined;
+
+  // fileApproval overrides path-restriction behavior for write/edit.
+  // 'always' = approve every write/edit regardless of path.
+  // 'none' = never approve (skip path restriction too).
+  // undefined = use path restriction (approve only outside cwd).
+  const fileApproval = config?.fileApproval;
+
+  // Build write/edit config: explicit approval overrides path restriction
+  const writeEditConfig = fileApproval
+    ? { approval: fileApproval }
+    : pathConfig
+      ? { pathConfig }
+      : undefined;
 
   // Determine which tools to include
   const include = new Set(
@@ -120,8 +130,8 @@ export function sandboxTools(config?: SandboxToolsConfig): ToolWorkflow[] {
 
   if (include.has('exec')) tools.push(createExecTool(getEnv, effectiveExecConfig));
   if (include.has('read')) tools.push(createReadTool(getEnv, pathConfig));
-  if (include.has('write')) tools.push(createWriteTool(getEnv, fileApproval));
-  if (include.has('edit')) tools.push(createEditTool(getEnv, fileApproval));
+  if (include.has('write')) tools.push(createWriteTool(getEnv, writeEditConfig));
+  if (include.has('edit')) tools.push(createEditTool(getEnv, writeEditConfig));
   if (include.has('glob')) tools.push(createGlobTool(getEnv, pathConfig));
   if (include.has('grep')) tools.push(createGrepTool(getEnv, pathConfig));
 

@@ -84,6 +84,7 @@ struct PushWorkRequest {
     otel_span_id: Option<String>,
     initial_state: Option<serde_json::Value>,
     run_timeout_seconds: Option<i32>,
+    channel_context: Option<serde_json::Value>,
 }
 
 #[derive(Debug)]
@@ -131,6 +132,7 @@ pub async fn push_work_to_worker(
         otel_span_id: execution.otel_span_id.clone(),
         initial_state: execution.initial_state.clone(),
         run_timeout_seconds: execution.run_timeout_seconds,
+        channel_context: execution.channel_context.clone(),
     };
 
     let response = client

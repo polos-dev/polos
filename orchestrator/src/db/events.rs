@@ -353,45 +353,49 @@ impl Database {
         last_sequence_id: Option<i64>,
         last_timestamp: Option<chrono::DateTime<chrono::Utc>>,
         limit: i32,
+        sort_desc: bool,
     ) -> anyhow::Result<Vec<Event>> {
+        let order = if sort_desc { "DESC" } else { "ASC" };
+
+        let sql_seq = format!(
+            "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
+             FROM events
+             WHERE topic = $1 AND status = 'valid' AND project_id = $2 AND sequence_id > $3
+             ORDER BY sequence_id {order}
+             LIMIT $4"
+        );
+        let sql_ts = format!(
+            "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
+             FROM events
+             WHERE topic = $1 AND status = 'valid' AND project_id = $2 AND created_at > $3
+             ORDER BY sequence_id {order}
+             LIMIT $4"
+        );
+        let sql_all = format!(
+            "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
+             FROM events
+             WHERE topic = $1 AND status = 'valid' AND project_id = $2
+             ORDER BY sequence_id {order}
+             LIMIT $3"
+        );
+
         let query = if let Some(last_seq) = last_sequence_id {
-            // If last_sequence_id is provided, use it (takes priority over timestamp)
-            sqlx::query(
-        "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
-         FROM events
-         WHERE topic = $1 AND status = 'valid' AND project_id = $2 AND sequence_id > $3
-         ORDER BY sequence_id ASC
-         LIMIT $4"
-      )
-      .bind(topic)
-      .bind(project_id)
-      .bind(last_seq)
-      .bind(limit)
+            sqlx::query(&sql_seq)
+                .bind(topic)
+                .bind(project_id)
+                .bind(last_seq)
+                .bind(limit)
         } else if let Some(ts) = last_timestamp {
-            // If last_timestamp is provided (and no last_sequence_id), filter by timestamp
-            sqlx::query(
-        "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
-         FROM events
-         WHERE topic = $1 AND status = 'valid' AND project_id = $2 AND created_at > $3
-         ORDER BY sequence_id ASC
-         LIMIT $4"
-      )
-      .bind(topic)
-      .bind(project_id)
-      .bind(ts)
-      .bind(limit)
+            sqlx::query(&sql_ts)
+                .bind(topic)
+                .bind(project_id)
+                .bind(ts)
+                .bind(limit)
         } else {
-            // No filtering - get all events
-            sqlx::query(
-        "SELECT id, sequence_id, topic, event_type, data, status, execution_id, attempt_number, created_at
-         FROM events
-         WHERE topic = $1 AND status = 'valid' AND project_id = $2
-         ORDER BY sequence_id ASC
-         LIMIT $3"
-      )
-      .bind(topic)
-      .bind(project_id)
-      .bind(limit)
+            sqlx::query(&sql_all)
+                .bind(topic)
+                .bind(project_id)
+                .bind(limit)
         };
 
         let rows = query.fetch_all(&self.pool).await?;

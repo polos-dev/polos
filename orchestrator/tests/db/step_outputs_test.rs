@@ -36,6 +36,7 @@ async fn test_step_output_storage() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -97,6 +98,7 @@ async fn test_step_output_retrieval() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )

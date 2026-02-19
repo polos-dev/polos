@@ -42,6 +42,7 @@ async fn test_cancel_execution_recursively_cancels_children() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create parent execution");
@@ -64,6 +65,7 @@ async fn test_cancel_execution_recursively_cancels_children() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create child execution");
@@ -128,6 +130,7 @@ async fn test_cancel_execution_recursively_cancels_parents() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create grandparent execution");
@@ -150,6 +153,7 @@ async fn test_cancel_execution_recursively_cancels_parents() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create parent execution");
@@ -172,6 +176,7 @@ async fn test_cancel_execution_recursively_cancels_parents() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create child execution");
@@ -243,6 +248,7 @@ async fn test_get_timed_out_executions() {
             &project.id,
             None,
             Some(1), // 1 second timeout
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -314,6 +320,7 @@ async fn test_mark_execution_cancelled() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -370,6 +377,7 @@ async fn test_create_execution() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -420,6 +428,7 @@ async fn test_get_execution() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -466,6 +475,7 @@ async fn test_complete_execution() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )
@@ -527,6 +537,7 @@ async fn test_fail_execution() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )
@@ -615,6 +626,7 @@ async fn test_reset_execution_for_retry() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -676,6 +688,7 @@ async fn test_get_executions_by_project() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create execution 1");
@@ -695,6 +708,7 @@ async fn test_get_executions_by_project() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )
@@ -746,6 +760,7 @@ async fn test_get_pending_cancel_executions() {
             &project.id,
             None,
             Some(3600),
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -802,6 +817,7 @@ async fn test_child_execution_creation_sets_parent_waiting() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create parent execution");
@@ -823,6 +839,7 @@ async fn test_child_execution_creation_sets_parent_waiting() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )
@@ -894,6 +911,7 @@ async fn test_child_execution_completion_resumes_parent() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create parent execution");
@@ -915,6 +933,7 @@ async fn test_child_execution_completion_resumes_parent() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )
@@ -1007,6 +1026,7 @@ async fn test_child_execution_failure_resumes_parent() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create parent execution");
@@ -1028,6 +1048,7 @@ async fn test_child_execution_failure_resumes_parent() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )

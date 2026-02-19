@@ -116,4 +116,5 @@ fn should_skip_auth(path: &str) -> bool {
     ) || path.starts_with("/docs")
         || path.starts_with("/api-docs")
         || path.starts_with("/api/v1/approvals")
+        || path.starts_with("/slack/")
 }

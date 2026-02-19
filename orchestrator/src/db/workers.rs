@@ -138,13 +138,13 @@ impl Database {
         WHERE status IN ('claimed', 'running')
         GROUP BY queue_name, deployment_id, COALESCE(concurrency_key, '')
       )
-      SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error, 
-             e.created_at, e.started_at, e.completed_at, 
-             e.deployment_id, e.parent_execution_id, e.root_execution_id, 
-             e.retry_count, e.step_key, e.queue_name, e.concurrency_key, 
-             e.batch_id, e.session_id, e.user_id, e.output_schema_name, 
-             e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state, 
-             e.run_timeout_seconds, q.concurrency_limit
+      SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error,
+             e.created_at, e.started_at, e.completed_at,
+             e.deployment_id, e.parent_execution_id, e.root_execution_id,
+             e.retry_count, e.step_key, e.queue_name, e.concurrency_key,
+             e.batch_id, e.session_id, e.user_id, e.output_schema_name,
+             e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state,
+             e.run_timeout_seconds, e.channel_context, q.concurrency_limit
       FROM workflow_executions e
       INNER JOIN queues q 
         ON q.name = e.queue_name 
@@ -213,6 +213,7 @@ impl Database {
                 cancelled_at: None,
                 cancelled_by: None,
                 root_workflow_id: None,
+                channel_context: row.get("channel_context"),
             };
             tx.commit().await?;
             Ok(Some(execution))
@@ -280,7 +281,8 @@ impl Database {
              e.retry_count, e.step_key, e.queue_name, e.concurrency_key,
              e.batch_id, e.session_id, e.user_id, e.output_schema_name,
              e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state,
-             e.claimed_at, e.queued_at, e.run_timeout_seconds, q.concurrency_limit
+             e.claimed_at, e.queued_at, e.run_timeout_seconds, e.channel_context,
+             q.concurrency_limit
       FROM workflow_executions e
       INNER JOIN queues q
         ON q.name = e.queue_name
@@ -362,7 +364,7 @@ impl Database {
         e.retry_count, e.step_key, e.queue_name, e.concurrency_key,
         e.batch_id, e.session_id, e.user_id, e.output_schema_name,
         e.otel_traceparent, e.otel_span_id, e.initial_state, e.final_state,
-        e.claimed_at, e.queued_at, e.run_timeout_seconds,
+        e.claimed_at, e.queued_at, e.run_timeout_seconds, e.channel_context,
         root_exec.workflow_id as root_workflow_id,
         -- Worker fields
         w.id as worker_id, w.status as worker_status, w.last_heartbeat, w.capabilities,
@@ -418,6 +420,7 @@ impl Database {
                     cancelled_at: None,
                     cancelled_by: None,
                     root_workflow_id: row.get("root_workflow_id"),
+                    channel_context: row.get("channel_context"),
                 };
 
                 // Build Worker struct

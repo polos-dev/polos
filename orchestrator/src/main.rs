@@ -985,6 +985,14 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/approvals/:execution_id/:step_key/submit",
             post(api::approvals::submit_approval),
         )
+        // Slack app registration (authenticated, requires API key / JWT)
+        .route("/api/v1/slack/apps", post(api::slack::register_slack_app))
+        // Slack webhook endpoints (verified via signing secret, not API keys)
+        .route(
+            "/slack/v1/interactions",
+            post(api::slack::handle_interaction),
+        )
+        .route("/slack/v1/events", post(api::slack::handle_event))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             api::auth::middleware::authenticate_api_v1_middleware,

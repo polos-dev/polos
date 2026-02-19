@@ -54,6 +54,7 @@ pub struct Execution {
     pub cancelled_at: Option<DateTime<Utc>>,
     pub cancelled_by: Option<String>,
     pub root_workflow_id: Option<String>,
+    pub channel_context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -237,7 +237,8 @@ pub async fn publish_event(
         ("X-Project-ID" = String, Header, description = "Project ID"),
         ("last_sequence_id" = Option<i64>, Query, description = "Last sequence ID for pagination"),
         ("last_timestamp" = Option<String>, Query, description = "Last timestamp for pagination (RFC3339)"),
-        ("limit" = Option<i32>, Query, description = "Maximum number of events (default: 100)")
+        ("limit" = Option<i32>, Query, description = "Maximum number of events (default: 100)"),
+        ("sort" = Option<String>, Query, description = "Sort order: 'asc' (default) or 'desc'")
     ),
     responses(
         (status = 200, description = "List of events", body = GetEventsResponse),
@@ -266,6 +267,10 @@ pub async fn get_events(
         .get("limit")
         .and_then(|s| s.parse::<i32>().ok())
         .unwrap_or(100);
+    let sort_desc = params
+        .get("sort")
+        .map(|s| s.eq_ignore_ascii_case("desc"))
+        .unwrap_or(false);
 
     // Extract project_id from query param or header
     let project_id = params
@@ -292,7 +297,14 @@ pub async fn get_events(
 
     let events = state
         .db
-        .get_events(topic, &project_id, last_sequence_id, last_timestamp, limit)
+        .get_events(
+            topic,
+            &project_id,
+            last_sequence_id,
+            last_timestamp,
+            limit,
+            sort_desc,
+        )
         .await
         .map_err(|e| {
             tracing::error!("Failed to get events: {}", e);
@@ -440,6 +452,7 @@ pub async fn stream_events(
                     last_sequence_id_local,
                     last_timestamp_local,
                     100,
+                    false,
                 )
                 .await
             {

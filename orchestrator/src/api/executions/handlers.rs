@@ -47,6 +47,8 @@ pub struct SubmitWorkflowRequest {
     initial_state: Option<serde_json::Value>,
     /// Timeout in seconds (default: 3600 = 60 minutes)
     run_timeout_seconds: Option<i32>,
+    /// Channel context for bidirectional channels (Slack thread, etc.)
+    channel_context: Option<serde_json::Value>,
 }
 
 /// Response after submitting a workflow
@@ -375,6 +377,7 @@ pub async fn submit_workflow(
             &project_id,
             req.initial_state,
             req.run_timeout_seconds,
+            req.channel_context,
         )
         .await
         .map_err(|e| {

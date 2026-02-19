@@ -38,6 +38,7 @@ async fn test_wait_step_creation() {
             &project.id,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to create execution");
@@ -111,6 +112,7 @@ async fn test_wait_step_resolution() {
             None,
             None,
             &project.id,
+            None,
             None,
             None,
         )

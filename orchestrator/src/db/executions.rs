@@ -38,6 +38,7 @@ impl Database {
         project_id: &Uuid,
         initial_state: Option<serde_json::Value>,
         run_timeout_seconds: Option<i32>,
+        channel_context: Option<serde_json::Value>,
     ) -> anyhow::Result<(Uuid, DateTime<Utc>)> {
         let mut tx = self.pool.begin().await?;
 
@@ -49,8 +50,8 @@ impl Database {
         let id = Uuid::new_v4();
 
         let row = sqlx::query(
-      "INSERT INTO workflow_executions (id, workflow_id, status, payload, deployment_id, parent_execution_id, root_execution_id, step_key, queue_name, concurrency_key, session_id, user_id, otel_traceparent, project_id, queued_at, initial_state, run_timeout_seconds) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15, $16)
+      "INSERT INTO workflow_executions (id, workflow_id, status, payload, deployment_id, parent_execution_id, root_execution_id, step_key, queue_name, concurrency_key, session_id, user_id, otel_traceparent, project_id, queued_at, initial_state, run_timeout_seconds, channel_context)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15, $16, $17)
        RETURNING id, created_at",
     )
     .bind(id)
@@ -69,6 +70,7 @@ impl Database {
     .bind(project_id)
     .bind(initial_state.as_ref())
     .bind(run_timeout_seconds)
+    .bind(channel_context.as_ref())
     .fetch_one(&mut *tx)
     .await?;
 
@@ -307,7 +309,7 @@ impl Database {
 
     pub async fn get_execution(&self, execution_id: &Uuid) -> anyhow::Result<Execution> {
         let row = sqlx::query(
-      "SELECT id, workflow_id, status, payload, result, error, created_at, started_at, completed_at, deployment_id, assigned_to_worker, parent_execution_id, root_execution_id, retry_count, step_key, queue_name, concurrency_key, batch_id, session_id, user_id, output_schema_name, otel_traceparent, otel_span_id, claimed_at, queued_at, initial_state, final_state, run_timeout_seconds, cancelled_at, cancelled_by
+      "SELECT id, workflow_id, status, payload, result, error, created_at, started_at, completed_at, deployment_id, assigned_to_worker, parent_execution_id, root_execution_id, retry_count, step_key, queue_name, concurrency_key, batch_id, session_id, user_id, output_schema_name, otel_traceparent, otel_span_id, claimed_at, queued_at, initial_state, final_state, run_timeout_seconds, cancelled_at, cancelled_by, channel_context
         FROM workflow_executions WHERE id = $1"
     )
     .bind(execution_id)
@@ -346,6 +348,7 @@ impl Database {
             cancelled_at: row.get("cancelled_at"),
             cancelled_by: row.get("cancelled_by"),
             root_workflow_id: None,
+            channel_context: row.get("channel_context"),
         })
     }
 
@@ -388,12 +391,12 @@ impl Database {
         offset: i64,
     ) -> anyhow::Result<Vec<Execution>> {
         let mut query_builder = QueryBuilder::new(
-      "SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error, e.created_at, 
-              e.started_at, e.completed_at, e.deployment_id, e.assigned_to_worker, 
-              e.parent_execution_id, e.root_execution_id, e.retry_count, e.step_key, 
-              e.queue_name, e.concurrency_key, e.batch_id, e.session_id, e.user_id, 
-              e.output_schema_name, e.initial_state, e.final_state, e.run_timeout_seconds, 
-              e.cancelled_at, e.cancelled_by
+      "SELECT e.id, e.workflow_id, e.status, e.payload, e.result, e.error, e.created_at,
+              e.started_at, e.completed_at, e.deployment_id, e.assigned_to_worker,
+              e.parent_execution_id, e.root_execution_id, e.retry_count, e.step_key,
+              e.queue_name, e.concurrency_key, e.batch_id, e.session_id, e.user_id,
+              e.output_schema_name, e.initial_state, e.final_state, e.run_timeout_seconds,
+              e.cancelled_at, e.cancelled_by, e.channel_context
        FROM workflow_executions e
        JOIN deployment_workflows dw ON e.workflow_id = dw.workflow_id AND e.deployment_id = dw.deployment_id
        WHERE dw.project_id = "
@@ -459,6 +462,7 @@ impl Database {
                 cancelled_at: row.get("cancelled_at"),
                 cancelled_by: row.get("cancelled_by"),
                 root_workflow_id: None,
+                channel_context: row.get("channel_context"),
             })
             .collect();
 
@@ -1432,5 +1436,89 @@ impl Database {
 
         tx.commit().await?;
         Ok(total_deleted)
+    }
+
+    // ==================== Slack Apps ====================
+
+    /// Look up the project_id for a Slack app by its api_app_id.
+    pub async fn get_slack_app(&self, api_app_id: &str) -> anyhow::Result<Option<Uuid>> {
+        let row = sqlx::query("SELECT project_id FROM slack_apps WHERE api_app_id = $1")
+            .bind(api_app_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(row.map(|r| r.get("project_id")))
+    }
+
+    /// Register or update a Slack app → project binding.
+    pub async fn upsert_slack_app(
+        &self,
+        api_app_id: &str,
+        project_id: &Uuid,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO slack_apps (api_app_id, project_id) VALUES ($1, $2)
+             ON CONFLICT (api_app_id) DO UPDATE SET project_id = EXCLUDED.project_id",
+        )
+        .bind(api_app_id)
+        .bind(project_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Find the most recent execution for a given Slack channel + thread.
+    pub async fn get_execution_by_channel_thread(
+        &self,
+        channel: &str,
+        thread_ts: &str,
+    ) -> anyhow::Result<Option<Execution>> {
+        let row = sqlx::query(
+            "SELECT id, workflow_id, status, payload, result, error, created_at, started_at, completed_at, deployment_id, assigned_to_worker, parent_execution_id, root_execution_id, retry_count, step_key, queue_name, concurrency_key, batch_id, session_id, user_id, output_schema_name, otel_traceparent, otel_span_id, claimed_at, queued_at, initial_state, final_state, run_timeout_seconds, cancelled_at, cancelled_by, channel_context
+             FROM workflow_executions
+             WHERE channel_context->'source'->>'channel' = $1
+               AND channel_context->'source'->>'threadTs' = $2
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(channel)
+        .bind(thread_ts)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| Execution {
+            id: row.get("id"),
+            workflow_id: row.get("workflow_id"),
+            status: row.get("status"),
+            payload: row.get("payload"),
+            result: row.get("result"),
+            error: row.get("error"),
+            created_at: row.get("created_at"),
+            started_at: row.get("started_at"),
+            completed_at: row.get("completed_at"),
+            deployment_id: row.get("deployment_id"),
+            assigned_to_worker: row.get("assigned_to_worker"),
+            parent_execution_id: row.get("parent_execution_id"),
+            root_execution_id: row.get("root_execution_id"),
+            retry_count: row.get("retry_count"),
+            step_key: row.get("step_key"),
+            queue_name: row.get("queue_name"),
+            concurrency_key: row.get("concurrency_key"),
+            batch_id: row.get("batch_id"),
+            session_id: row.get("session_id"),
+            user_id: row.get("user_id"),
+            output_schema_name: row.get("output_schema_name"),
+            otel_traceparent: row.get("otel_traceparent"),
+            otel_span_id: row.get("otel_span_id"),
+            claimed_at: row.get("claimed_at"),
+            queued_at: row.get("queued_at"),
+            initial_state: row.get("initial_state"),
+            final_state: row.get("final_state"),
+            run_timeout_seconds: row.get("run_timeout_seconds"),
+            cancelled_at: row.get("cancelled_at"),
+            cancelled_by: row.get("cancelled_by"),
+            root_workflow_id: None,
+            channel_context: row.get("channel_context"),
+        }))
     }
 }

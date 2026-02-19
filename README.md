@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>The runtime for agents that do real work</strong>
+  <strong>The open-source runtime for AI agents</strong>
 </p>
 
 <p align="center">
@@ -19,7 +19,8 @@
 </p>
 
 <p align="center">
-  Sandboxed execution. Agents that reach you. Durable workflows.
+  You write the agent. Polos handles sandboxes, durability, approvals, triggers, and observability.<br>
+  Built for developers shipping agents to production.
 </p>
 
 <p align="center">
@@ -28,237 +29,154 @@
 
 ---
 
-AI agents break the rules of traditional software. They're **async by nature** - running while you sleep, but still needing you to approve, confirm, or provide a credential. They're **autonomous by design** - you say "fix the bug" and they write code, run commands, delete files. That power is the point. And the risk.
-
-Most frameworks ignore this. Polos is built for it.
-
-100% open source. Write it all in plain Python or TypeScript. No DAGs to define, no graph syntax to learn.
-
-```typescript
-import { defineAgent, sandboxTools } from "@polos/sdk";
-import { anthropic } from "@ai-sdk/anthropic";
-
-// Create a sandboxed environment — agents get exec, read, write,
-// edit, glob, and grep tools automatically.
-const sandbox = sandboxTools({
-  env: 'docker',
-  docker: {
-    image: 'node:20-slim',
-    workspaceDir: './workspace',
-    memory: '2g',
-  },
-});
-
-// Give the agent sandbox tools — it can now run commands,
-// read/write files, and explore the codebase autonomously.
-const codingAgent = defineAgent({
-  id: 'coding_agent',
-  model: anthropic('claude-opus-4-5'),
-  systemPrompt: 'You are a coding assistant. The repo is at /workspace.',
-  tools: [...sandbox], // exec, read, write, edit, glob, grep
-});
-```
-
----
-
-## What You Get With Polos
-
-### Secure Sandbox
-
-Agents run in isolated environments - Docker, E2B, or cloud VMs. Built-in tools for shell, file system, and web search. Full power. Zero risk to your systems.
-
-### Agents That Reach You
-
-Agents reach you - not the other way around. Stripe-like approval pages that collect input, not just yes/no. Slack, SMS, email - you're at dinner, phone buzzes, one tap, done.
-
-### Durable Execution
-
-State persists - agents resume exactly where they left off. Automatic retries on failure. 60-80% cost savings via prompt caching. Built-in observability for every step, every approval, every tool call. Concurrency control across multiple agents - no API rate limit chaos.
-
----
-
-## See It In Action
-
-Watch a coding agent built with Polos - sandboxed execution, tool calls, and real-time observability.
-
-[Watch the demo video](https://www.veed.io/embed/7491f507-2b84-4954-b8b1-4ffa69322a91)
-
----
-
 ## Quick Start
 
-### 1. Install Polos Server
+```
+$ curl -fsSL https://install.polos.dev/install.sh | bash
 
-```bash
-curl -fsSL https://install.polos.dev/install.sh | bash
-polos server start
+$ npx create-polos my-project
+  ✓ Project name: my-project
+  ✓ LLM provider: Anthropic
+  ✓ Done!
+
+$ cd my-project && polos dev
+  ✓ Polos server started → http://localhost:5173
+  ✓ Worker connected - agents: coding_agent, assistant_agent
+  Watching for changes...
+
+$ polos run coding_agent
+> Build a REST API with Express and user auth
+
+  [Agent writes files, runs commands, builds the project - all sandboxed]
 ```
 
-Copy the project ID displayed when you start the server. You'll need it in the next steps.
+Open [http://localhost:5173](http://localhost:5173) for the dashboard. 📖 **[Full Quick Start Guide →](https://polos.dev/docs/quickstart)**
 
-### 2. Install the SDK
+---
 
-**Python**
+## The Polos CLI
+
+Once you're running, the CLI gives you full control:
+
 ```bash
-pip install polos-sdk
+polos dev                    # Start server + worker with hot reload
+polos run <agent>            # Start an interactive session with an agent
+polos agent list             # List available agents
+polos tool list              # List available tools
+polos logs <agent>           # Stream logs from agent runs
 ```
 
-**TypeScript**
-```bash
-npm install @polos/sdk
-```
+---
 
-### 3. Create a coding agent
+## Building Agents Is Easy. Running Them in Production Is Hard.
 
-**Python**
+| Challenge | Typical agent framework | With Polos |
+|-----------|------------------------|------------|
+| **Sandboxing** | None - DIY or run unsandboxed | Docker, E2B + built-in tools (exec, files, search) |
+| **Durability** | Agent crashes, start over | Auto-retry, resume from exact step |
+| **Approvals** | Build it yourself | Slack, UI, terminal - one tap |
+| **Triggers** | Glue code for every webhook | Built-in: HTTP, webhooks, cron, events |
+| **Observability** | Grep through logs | Full tracing, every tool call, every decision |
+| **Cost** | Re-run failed LLM calls from scratch | Durable execution, Prompt caching, 60-80% savings |
+
+---
+
+## What You Get
+
+### Sandboxed Execution
+
+Agents run in isolated Docker containers, E2B, or cloud VMs. Every sandbox ships with built-in tools - `exec`, `read`, `write`, `edit`, `glob`, `grep`, `web_search` - so your agent can run commands, navigate codebases, and browse the web out of the box. No tool code to write, no sandbox lifecycle to manage. Just pass `sandboxTools()` and go.
+
+### Durable Workflows
+
+Automatic retries and state persistence. Resume from the exact step that failed. Prompt caching with 60-80% cost savings. Concurrency control across agents - no API rate limit chaos.
+
+### Human-in-the-Loop
+
+Approval flows for any tool call. Reach your team via Slack, Discord, email. Configurable rules for what needs approval. Paused agents consume zero compute.
+
+### Triggers
+
+Every agent gets a webhook URL out of the box - point GitHub, JIRA, Salesforce, or any system at it. Plus HTTP API, cron scheduling, event-driven triggers, and built-in Slack integration to run agents from chat.
+
+### Observability
+
+OpenTelemetry tracing for every step, tool call, and approval. Full execution history. Visual dashboard for monitoring and debugging.
+
+### Bring Your Stack
+
+Build agents on Polos with any LLM - OpenAI, Anthropic, Google, and more via Vercel AI SDK and LiteLLM. Or bring existing agents from CrewAI, LangGraph, and Mastra and get Polos's durability, observability, and sandboxing without rewriting anything. Python or TypeScript. Open source - run anywhere.
+
+---
+
+## Show Me the Code
+
+**Define an agent with access to sandbox (Python)**
 ```python
-# agents.py
-from polos import Agent, sandbox_tools, SandboxToolsConfig, LocalEnvironmentConfig
+from polos import Agent, sandbox_tools, SandboxToolsConfig, DockerConfig
 
-sandbox_tools = sandbox_tools(SandboxToolsConfig(
-    env="local",
-    local=LocalEnvironmentConfig(cwd="./workspace", path_restriction="./workspace"),
+sandbox = sandbox_tools(SandboxToolsConfig(
+    env="docker",
+    docker=DockerConfig(image="node:20-slim", memory="2g"),
 ))
 
 coding_agent = Agent(
     id="coding_agent",
     provider="anthropic",
     model="claude-sonnet-4-5",
-    system_prompt="You are a coding agent. Your workspace is at ./workspace.",
-    tools=sandbox_tools,
+    system_prompt="You are a coding agent.",
+    tools=sandbox,
 )
 ```
 
-```python
-# worker.py
-from polos import PolosClient, Worker
-from agents import coding_agent, sandbox_tools
-
-client = PolosClient(project_id="your-project-id")
-worker = Worker(client=client, agents=[coding_agent], tools=list(sandbox_tools))
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(worker.run())
-```
-
-**TypeScript**
+**Define an agent with tool approval (TypeScript)**
 ```typescript
-// agents.ts
-import { defineAgent, sandboxTools } from "@polos/sdk";
+import { defineAgent, defineTool, sandboxTools } from "@polos/sdk";
 import { anthropic } from "@ai-sdk/anthropic";
+import { z } from "zod";
 
-export const sandboxTools = sandboxTools({
-  env: "local",
-  local: { cwd: "./workspace", pathRestriction: "./workspace" },
+const sandbox = sandboxTools({
+  env: "docker",
+  docker: { image: "node:20-slim", memory: "2g" },
+  exec: {
+    security: "allowlist",
+    allowlist: ["node *", "npm install *", "cat *", "ls *"],
+    // Commands matching the allowlist run automatically.
+    // Everything else pauses and asks a human to approve.
+  },
 });
 
-export const codingAgent = defineAgent({
+// Bring your own tools - approval: "always" pauses for human approval before every call.
+const deployTool = defineTool(
+  {
+    id: "deploy",
+    description: "Deploy the project to production",
+    inputSchema: z.object({ env: z.enum(["staging", "production"]), version: z.string() }),
+    approval: "always",
+  },
+  async (ctx, input) => {
+    // This only runs after a human approves
+    return await pushToCloudDeploy(input.env, input.version);
+  }
+);
+
+const codingAgent = defineAgent({
   id: "coding_agent",
   model: anthropic("claude-sonnet-4-5"),
-  systemPrompt: "You are a coding agent. Your workspace is at ./workspace.",
-  tools: [...sandboxTools],
+  systemPrompt: "You are a coding agent.",
+  tools: [...sandbox, deployTool], // sandbox tools + your own
 });
 ```
 
-```typescript
-// worker.ts
-import { PolosClient, Worker } from "@polos/sdk";
-import { codingAgent, sandboxTools } from "./agents.js";
+No DAGs. No graph syntax. Just Python or TypeScript.
 
-const client = new PolosClient({ projectId: "your-project-id" });
-const worker = new Worker({ client, agents: [codingAgent], tools: [...sandboxTools] });
+---
 
-await worker.run();
-```
+## See It In Action
 
-### 4. Invoke the agent
+Watch a coding agent built with Polos - sandboxed execution, tool approvals, and real-time observability.
 
-Local sandbox tools suspend for approval before running commands or writing files. The client streams workflow events, prompts you in the terminal, and resumes the agent.
-
-**Python**
-```python
-# main.py
-import asyncio
-from polos import PolosClient
-from polos.features import events
-from agents import coding_agent
-
-async def main():
-    client = PolosClient(project_id="your-project-id")
-    handle = await client.invoke(coding_agent.id, {
-        "input": "Create hello.js that prints 'Hello, world!' and run it.",
-        "streaming": True,
-    })
-
-    # Stream events — approve each exec/write/edit when the agent suspends
-    async for event in events.stream_workflow(client, handle.root_workflow_id, handle.id):
-        if event.event_type and event.event_type.startswith("suspend_"):
-            step_key = event.event_type[len("suspend_"):]
-            form = event.data.get("_form", {})
-            context = form.get("context", {})
-            print(f"\n  Agent wants to: {context.get('command') or context.get('tool', step_key)}")
-            approved = input("  Approve? (y/n): ").strip().lower() == "y"
-            await client.resume(handle.root_workflow_id, handle.id, step_key, {"approved": approved})
-
-    execution = await client.get_execution(handle.id)
-    print(f"\nResult: {execution.get('result')}")
-
-asyncio.run(main())
-```
-
-**TypeScript**
-```typescript
-// main.ts
-import { PolosClient } from "@polos/sdk";
-import { codingAgent } from "./agents.js";
-import * as readline from "node:readline/promises";
-
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const client = new PolosClient({ projectId: "your-project-id" });
-const handle = await client.invoke(codingAgent.id, {
-  input: "Create hello.js that prints 'Hello, world!' and run it.",
-  streaming: true,
-});
-
-// Stream events — approve each exec/write/edit when the agent suspends
-for await (const event of client.events.streamWorkflow(handle.rootWorkflowId, handle.id)) {
-  if (event.eventType?.startsWith("suspend_")) {
-    const stepKey = event.eventType.slice("suspend_".length);
-    const context = (event.data as any)?._form?.context ?? {};
-    console.log(`\n  Agent wants to: ${context.command ?? context.tool ?? stepKey}`);
-    const answer = await rl.question("  Approve? (y/n): ");
-    const approved = answer.trim().toLowerCase() === "y";
-    await client.resume(handle.rootWorkflowId, handle.id, stepKey, { approved });
-  }
-}
-
-const execution = await client.getExecution(handle.id);
-console.log(`\nResult: ${typeof execution.result === "string" ? execution.result : JSON.stringify(execution.result)}`);
-rl.close();
-```
-
-### 5. Run it
-
-```bash
-# Terminal 1: Start the worker
-python worker.py    # or: npx tsx worker.ts
-
-# Terminal 2: Invoke the agent
-python main.py      # or: npx tsx main.ts
-```
-
-See the full example for [Python](./python-examples/21-local-sandbox) or [TypeScript](./typescript-examples/21-local-sandbox) with richer approval UIs and more.
-
-### 6. See it in action
-
-Open the Polos UI to see your agent's execution trace, tool calls, and reasoning:
-
-<p align="center">
-  <img src=".github/assets/observability.png" alt="Polos Observability UI" width="800">
-</p>
-
-📖 **[Full Quick Start Guide →](https://polos.dev/docs/quickstart)**
+[Watch the demo video](https://www.veed.io/embed/7491f507-2b84-4954-b8b1-4ffa69322a91)
 
 ---
 
@@ -268,135 +186,30 @@ Open the Polos UI to see your agent's execution trace, tool calls, and reasoning
   <img src=".github/assets/architecture.png" alt="Polos Architecture" width="800">
 </p>
 
-Polos consists of three components:
-
-- **Orchestrator**: Written in Rust. Manages execution state, handles retries, and coordinates workers
-- **Worker**: Runs your agents and workflows, connects to the orchestrator
-- **SDK**: Python and TypeScript libraries for defining agents, workflows, and tools
-
----
-
-## Why Polos?
-
-| Feature | Description |
-|---------|-------------|
-| **🔒 Sandboxed Execution** | Agents run in isolated Docker containers, E2B, or cloud VMs. Built-in tools for shell, files, and web search - full autonomy with zero risk. |
-| **📲 Agents That Reach You** | Approval pages, Slack, SMS, email. Agents notify you when they need input. One tap from your phone. Done. |
-| **🧠 Durable State** | Your agent survives crashes with call stack and local variables intact. Step 18 of 20 fails? Resume from step 18. No wasted LLM calls. |
-| **🚦 Global Concurrency** | System-wide rate limiting with queues and concurrency keys. Prevent one rogue agent from exhausting your entire OpenAI quota. |
-| **🤝 Human-in-the-Loop** | Native support for pausing execution. Wait hours or days for user approval and resume with full context. Paused agents consume zero compute. |
-| **📡 Agent Handoffs** | Transactional memory for multi-agent systems. Pass reasoning history between specialized agents without context drift. |
-| **🔍 Decision-Level Observability** | Trace the reasoning behind every tool call, not just raw logs. See why your agent chose Tool B over Tool A. |
-| **⚡ Production Ready** | Automatic retries, exactly-once execution guarantees, OpenTelemetry tracing built-in. |
-
-<br />
-
-### Logic Belongs in Code, Not Configs
-
-**With Polos:**
-
-**Python**
-```python
-@workflow
-async def process_order(ctx: WorkflowContext, order: ProcessOrderInput):
-    if order.amount > 1000:
-        approved = await ctx.step.suspend("approval", data=order.model_dump())
-        if not approved.data["ok"]:
-            return {"status": "rejected"}
-
-    await ctx.step.run("charge", charge_stripe, order)
-    await ctx.step.run("notify", send_email, order)
-```
-
-**TypeScript**
-```typescript
-const processOrder = defineWorkflow({ id: "process-order" }, async (ctx, order) => {
-  if (order.amount > 1000) {
-    const approved = await ctx.step.suspend("approval", { data: order });
-    if (!approved.data.ok) {
-      return { status: "rejected" };
-    }
-  }
-
-  await ctx.step.run("charge", () => chargeStripe(order));
-  await ctx.step.run("notify", () => sendEmail(order));
-});
-```
-
-**Other platforms:**
-```python
-dag = DAG(
-    nodes=[
-        Node("check_amount", CheckAmount),
-        Node("approval", HumanApproval),
-        Node("charge", ChargeStripe),
-        Node("notify", SendEmail),
-    ],
-    edges=[
-        ("check_amount", "approval", condition="amount > 1000"),
-        ("check_amount", "charge", condition="amount <= 1000"),
-        ("approval", "charge", condition="approved"),
-        ("charge", "notify"),
-    ]
-)
-```
-
-No DAGs. No graph syntax. Just Python or TypeScript.
-
----
-
-## Examples
-
-### Agents
-
-| Example | Python | TypeScript | Description |
-|---------|--------|------------|-------------|
-| Agent with tools | [Python](./python-examples/01-agent-with-tools) | [TypeScript](./typescript-examples/01-agent-with-tools) | Simple agent with tool calling |
-| Structured Output | [Python](./python-examples/02-structured-output) | [TypeScript](./typescript-examples/02-structured-output) | Agent with structured model responses |
-| Streaming | [Python](./python-examples/03-agent-streaming) | [TypeScript](./typescript-examples/03-agent-streaming) | Real-time streaming responses |
-| Conversational Chat | [Python](./python-examples/04-conversational-chat) | [TypeScript](./typescript-examples/04-conversational-chat) | Multi-turn conversations with memory |
-| Thinking Agent | [Python](./python-examples/05-thinking-agent) | [TypeScript](./typescript-examples/05-thinking-agent) | Chain-of-thought reasoning |
-| Guardrails | [Python](./python-examples/06-guardrails) | [TypeScript](./typescript-examples/06-guardrails) | Input/output validation |
-| Multi-Agent Coordination | [Python](./python-examples/14-router-coordinator) | [TypeScript](./typescript-examples/14-router-coordinator) | Workflow orchestrating multiple agents |
-| Order Processing | [Python](./python-examples/17-order-processing) | [TypeScript](./typescript-examples/17-order-processing) | Human-in-the-loop fraud review |
-| Sandbox Tools | [Python](./python-examples/18-sandbox-tools) | [TypeScript](./typescript-examples/18-sandbox-tools) | Code execution in an isolated Docker container |
-| Exec Security | [Python](./python-examples/19-exec-security) | [TypeScript](./typescript-examples/19-exec-security) | Allowlist-based command approval |
-| Web Search Agent | [Python](./python-examples/20-web-search-agent) | [TypeScript](./typescript-examples/20-web-search-agent) | Research agent with Tavily web search |
-| Local Sandbox | [Python](./python-examples/21-local-sandbox) | [TypeScript](./typescript-examples/21-local-sandbox) | Sandbox tools running on the host machine |
-
-### Workflows
-
-| Example | Python | TypeScript | Description |
-|---------|--------|------------|-------------|
-| Workflow Basics | [Python](./python-examples/08-workflow-basics) | [TypeScript](./typescript-examples/08-workflow-basics) | Core workflow patterns |
-| Suspend/Resume | [Python](./python-examples/09-suspend-resume) | [TypeScript](./typescript-examples/09-suspend-resume) | Human-in-the-loop approvals |
-| State Persistence | [Python](./python-examples/10-state-persistence) | [TypeScript](./typescript-examples/10-state-persistence) | Durable state across executions |
-| Error Handling | [Python](./python-examples/11-error-handling) | [TypeScript](./typescript-examples/11-error-handling) | Retry, fallback, compensation patterns |
-| Queues & Concurrency | [Python](./python-examples/12-shared-queues) | [TypeScript](./typescript-examples/12-shared-queues) | Rate limiting and concurrency control |
-| Parallel Execution | [Python](./python-examples/13-parallel-review) | [TypeScript](./typescript-examples/13-parallel-review) | Fan-out/fan-in patterns |
-
-### Events & Scheduling
-
-| Example | Python | TypeScript | Description |
-|---------|--------|------------|-------------|
-| Event-Triggered | [Python](./python-examples/15-event-triggered) | [TypeScript](./typescript-examples/15-event-triggered) | Pub/sub event-driven workflows |
-| Scheduled Workflows | [Python](./python-examples/16-scheduled-workflow) | [TypeScript](./typescript-examples/16-scheduled-workflow) | Cron-based scheduling |
-
-### Human-in-the-Loop
-
-| Example | Python | TypeScript | Description |
-|---------|--------|------------|-------------|
-| Approval Page | [Python](./python-examples/22-approval-page) | [TypeScript](./typescript-examples/22-approval-page) | Web UI for workflow approval with suspend/resume |
+- **Orchestrator**: Written in Rust. Manages execution state, durable logs, retries, scheduling, triggers, and the dashboard UI. Backed by Postgres.
+- **Worker**: Runs your agents and workflows, written with the Python or TypeScript SDK. Connects to the orchestrator. Scale horizontally by running multiple workers.
 
 ---
 
 ## Under the Hood
 
-Polos captures the result of every side effect - tool calls, API responses, time delays as a durable log.
-If your process dies, Polos replays the workflow from the log, returning previously-recorded results instead of re-executing them.
-Your agent's exact local variables and call stack are restored in milliseconds.
+Polos captures the result of every side effect - tool calls, API responses, time delays - as a durable log. If your process dies, Polos replays the workflow from the log, returning previously-recorded results instead of re-executing them. Your agent's exact local variables and call stack are restored in milliseconds.
 
 **Completed steps are never re-executed - so you never pay for an LLM call twice.**
+
+---
+
+## Featured Examples
+
+| Example | Python | TypeScript | What it shows |
+|---------|--------|------------|---------------|
+| Sandbox Tools | [Python](./python-examples/18-sandbox-tools) | [TypeScript](./typescript-examples/18-sandbox-tools) | Code execution in an isolated Docker container |
+| Order Processing | [Python](./python-examples/17-order-processing) | [TypeScript](./typescript-examples/17-order-processing) | Human-in-the-loop fraud review with approvals |
+| Multi-Agent Coordination | [Python](./python-examples/14-router-coordinator) | [TypeScript](./typescript-examples/14-router-coordinator) | Workflow orchestrating multiple specialized agents |
+| Event-Triggered | [Python](./python-examples/15-event-triggered) | [TypeScript](./typescript-examples/15-event-triggered) | Pub/sub event-driven workflows |
+| Scheduled Workflows | [Python](./python-examples/16-scheduled-workflow) | [TypeScript](./typescript-examples/16-scheduled-workflow) | Cron-based scheduling |
+
+**[Browse all examples →](https://polos.dev/docs/examples)** - agents, workflows, streaming, guardrails, parallel execution, and more.
 
 ---
 

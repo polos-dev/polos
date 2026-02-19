@@ -223,7 +223,7 @@ main() {
     tar -xzf "$tarball_path" -C "$POLOS_HOME"
 
     # Make binaries executable
-    chmod +x "$POLOS_HOME/bin/polos-server"
+    chmod +x "$POLOS_HOME/bin/polos"
     chmod +x "$POLOS_HOME/bin/polos-orchestrator"
 
     # Clean up
@@ -235,22 +235,23 @@ main() {
     echo "✅ Installation complete!"
     echo ""
     echo "Polos has been installed to: ${POLOS_HOME}"
-    echo "  - Server:       ${POLOS_HOME}/bin/polos-server"
+    echo "  - CLI:          ${POLOS_HOME}/bin/polos"
     echo "  - Orchestrator: ${POLOS_HOME}/bin/polos-orchestrator"
     echo "  - UI:           ${POLOS_HOME}/ui/"
     echo ""
 
-    # Check if polos-server is in PATH
-    if command -v polos-server >/dev/null 2>&1; then
-        echo "You can now run: polos-server start"
-    else
+    # Check if polos is in PATH
+    if ! command -v polos >/dev/null 2>&1; then
         add_to_path "$POLOS_HOME/bin"
         echo ""
-        echo "Run this to use polos-server now:"
-        echo "  source ~/.zshrc && polos-server start"
+        echo "Restart your terminal or run: source ~/.zshrc"
         echo ""
-        echo "Or open a new terminal and run: polos-server start"
     fi
+
+    echo "Get started by scaffolding a new project:"
+    echo ""
+    echo "  TypeScript:  npx create-polos"
+    echo "  Python:      pipx run create-polos"
     echo ""
 }
 

@@ -45,7 +45,7 @@ $ cd my-project && polos dev
   Watching for changes...
 
 $ polos run coding_agent
-> Build a REST API with Express and user auth
+> Build a REST API with Express and SQLite — one endpoint: GET /orders
 
   [Agent writes files, runs commands, builds the project - all sandboxed]
 ```

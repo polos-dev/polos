@@ -96,17 +96,6 @@ class TestSandboxToolsFactory:
         props = grep_def["function"]["parameters"]["properties"]
         assert "pattern" in props
 
-    def test_has_a_cleanup_method(self):
-        """Result has a cleanup method."""
-        tools = sandbox_tools(SandboxToolsConfig(env="docker"))
-        assert callable(tools.cleanup)
-
-    @pytest.mark.asyncio
-    async def test_cleanup_is_safe_without_initialization(self):
-        """Cleanup before any tool use does not raise."""
-        tools = sandbox_tools(SandboxToolsConfig(env="docker"))
-        await tools.cleanup()
-
     def test_throws_for_e2b_environment(self):
         """E2B environment raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="not yet implemented"):

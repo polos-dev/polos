@@ -1264,7 +1264,7 @@ class Worker:
 
     async def _send_cancel_confirmation(self, execution_id: str):
         """Send cancellation confirmation to orchestrator."""
-        max_retries = 5
+        max_retries = 3
         base_delay = 1.0
 
         for attempt in range(max_retries):
@@ -1338,7 +1338,7 @@ class Worker:
     ):
         """Emit cancellation event for the workflow."""
         try:
-            from ..features.events import publish
+            from ..features.events import EventData, publish
 
             # Topic format: workflow/{root_workflow_id}/{root_execution_id}
             root_execution_id = context.get("root_execution_id") or execution_id
@@ -1348,20 +1348,19 @@ class Worker:
             # Event type: {workflow_id}_cancel
             event_type = f"{context.get('workflow_type', 'workflow')}_cancel"
 
-            # Event data
-            event_data = {
-                "_metadata": {
-                    "execution_id": execution_id,
-                    "workflow_id": workflow_id,
-                }
-            }
-
             # Publish event
             await publish(
                 self.polos_client,
                 topic=topic,
-                event_type=event_type,
-                data=event_data,
+                event_data=EventData(
+                    event_type=event_type,
+                    data={
+                        "_metadata": {
+                            "execution_id": execution_id,
+                            "workflow_id": workflow_id,
+                        }
+                    },
+                ),
                 execution_id=execution_id,
                 root_execution_id=context.get("root_execution_id"),
             )
@@ -1404,30 +1403,43 @@ class Worker:
         logger.info("Shutting down gracefully...")
         self.running = False
 
-        # Shutdown worker server first (if in push mode)
+        # 1. Stop accepting new work
         if self.mode == "push" and self.worker_server:
             try:
                 await self.worker_server.shutdown()
             except Exception as e:
                 logger.error("Error shutting down worker server: %s", e)
-
-        # Cancel tasks
-        if self.mode == "push":
-            # Don't cancel - uvicorn is already shutting down gracefully
-            # via worker_server.shutdown(). Just wait for it to finish.
-            pass
-        else:
-            if self.poll_task:
-                self.poll_task.cancel()
+        elif self.poll_task:
+            self.poll_task.cancel()
 
         if self.heartbeat_task:
             self.heartbeat_task.cancel()
 
-        # Wait for tasks to finish
+        # 2. Cancel in-flight executions and wait for their cancellation
+        #    handling (confirmation POST to orchestrator) to complete.
+        #    This MUST happen before closing the HTTP client.
+        async with self.execution_tasks_lock:
+            in_flight = list(self.execution_tasks.values())
+
+        if in_flight:
+            logger.info("Cancelling %d in-flight execution(s)...", len(in_flight))
+            for task in in_flight:
+                task.cancel()
+            # Wait for tasks to finish their cancellation handlers (which
+            # send confirmation to the orchestrator). Use a bounded timeout
+            # so we don't hang forever on a stuck execution.
+            done, pending = await asyncio.wait(in_flight, timeout=15)
+            if pending:
+                logger.warning(
+                    "%d execution(s) did not finish cancellation within timeout",
+                    len(pending),
+                )
+
+        # 3. Wait for server/poll infrastructure tasks
         if self.mode == "push":
             try:
                 if self.worker_server_task:
-                    await asyncio.wait_for(self.worker_server_task, timeout=10)
+                    await asyncio.wait_for(self.worker_server_task, timeout=5)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
         else:
@@ -1443,14 +1455,14 @@ class Worker:
         except asyncio.CancelledError:
             pass
 
-        # Stop sandbox sweep and destroy all sandboxes
+        # 4. Stop sandbox sweep and destroy all sandboxes
         self.sandbox_manager.stop_sweep()
         try:
             await self.sandbox_manager.destroy_all()
         except Exception as e:
             logger.error("Error destroying sandboxes: %s", e)
 
-        # Close HTTP client
+        # 5. Close HTTP client (safe now — all executions have drained)
         if hasattr(self, "client") and self.client:
             try:
                 await self.client.aclose()

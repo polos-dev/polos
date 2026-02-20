@@ -38,15 +38,7 @@ from .types import (
 )
 
 
-class SandboxToolsResult(list):
-    """Return type for sandbox_tools -- a list of Tool with a cleanup method."""
-
-    async def cleanup(self) -> None:
-        """Destroy the shared execution environment (remove container, etc.)."""
-        ...
-
-
-def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResult:
+def sandbox_tools(config: SandboxToolsConfig | None = None) -> list[Tool]:
     """Create sandbox tools for AI agents.
 
     Returns a list of Tool that can be passed directly to Agent().
@@ -56,9 +48,6 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
 
     Args:
         config: Optional sandbox tools configuration.
-
-    Returns:
-        SandboxToolsResult -- a list of Tool instances with a cleanup() method.
     """
     # Cache by root_execution_id so the same sandbox is reused across
     # sub-workflows within the same root execution.
@@ -164,13 +153,4 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     if "grep" in include:
         tools.append(create_grep_tool(get_env, path_config))
 
-    # Create result with cleanup method
-    result = SandboxToolsResult(tools)
-
-    async def _cleanup() -> None:
-        # Cleanup is handled by the SandboxManager; this is a no-op.
-        _sandbox_cache.clear()
-
-    result.cleanup = _cleanup  # type: ignore[attr-defined]
-
-    return result
+    return tools

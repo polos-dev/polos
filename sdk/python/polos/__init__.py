@@ -46,7 +46,6 @@ from .execution import (
     ManagedSandbox,
     SandboxManager,
     SandboxToolsConfig,
-    SandboxToolsResult,
     sandbox_tools,
 )
 from .features import events, schedules
@@ -136,7 +135,6 @@ __all__ = [
     "BatchWorkflowInput",
     # Execution framework
     "sandbox_tools",
-    "SandboxToolsResult",
     "SandboxToolsConfig",
     "SandboxManager",
     "ManagedSandbox",

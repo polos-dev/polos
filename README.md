@@ -176,7 +176,7 @@ No DAGs. No graph syntax. Just Python or TypeScript.
 
 Watch a coding agent built with Polos - sandboxed execution, tool approvals, and real-time observability.
 
-[Watch the demo video](https://www.veed.io/embed/7491f507-2b84-4954-b8b1-4ffa69322a91)
+[Watch the demo video](https://www.youtube.com/watch?v=KYVBpdZ_5eM&t=1s&rel=0)
 
 ---
 

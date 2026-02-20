@@ -11,7 +11,7 @@ import type { WorkflowContext } from '../../core/context.js';
 import { isWithinRestriction } from '../security.js';
 
 /**
- * Configuration for path-restricted approval on read-only tools.
+ * Configuration for path-restricted approval on sandbox tools.
  */
 export interface PathRestrictionConfig {
   /** Directory to allow without approval. Paths outside require approval. */

@@ -84,7 +84,32 @@ function spawnLocal(
       proc.kill('SIGKILL');
     }, timeoutMs);
 
+    // Grace period timer: when the shell exits but streams stay open
+    // (e.g. backgrounded processes), resolve after a short drain window
+    // instead of hanging until the child exits or timeout fires.
+    let exitGraceTimer: ReturnType<typeof setTimeout> | null = null;
+    let exitCode: number | null = null;
+
+    proc.on('exit', (code) => {
+      exitCode = code;
+      exitGraceTimer = setTimeout(() => {
+        clearTimeout(timer);
+        settle(() => {
+          if (killed) {
+            resolve({
+              exitCode: 137,
+              stdout,
+              stderr: stderr + '\n[Process killed: timeout exceeded]',
+            });
+          } else {
+            resolve({ exitCode: exitCode ?? 1, stdout, stderr });
+          }
+        });
+      }, 2000);
+    });
+
     proc.on('close', (code) => {
+      if (exitGraceTimer) clearTimeout(exitGraceTimer);
       clearTimeout(timer);
       settle(() => {
         if (killed) {
@@ -94,12 +119,13 @@ function spawnLocal(
             stderr: stderr + '\n[Process killed: timeout exceeded]',
           });
         } else {
-          resolve({ exitCode: code ?? 1, stdout, stderr });
+          resolve({ exitCode: code ?? exitCode ?? 1, stdout, stderr });
         }
       });
     });
 
     proc.on('error', (err) => {
+      if (exitGraceTimer) clearTimeout(exitGraceTimer);
       clearTimeout(timer);
       settle(() => {
         reject(err);

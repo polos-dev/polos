@@ -130,8 +130,8 @@ def sandbox_tools(config: SandboxToolsConfig | None = None) -> SandboxToolsResul
     file_approval = config.file_approval if config else None
 
     # Build write/edit config: explicit approval overrides path restriction
-    from .tools.write import WriteToolConfig
     from .tools.edit import EditToolConfig
+    from .tools.write import WriteToolConfig
 
     if file_approval:
         write_edit_config_w = WriteToolConfig(approval=file_approval)

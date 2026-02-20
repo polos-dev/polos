@@ -40,6 +40,11 @@ async def _spawn_local(
 ) -> tuple[int, str, str]:
     """Execute a shell command via asyncio subprocess.
 
+    Handles backgrounded processes (e.g. ``cmd &``) gracefully: when the
+    shell process exits but a child keeps stdio open, we wait a short grace
+    period for output to drain, then return instead of blocking until the
+    full timeout fires.
+
     Args:
         command: Shell command to execute.
         cwd: Working directory.
@@ -68,28 +73,69 @@ async def _spawn_local(
         stderr=asyncio.subprocess.PIPE,
     )
 
+    # Write stdin and close
+    if stdin and proc.stdin:
+        proc.stdin.write(stdin.encode())
+        await proc.stdin.drain()
+    if proc.stdin:
+        proc.stdin.close()
+
+    # Race communicate() against proc.wait(). communicate() waits for both
+    # stream EOF and process exit. If the shell exits but a backgrounded child
+    # holds stdio open, communicate() blocks indefinitely. By racing against
+    # wait(), we detect when the shell exits and give a short grace period
+    # for output to drain instead of blocking for the full timeout.
+    communicate_task = asyncio.create_task(proc.communicate())
+    wait_task = asyncio.create_task(proc.wait())
+
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(input=stdin.encode() if stdin else None),
+        done, _pending = await asyncio.wait(
+            [communicate_task, wait_task],
             timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
         )
+    except Exception:
+        communicate_task.cancel()
+        wait_task.cancel()
+        raise
+
+    if communicate_task in done:
+        # Normal path: streams closed and process exited
+        wait_task.cancel()
+        stdout_bytes, stderr_bytes = communicate_task.result()
         exit_code = proc.returncode if proc.returncode is not None else 1
         return (
             exit_code,
             stdout_bytes.decode("utf-8", errors="replace"),
             stderr_bytes.decode("utf-8", errors="replace"),
         )
-    except asyncio.TimeoutError:
-        proc.kill()
-        # Collect any partial output
+
+    if wait_task in done:
+        # Shell exited but streams are still open (backgrounded child).
+        # Give a 2-second grace period to drain any buffered output.
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=5)
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(communicate_task, timeout=2)
         except (asyncio.TimeoutError, Exception):
+            communicate_task.cancel()
             stdout_bytes = b""
             stderr_bytes = b""
+        exit_code = proc.returncode if proc.returncode is not None else 0
         stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
         stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-        return 137, stdout, stderr + "\n[Process killed: timeout exceeded]"
+        return exit_code, stdout, stderr
+
+    # Neither completed — full timeout exceeded. Kill the process.
+    communicate_task.cancel()
+    wait_task.cancel()
+    proc.kill()
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=5)
+    except (asyncio.TimeoutError, Exception):
+        stdout_bytes = b""
+        stderr_bytes = b""
+    stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+    stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+    return 137, stdout, stderr + "\n[Process killed: timeout exceeded]"
 
 
 class LocalEnvironment(ExecutionEnvironment):

@@ -75,6 +75,7 @@ polos logs <agent>           # Stream logs from agent runs
 |-----------|------------------------|------------|
 | **Sandboxing** | None - DIY or run unsandboxed | Docker, E2B + built-in tools (exec, files, search) |
 | **Durability** | Agent crashes, start over | Auto-retry, resume from exact step |
+| **Slack** | Build a bot from scratch | @mention an agent, get responses in thread |
 | **Approvals** | Build it yourself | Slack, UI, terminal - one tap |
 | **Triggers** | Glue code for every webhook | Built-in: HTTP, webhooks, cron, events |
 | **Observability** | Grep through logs | Full tracing, every tool call, every decision |

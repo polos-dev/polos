@@ -34,8 +34,8 @@
 ```
 $ curl -fsSL https://install.polos.dev/install.sh | bash
 
-$ npx create-polos my-project          # TypeScript
-$ pipx run create-polos my-project     # Python
+$ npx create-polos          # TypeScript
+$ pipx run create-polos     # Python
   ✓ Project name: my-project
   ✓ LLM provider: Anthropic
   ✓ Done!

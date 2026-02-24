@@ -1,0 +1,14 @@
+[project]
+name = "polos-slack-channel"
+version = "0.1.0"
+description = "Slack channel notifications when agents suspend for user input"
+requires-python = ">=3.10"
+dependencies = [
+    "polos-sdk[anthropic]",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+]

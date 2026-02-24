@@ -1698,6 +1698,7 @@ dependencies = [
  "colored",
  "ctrlc",
  "dirs",
+ "dotenvy",
  "futures",
  "hex",
  "hmac",

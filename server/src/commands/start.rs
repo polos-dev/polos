@@ -115,6 +115,16 @@ async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
         })
     };
 
+    // Load ~/.polos/.env if it exists (user-managed secrets like SLACK_SIGNING_SECRET)
+    let mut dotenv_vars = std::collections::HashMap::new();
+    let env_path = ServerConfig::config_dir()?.join(".env");
+    if env_path.exists() {
+        for item in dotenvy::from_path_iter(&env_path)? {
+            let (key, value) = item?;
+            dotenv_vars.insert(key, value);
+        }
+    }
+
     // Get logs directory
     let logs_dir = ServerConfig::config_dir()?.join("logs");
     fs::create_dir_all(&logs_dir)?;
@@ -122,12 +132,24 @@ async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
     let stdout_log = fs::File::create(logs_dir.join("orchestrator.log"))?;
     let stderr_log = stdout_log.try_clone()?;
 
-    let child = Command::new(&binary_path)
-        .env("POLOS_LOCAL_MODE", "true")
+    let mut cmd = Command::new(&binary_path);
+    cmd.env("POLOS_LOCAL_MODE", "true")
         .env("DATABASE_URL", &config.database_url)
         .env("POLOS_BIND_ADDRESS", &bind_address)
         .env("CORS_ORIGIN", &cors_origin)
-        .env("HMAC_SECRET", &hmac_secret)
+        .env("HMAC_SECRET", &hmac_secret);
+
+    // Pass ~/.polos/.env variables to the orchestrator
+    for (key, value) in &dotenv_vars {
+        cmd.env(key, value);
+    }
+
+    // Pass extra [env] variables from config.toml (overrides .env if both set same key)
+    for (key, value) in &config.env {
+        cmd.env(key, value);
+    }
+
+    let child = cmd
         .stdout(Stdio::from(stdout_log))
         .stderr(Stdio::from(stderr_log))
         .spawn()
@@ -248,6 +270,7 @@ pub async fn initialize() -> Result<()> {
         orchestrator_port,
         ui_port,
         hmac_secret,
+        env: Default::default(),
     };
     config.save()?;
 

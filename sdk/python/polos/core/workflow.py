@@ -251,6 +251,8 @@ class Workflow:
         otel_span_id = context.get("otel_span_id")
         cancel_event = context.get("cancel_event")
         sandbox_manager = context.get("sandbox_manager")
+        channels = context.get("channels")
+        channel_context_data = context.get("channel_context")
 
         # Ensure execution_id is a string
         if execution_id:
@@ -276,6 +278,16 @@ class Workflow:
         initial_state = context.get("initial_state")
         if initial_state:
             initial_state = self.state_schema.model_validate(initial_state)
+
+        # Parse channel_context from raw dict (sent by orchestrator)
+        channel_context = None
+        if channel_context_data and isinstance(channel_context_data, dict):
+            from ..channels.channel import ChannelContext
+
+            channel_context = ChannelContext(
+                channel_id=channel_context_data.get("channel_id", ""),
+                source=channel_context_data.get("source", {}),
+            )
 
         # Check if this is an Agent and create appropriate context
         from ..agents.agent import Agent
@@ -304,6 +316,8 @@ class Workflow:
                 state_schema=self.state_schema,
                 initial_state=initial_state,
                 cancel_event=cancel_event,
+                channels=channels,
+                channel_context=channel_context,
             )
         else:
             # Create WorkflowContext for regular workflows or tools
@@ -328,6 +342,8 @@ class Workflow:
                 state_schema=self.state_schema,
                 initial_state=initial_state,
                 cancel_event=cancel_event,
+                channels=channels,
+                channel_context=channel_context,
             )
 
         # Convert dict payload to Pydantic model if needed
@@ -710,6 +726,7 @@ class Workflow:
         otel_traceparent: str | None = None,
         initial_state: BaseModel | dict[str, Any] | None = None,
         run_timeout_seconds: int | None = None,
+        channel_context: dict[str, Any] | None = None,
     ) -> ExecutionHandle:
         """Invoke workflow execution via orchestrator and return a handle immediately.
 
@@ -776,6 +793,7 @@ class Workflow:
             otel_traceparent=otel_traceparent,
             initial_state=serialize(initial_state),
             run_timeout_seconds=run_timeout_seconds,
+            channel_context=channel_context,
         )
         return handle
 

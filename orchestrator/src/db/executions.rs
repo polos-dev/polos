@@ -208,8 +208,8 @@ impl Database {
             let traceparent = exec_data.otel_traceparent.as_deref().or(otel_traceparent);
 
             let row = sqlx::query(
-        "INSERT INTO workflow_executions (id, workflow_id, status, payload, deployment_id, parent_execution_id, root_execution_id, step_key, queue_name, concurrency_key, batch_id, session_id, user_id, otel_traceparent, project_id, queued_at, initial_state, run_timeout_seconds) 
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, $17)
+        "INSERT INTO workflow_executions (id, workflow_id, status, payload, deployment_id, parent_execution_id, root_execution_id, step_key, queue_name, concurrency_key, batch_id, session_id, user_id, otel_traceparent, project_id, queued_at, initial_state, run_timeout_seconds, channel_context)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, $17, $18)
           RETURNING id, created_at",
       )
       .bind(id)
@@ -229,6 +229,7 @@ impl Database {
       .bind(project_id)
       .bind(exec_data.initial_state.as_ref())
       .bind(exec_data.run_timeout_seconds)
+      .bind(exec_data.channel_context.as_ref())
       .fetch_one(&mut *tx)
       .await?;
 
@@ -1479,6 +1480,7 @@ impl Database {
              FROM workflow_executions
              WHERE channel_context->'source'->>'channel' = $1
                AND channel_context->'source'->>'threadTs' = $2
+               AND parent_execution_id IS NULL
              ORDER BY created_at DESC LIMIT 1",
         )
         .bind(channel)

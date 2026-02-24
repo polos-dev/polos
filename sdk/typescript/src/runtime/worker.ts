@@ -11,6 +11,7 @@ import type { Workflow } from '../core/workflow.js';
 import { isToolWorkflow, type ToolWorkflow } from '../core/tool.js';
 import { isAgentWorkflow, type AgentWorkflow } from '../agents/agent.js';
 import type { Channel, ChannelContext, ChannelOutputMode } from '../channels/channel.js';
+import { SlackChannel } from '../channels/slack.js';
 import type { StreamEvent } from '../types/events.js';
 import { globalRegistry } from '../core/registry.js';
 import { StepExecutionError } from '../core/step.js';
@@ -110,11 +111,27 @@ export class Worker {
   private state: WorkerState = 'stopped';
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private activeExecutions = new Map<string, { abortController: AbortController }>();
+  /** Tracks running channel bridges so we don't start duplicates on re-dispatch. */
+  private activeChannelBridges = new Set<string>();
   private signalHandler: (() => void) | null = null;
 
   constructor(config: WorkerConfig) {
     this.config = config;
     this.channels = config.channels ?? [];
+
+    // Auto-register SlackChannel if SLACK_BOT_TOKEN is set and no explicit slack channel was provided
+    if (!this.channels.some((ch) => ch.id === 'slack')) {
+      const slackBotToken = process.env['SLACK_BOT_TOKEN'];
+      if (slackBotToken) {
+        this.channels.push(
+          new SlackChannel({
+            botToken: slackBotToken,
+            defaultChannel: process.env['SLACK_CHANNEL'] ?? '#general',
+          })
+        );
+        logger.info('Auto-registered SlackChannel from SLACK_BOT_TOKEN env var');
+      }
+    }
     this.maxConcurrentWorkflows = config.maxConcurrentWorkflows ?? 100;
     this.workerServerUrl =
       config.workerServerUrl ?? `http://localhost:${String(config.port ?? 8000)}`;
@@ -798,6 +815,17 @@ export class Worker {
       const hasWorkflowChannels = workflow.config.channels !== undefined;
       const resolvedChannels = workflow.config.channels ?? this.channels;
 
+      // Start channel bridge for output streaming BEFORE execution so it can
+      // capture events as they happen (avoids race where execution completes
+      // before the bridge subscribes to the SSE stream).
+      // Only start for root executions — child events are published on the
+      // root topic, so the root bridge already captures everything.
+      if (data.channelContext && !data.parentExecutionId) {
+        const rootExecId = data.rootExecutionId ?? executionId;
+        const rootWfId = data.rootWorkflowId ?? workflowId;
+        this.startChannelBridge(rootExecId, rootWfId, data.channelContext, workflow);
+      }
+
       // Execute workflow
       result = await executeWorkflow({
         workflow,
@@ -810,11 +838,6 @@ export class Worker {
         sandboxManager: this.sandboxManager,
         channelContext: hasWorkflowChannels ? undefined : data.channelContext,
       });
-
-      // Start channel bridge for output streaming (always uses channelContext, independent of channel resolution)
-      if (data.channelContext) {
-        this.startChannelBridge(executionId, workflowId, data.channelContext, workflow);
-      }
 
       // Handle result
       await this.handleExecutionResult(executionId, workflowId, context, result);
@@ -1000,13 +1023,27 @@ export class Worker {
    * Start a channel bridge that streams execution events back to the originating channel.
    */
   private startChannelBridge(
-    executionId: string,
-    workflowId: string,
+    rootExecutionId: string,
+    rootWorkflowId: string,
     channelCtx: { channelId: string; source: Record<string, unknown> },
     workflow: Workflow
   ): void {
+    // Prevent duplicate bridges — on resume/re-dispatch the previous SSE
+    // stream is still alive, so we don't need another one.
+    if (this.activeChannelBridges.has(rootExecutionId)) return;
+
     const channel = this.channels.find((ch) => ch.id === channelCtx.channelId);
-    if (!channel?.sendOutput) return;
+    if (!channel) {
+      logger.error(
+        `No channel registered for "${channelCtx.channelId}". ` +
+          (channelCtx.channelId === 'slack'
+            ? 'Set the SLACK_BOT_TOKEN environment variable so the worker can respond to Slack.'
+            : `Register a channel with id "${channelCtx.channelId}" on the worker.`),
+        { executionId: rootExecutionId }
+      );
+      return;
+    }
+    if (!channel.sendOutput) return;
 
     const outputMode: ChannelOutputMode =
       ((workflow.config as unknown as Record<string, unknown>)['channelOutputMode'] as
@@ -1016,11 +1053,7 @@ export class Worker {
       'per_step';
     if (outputMode === 'none') return;
 
-    const execution = this.activeExecutions.get(executionId);
-    if (!execution) return;
-
-    const rootExecutionId = execution.abortController.signal.aborted ? executionId : executionId;
-    const rootWorkflowId = workflowId;
+    this.activeChannelBridges.add(rootExecutionId);
 
     void (async () => {
       try {
@@ -1029,13 +1062,14 @@ export class Worker {
           workflowRunId: rootExecutionId,
         });
         for await (const event of stream) {
-          if (execution.abortController.signal.aborted) break;
           if (shouldForwardEvent(event, outputMode)) {
             await channel.sendOutput?.(channelCtx as ChannelContext, event);
           }
         }
       } catch (err) {
-        logger.warn('Channel bridge error', { error: String(err), executionId });
+        logger.warn('Channel bridge error', { error: String(err), executionId: rootExecutionId });
+      } finally {
+        this.activeChannelBridges.delete(rootExecutionId);
       }
     })();
   }

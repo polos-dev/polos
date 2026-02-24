@@ -81,6 +81,8 @@ pub struct SubmitWorkflowsRequest {
     wait_for_subworkflow: Option<bool>,
     /// OpenTelemetry trace parent (deprecated)
     otel_traceparent: Option<String>,
+    /// Channel context for bidirectional channels (Slack thread, etc.)
+    channel_context: Option<serde_json::Value>,
 }
 
 /// Individual workflow request in a batch
@@ -506,6 +508,7 @@ pub async fn submit_workflows(
         session_id = Some(Uuid::new_v4().to_string());
     }
 
+    let channel_context = req.channel_context;
     let mut execution_data_vec = Vec::new();
 
     for workflow_req in req.workflows {
@@ -530,6 +533,7 @@ pub async fn submit_workflows(
             otel_traceparent: None,
             initial_state: workflow_req.initial_state.clone(),
             run_timeout_seconds: workflow_req.run_timeout_seconds,
+            channel_context: channel_context.clone(),
         });
     }
 

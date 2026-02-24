@@ -235,6 +235,119 @@ class Step:
             )
         )
 
+    async def _notify_channels(
+        self,
+        step_key: str,
+        approval_url: str,
+        event_data: dict[str, Any] | Any,
+    ) -> None:
+        """Notify registered channels when a workflow suspends.
+
+        Matches TypeScript executor.ts suspend() channel notification logic:
+        - Extracts _form and _notify metadata from event data
+        - Builds SuspendNotification
+        - Per-channel overrides via _notify.[channelId]
+        - Fires all notifications concurrently
+        - Failures are logged but never block the suspend flow
+        """
+        channels = self.ctx.channels
+        if not channels:
+            return
+
+        from ..channels.channel import ChannelContext, SuspendNotification
+
+        event_record = event_data if isinstance(event_data, dict) else {}
+        form_data = event_record.get("_form") or {}
+        notify_config = event_record.get("_notify") or {}
+
+        title_val = form_data.get("title") if isinstance(form_data, dict) else None
+        notify_message = notify_config.get("message") if isinstance(notify_config, dict) else None
+        form_description = form_data.get("description") if isinstance(form_data, dict) else None
+        description_val = notify_message or form_description
+        source_val = event_record.get("_source")
+        tool_val = event_record.get("_tool")
+        context_val = form_data.get("context") if isinstance(form_data, dict) else None
+        form_fields_val = form_data.get("fields") if isinstance(form_data, dict) else None
+        expires_at_val = (
+            (form_data.get("expiresAt") or form_data.get("expires_at"))
+            if isinstance(form_data, dict)
+            else None
+        )
+
+        # Get channel context from workflow context (set when triggered from Slack etc.)
+        channel_context: ChannelContext | None = self.ctx.channel_context
+
+        notification = SuspendNotification(
+            workflow_id=self.ctx.root_workflow_id,
+            execution_id=self.ctx.root_execution_id,
+            step_key=step_key,
+            approval_url=approval_url,
+            title=title_val,
+            description=description_val,
+            source=source_val,
+            tool=tool_val,
+            context=context_val,
+            form_fields=form_fields_val,
+            expires_at=expires_at_val,
+            channel_context=channel_context,
+        )
+
+        # Fire all notifications concurrently — failures logged, never block suspend
+        async def _notify_single(ch: Any) -> dict[str, Any] | None:
+            try:
+                # Per-channel overrides: merge _notify.[channelId] overrides
+                # + inject channelContext.source for matching channel (thread routing)
+                notify_overrides = (
+                    notify_config.get(ch.id) if isinstance(notify_config, dict) else None
+                )
+                # When channel matches the originating channelContext, merge source
+                # so the notification routes to the same Slack thread
+                if channel_context and ch.id == channel_context.channel_id:
+                    overrides = {
+                        **channel_context.source,
+                        **(notify_overrides or {}),
+                    }
+                else:
+                    overrides = notify_overrides
+
+                if overrides is not None:
+                    n = notification.model_copy(update={"channel_overrides": overrides})
+                else:
+                    n = notification
+                meta = await ch.notify(n)
+                if meta:
+                    return {"channelId": ch.id, **meta}
+                return None
+            except Exception as err:
+                logger.warning("Channel %s notification failed: %s", ch.id, err)
+                return None
+
+        results = await asyncio.gather(
+            *[_notify_single(ch) for ch in channels], return_exceptions=True
+        )
+
+        # Publish notification metadata so the orchestrator can update
+        # channel messages when approval comes through the UI instead of Slack
+        meta_entries = [r for r in results if isinstance(r, dict)]
+        if meta_entries:
+            try:
+                client = get_client_or_raise()
+                topic = f"workflow/{self.ctx.root_workflow_id}/{self.ctx.root_execution_id}"
+                await batch_publish(
+                    client=client,
+                    topic=topic,
+                    events=[
+                        EventData(
+                            data={"channels": meta_entries},
+                            event_type=f"notification_meta_{step_key}",
+                        )
+                    ],
+                    execution_id=self.ctx.execution_id,
+                    root_execution_id=self.ctx.root_execution_id,
+                )
+            except Exception as err:
+                logger.warning("Failed to publish notification metadata: %s", err)
+
     async def run(
         self,
         step_key: str,
@@ -735,6 +848,9 @@ class Step:
             expires_at=expires_at,
         )
 
+        # Notify channels — after state is persisted, before pausing execution
+        await self._notify_channels(step_key, approval_url, serialized_data)
+
         # Resume event will be added to step outputs by the orchestrator when it is received
 
         # Raise WaitException to pause execution
@@ -830,6 +946,12 @@ class Step:
 
         # Invoke workflow
         client = get_client_or_raise()
+
+        # Propagate channel_context to child executions so notifications
+        # route to the originating Slack thread (or other channel).
+        cc = self.ctx.channel_context
+        cc_dict = {"channel_id": cc.channel_id, "source": cc.source} if cc else None
+
         handle = await workflow_instance._invoke(
             client,
             payload,
@@ -846,6 +968,7 @@ class Step:
             wait_for_subworkflow=wait_for_subworkflow,
             otel_traceparent=traceparent,
             run_timeout_seconds=run_timeout_seconds,
+            channel_context=cc_dict,
         )
 
         if wait_for_subworkflow:
@@ -1014,6 +1137,10 @@ class Step:
 
             workflow_requests.append(workflow_req)
 
+        # Propagate channel_context to child executions
+        cc = self.ctx.channel_context
+        cc_dict = {"channel_id": cc.channel_id, "source": cc.source} if cc else None
+
         # Submit all workflows in a single batch using the batch endpoint
         client = get_client_or_raise()
         handles = await client._submit_workflows(
@@ -1028,6 +1155,7 @@ class Step:
             user_id=self.ctx.user_id,
             wait_for_subworkflow=False,  # batch_invoke is fire-and-forget
             otel_traceparent=traceparent,
+            channel_context=cc_dict,
         )
 
         await self._save_step_output(
@@ -1117,6 +1245,10 @@ class Step:
 
             workflow_requests.append(workflow_req)
 
+        # Propagate channel_context to child executions
+        cc = self.ctx.channel_context
+        cc_dict = {"channel_id": cc.channel_id, "source": cc.source} if cc else None
+
         # Submit all workflows in a single batch using the batch endpoint
         # with wait_for_subworkflow=True
         client = get_client_or_raise()
@@ -1131,6 +1263,7 @@ class Step:
             user_id=self.ctx.user_id,
             wait_for_subworkflow=True,  # This will set parent to waiting until all complete
             otel_traceparent=traceparent,
+            channel_context=cc_dict,
         )
 
         # Raise WaitException to pause execution

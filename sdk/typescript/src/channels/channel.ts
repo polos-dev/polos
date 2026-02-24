@@ -73,8 +73,11 @@ export interface Channel {
   /**
    * Send a notification when an agent suspends for user input.
    * Implementations should throw on failure — the SDK catches and logs errors.
+   *
+   * May return channel-specific metadata (e.g., Slack message_ts) so the
+   * orchestrator can update the notification later (e.g., after approval via UI).
    */
-  notify(notification: SuspendNotification): Promise<void>;
+  notify(notification: SuspendNotification): Promise<Record<string, unknown> | undefined>;
 
   /** Default output mode for this channel. */
   readonly outputMode?: ChannelOutputMode;

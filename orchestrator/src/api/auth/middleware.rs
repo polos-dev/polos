@@ -115,6 +115,7 @@ fn should_skip_auth(path: &str) -> bool {
         "/health" | "/api/v1/auth/signup" | "/api/v1/auth/signin" | "/api/v1/auth/oauth-signin"
     ) || path.starts_with("/docs")
         || path.starts_with("/api-docs")
+        || path.starts_with("/approve/")
         || path.starts_with("/api/v1/approvals")
         || path.starts_with("/slack/")
 }

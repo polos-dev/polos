@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from .agents.agent import Agent
+from .channels.channel import Channel
 from .core.workflow import get_all_workflows
 from .runtime.client import ExecutionHandle, PolosClient
 from .runtime.worker import Worker
@@ -74,7 +75,7 @@ class Polos:
         deployment_id: str | None = None,
         port: int = 8000,
         max_concurrent_workflows: int | None = None,
-        channels: list | None = None,
+        channels: list[Channel] | None = None,
         log_file: str | None = None,
     ):
         self._project_id = project_id or os.getenv("POLOS_PROJECT_ID")
@@ -116,6 +117,7 @@ class Polos:
             mode="push",
             worker_server_url=f"http://localhost:{self._port}",
             log_file=log_file,
+            channels=self._channels,
         )
 
         # Track state

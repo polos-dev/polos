@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -12,6 +13,9 @@ pub struct ServerConfig {
     pub ui_port: u16,
     #[serde(default)]
     pub hmac_secret: String,
+    /// Extra environment variables passed to the orchestrator process.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 impl ServerConfig {

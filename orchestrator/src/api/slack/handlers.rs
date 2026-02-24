@@ -26,9 +26,16 @@ struct SlackUser {
 }
 
 #[derive(serde::Deserialize)]
+struct SlackMessage {
+    blocks: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(serde::Deserialize)]
 struct SlackInteractionPayload {
     actions: Vec<SlackAction>,
     user: Option<SlackUser>,
+    response_url: Option<String>,
+    message: Option<SlackMessage>,
 }
 
 #[derive(serde::Deserialize)]
@@ -74,61 +81,94 @@ pub async fn handle_interaction(
         StatusCode::BAD_REQUEST
     })?;
 
+    let username = payload
+        .user
+        .as_ref()
+        .and_then(|u| u.username.as_deref())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let response_url = payload.response_url.clone();
+    let original_blocks = payload.message.and_then(|m| m.blocks).unwrap_or_default();
+
     let execution_id_uuid =
         Uuid::parse_str(&action_value.execution_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
+    // Spawn async work so we can respond to Slack within 3 seconds.
+    // We use response_url to update the original message after processing.
+    let state_clone = state.clone();
+    let approved = action_value.approved;
+    let step_key = action_value.step_key.clone();
+    tokio::spawn(async move {
+        let result = process_interaction(
+            &state_clone,
+            &execution_id_uuid,
+            &step_key,
+            approved,
+            &username,
+            response_url.as_deref(),
+            &original_blocks,
+        )
+        .await;
+        if let Err(e) = result {
+            tracing::error!(
+                "Failed to process Slack interaction for execution {}: {}",
+                execution_id_uuid,
+                e
+            );
+        }
+    });
+
+    // Return 200 immediately — the original message will be updated via response_url
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Process the Slack interaction asynchronously and update the original message
+/// via Slack's `response_url`.
+async fn process_interaction(
+    state: &Arc<AppState>,
+    execution_id_uuid: &Uuid,
+    step_key: &str,
+    approved: bool,
+    username: &str,
+    response_url: Option<&str>,
+    original_blocks: &[serde_json::Value],
+) -> Result<(), String> {
     // Get project_id from execution and set RLS
     let project_id = state
         .db
-        .get_project_id_from_execution(&execution_id_uuid)
+        .get_project_id_from_execution(execution_id_uuid)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to get project_id from execution: {}", e);
-            StatusCode::NOT_FOUND
-        })?;
+        .map_err(|e| format!("Failed to get project_id: {}", e))?;
 
     state
         .db
         .set_project_id(&project_id, false)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to set project_id: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map_err(|e| format!("Failed to set project_id: {}", e))?;
 
     // Verify execution is still waiting
     let execution = state
         .db
-        .get_execution(&execution_id_uuid)
+        .get_execution(execution_id_uuid)
         .await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
-
-    let username = payload
-        .user
-        .as_ref()
-        .and_then(|u| u.username.as_deref())
-        .unwrap_or("unknown");
+        .map_err(|e| format!("Failed to get execution: {}", e))?;
 
     if execution.status != "waiting" {
-        // Already handled — return a replacement message
         let message = format!(
             "This request has already been handled (status: {}).",
             execution.status
         );
-        return Ok(Json(serde_json::json!({
-            "replace_original": true,
-            "text": message,
-            "blocks": [{
-                "type": "section",
-                "text": { "type": "mrkdwn", "text": message }
-            }]
-        })));
+        if let Some(url) = response_url {
+            update_slack_message(url, &message, &[]).await;
+        }
+        return Ok(());
     }
 
     // Publish resume event
     let topic = format!("workflow/{}/{}", execution.workflow_id, execution_id_uuid);
-    let event_type = format!("resume_{}", action_value.step_key);
-    let event_data = serde_json::json!({ "approved": action_value.approved });
+    let event_type = format!("resume_{}", step_key);
+    let event_data = serde_json::json!({ "approved": approved });
     let events: Vec<(Option<String>, serde_json::Value, Option<Uuid>, i32)> =
         vec![(Some(event_type), event_data, None, 0)];
 
@@ -136,44 +176,87 @@ pub async fn handle_interaction(
         .db
         .publish_events_batch(topic, events, None, None, &project_id)
         .await
-        .map_err(|e| {
-            tracing::error!(
-                "Failed to publish resume event for execution {}: {}",
-                execution_id_uuid,
-                e
-            );
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map_err(|e| format!("Failed to publish resume event: {}", e))?;
 
-    // Return replacement message
-    let action_text = if action_value.approved {
-        "Approved"
-    } else {
-        "Rejected"
-    };
-    let emoji = if action_value.approved {
+    // Build replacement: keep original blocks but replace action buttons with status
+    let action_text = if approved { "Approved" } else { "Rejected" };
+    let emoji = if approved {
         "\u{2705}" // check mark
     } else {
         "\u{274C}" // X mark
     };
+    let status_text = format!("{} {} by @{}", emoji, action_text, username);
 
-    let message = format!("{} {} by @{}", emoji, action_text, username);
+    // Keep original blocks (header, description, context) but strip the actions block,
+    // then append a status line so the user can still see what was approved/rejected.
+    let mut replacement_blocks: Vec<serde_json::Value> = original_blocks
+        .iter()
+        .filter(|b| b.get("type").and_then(|t| t.as_str()) != Some("actions"))
+        .cloned()
+        .collect();
+    replacement_blocks.push(serde_json::json!({
+        "type": "context",
+        "elements": [{ "type": "mrkdwn", "text": status_text }]
+    }));
 
-    Ok(Json(serde_json::json!({
-        "replace_original": true,
-        "text": message,
-        "blocks": [{
-            "type": "section",
-            "text": { "type": "mrkdwn", "text": message }
-        }]
-    })))
+    if let Some(url) = response_url {
+        update_slack_message(url, &status_text, &replacement_blocks).await;
+    }
+
+    Ok(())
+}
+
+/// POST a replacement message to Slack's `response_url` to update the original message.
+async fn update_slack_message(
+    response_url: &str,
+    fallback_text: &str,
+    blocks: &[serde_json::Value],
+) {
+    let client = reqwest::Client::new();
+    let body = if blocks.is_empty() {
+        serde_json::json!({
+            "replace_original": "true",
+            "text": fallback_text,
+            "blocks": [{
+                "type": "section",
+                "text": { "type": "mrkdwn", "text": fallback_text }
+            }]
+        })
+    } else {
+        serde_json::json!({
+            "replace_original": "true",
+            "text": fallback_text,
+            "blocks": blocks,
+        })
+    };
+
+    match client.post(response_url).json(&body).send().await {
+        Ok(resp) => {
+            if !resp.status().is_success() {
+                tracing::warn!(
+                    "Slack response_url returned status {}: {:?}",
+                    resp.status(),
+                    resp.text().await.ok()
+                );
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to POST to Slack response_url: {}", e);
+        }
+    }
 }
 
 /// Extract the `payload` field from URL-encoded body.
+///
+/// Slack sends the body as `application/x-www-form-urlencoded` where spaces
+/// are encoded as `+`.  `urlencoding::decode` only handles `%XX` sequences,
+/// so we first replace `+` with `%20` before decoding.
 fn extract_payload(body: &str) -> Result<String, StatusCode> {
     for pair in body.split('&') {
         if let Some(value) = pair.strip_prefix("payload=") {
-            let decoded = urlencoding::decode(value).map_err(|e| {
+            // Convert form-urlencoded '+' → '%20' so urlencoding::decode handles spaces
+            let value = value.replace('+', "%20");
+            let decoded = urlencoding::decode(&value).map_err(|e| {
                 tracing::error!("Failed to URL-decode payload: {}", e);
                 StatusCode::BAD_REQUEST
             })?;
@@ -519,12 +602,10 @@ mod tests {
 
     #[test]
     fn extract_payload_handles_special_characters() {
-        // payload containing spaces and special chars
+        // payload containing spaces encoded as '+' (form-urlencoded)
         let body = "payload=%7B%22text%22%3A%22hello+world%22%7D";
         let result = extract_payload(body).unwrap();
-        // '+' is not decoded by urlencoding::decode (it's form-specific),
-        // but the JSON payload from Slack uses %20 for spaces.
-        assert!(result.contains("hello"));
+        assert_eq!(result, r#"{"text":"hello world"}"#);
     }
 
     // ── verify_slack_signature ─────────────────────────────────────────

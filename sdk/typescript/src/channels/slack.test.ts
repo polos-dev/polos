@@ -284,10 +284,7 @@ describe('SlackChannel', () => {
         assert.ok(captured.body, 'Expected fetch to be called');
         assert.strictEqual(captured.body['channel'], '#general');
         assert.strictEqual(captured.body['thread_ts'], '1234.5678');
-        assert.ok(
-          (captured.body['text'] as string).includes('test-wf'),
-          'Expected text to include workflow ID'
-        );
+        assert.strictEqual(captured.body['text'], 'done');
       } finally {
         restore();
       }
@@ -315,8 +312,7 @@ describe('SlackChannel', () => {
 
         assert.ok(captured.body);
         const text = captured.body['text'] as string;
-        assert.ok(text.includes('my-agent'));
-        assert.ok(text.includes('Task completed successfully'));
+        assert.strictEqual(text, 'Task completed successfully');
       } finally {
         restore();
       }

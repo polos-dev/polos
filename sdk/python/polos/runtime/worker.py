@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from ..agents.agent import Agent
+from ..channels.channel import Channel, ChannelContext, ChannelOutputMode
 from ..core.step import ExecutionCancelledError
 from ..core.workflow import _WORKFLOW_REGISTRY, StepExecutionError, Workflow
 from ..execution.sandbox_manager import SandboxManager
@@ -35,6 +36,24 @@ except ImportError:
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+
+def _should_forward_event(event_type: str | None, mode: str) -> bool:
+    """Determine whether an event should be forwarded based on the output mode.
+
+    Matches TypeScript worker.ts shouldForwardEvent().
+    """
+    if mode == "per_step":
+        return event_type in (
+            "text_delta",
+            "tool_call",
+            "step_finish",
+            "workflow_finish",
+            "agent_finish",
+        )
+    if mode == "final":
+        return event_type in ("workflow_finish", "agent_finish")
+    return False
 
 
 class Worker:
@@ -80,6 +99,7 @@ class Worker:
         mode: str = "push",  # "push" or "pull"
         worker_server_url: str | None = None,  # Required if mode="push"
         log_file: str | None = None,
+        channels: list[Channel] | None = None,
     ):
         """
         Initialize worker.
@@ -99,6 +119,10 @@ class Worker:
                 (e.g., "https://worker.example.com").
                 If not provided and mode="push", will be auto-generated from
                 POLOS_WORKER_SERVER_URL env var or default to "http://localhost:8000"
+            channels: Default notification channels for suspend events
+                (e.g., Slack, Discord). Channel notifications are sent
+                concurrently when any workflow suspends; failures are logged
+                but never block the suspend flow.
 
         Raises:
             ValueError: If deployment_id is not provided,
@@ -191,6 +215,8 @@ class Worker:
         # Store cancel events for cooperative cancellation
         self.execution_cancel_events: dict[str, asyncio.Event] = {}
         self.execution_tasks_lock = asyncio.Lock()
+        # Tracks running channel bridges so we don't start duplicates on re-dispatch
+        self._active_channel_bridges: set[str] = set()
 
         # Build workflow registry
         self.workflows_registry: dict[str, Workflow] = {}
@@ -232,6 +258,26 @@ class Worker:
             project_id=self.project_id,
             orchestrator_client=client,
         )
+
+        # Notification channels for suspend events
+        self.channels: list[Channel] = channels or []
+
+        # Auto-register SlackChannel if SLACK_BOT_TOKEN is set
+        # and no explicit slack channel provided
+        if not any(ch.id == "slack" for ch in self.channels):
+            slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
+            if slack_bot_token:
+                from ..channels.slack import SlackChannel, SlackChannelConfig
+
+                self.channels.append(
+                    SlackChannel(
+                        SlackChannelConfig(
+                            bot_token=slack_bot_token,
+                            default_channel=os.getenv("SLACK_CHANNEL", "#general"),
+                        )
+                    )
+                )
+                logger.info("Auto-registered SlackChannel from SLACK_BOT_TOKEN env var")
 
         # Worker state
         self.worker_id: str | None = None
@@ -861,6 +907,8 @@ class Worker:
                 "initial_state": workflow_data.get("initial_state"),
                 "run_timeout_seconds": run_timeout_seconds,
                 "sandbox_manager": self.sandbox_manager,
+                "channels": self.channels,
+                "channel_context": workflow_data.get("channel_context"),
             }
 
             payload = workflow_data["payload"]
@@ -880,6 +928,22 @@ class Worker:
             # (mirrors TypeScript's AbortController pattern)
             cancel_event = asyncio.Event()
             context["cancel_event"] = cancel_event
+
+            # Start channel bridge for output streaming BEFORE execution so it can
+            # capture events as they happen.
+            # Only start for root executions — child events are published on the
+            # root topic, so the root bridge already captures everything.
+            channel_context_data = workflow_data.get("channel_context")
+            parent_execution_id = workflow_data.get("parent_execution_id")
+            if channel_context_data and not parent_execution_id:
+                root_exec_id = workflow_data.get("root_execution_id") or execution_id
+                root_wf_id = workflow_data.get("root_workflow_id") or workflow_id
+                self._start_channel_bridge(
+                    root_exec_id,
+                    root_wf_id,
+                    channel_context_data,
+                    cancel_event,
+                )
 
             # Create task for workflow execution and store it for cancellation
             workflow_task = asyncio.create_task(workflow._execute(context, payload))
@@ -1031,6 +1095,96 @@ class Worker:
                     )
 
             raise
+
+    def _start_channel_bridge(
+        self,
+        root_execution_id: str,
+        root_workflow_id: str,
+        channel_context_data: dict[str, Any],
+        cancel_event: asyncio.Event,
+    ) -> None:
+        """Start a background task that streams execution events back to the originating channel.
+
+        Matches TypeScript worker.ts startChannelBridge():
+        - Prevents duplicate bridges (on resume/re-dispatch the previous SSE stream is still alive)
+        - Finds channel by channelContext.channelId
+        - Checks channel has send_output capability
+        - Determines output mode (channel.output_mode or 'per_step')
+        - Spawns background task streaming via SSE and forwarding filtered events
+        """
+        # Prevent duplicate bridges — on resume/re-dispatch the previous SSE
+        # stream is still alive, so we don't need another one.
+        if root_execution_id in self._active_channel_bridges:
+            return
+
+        channel_id = channel_context_data.get("channelId") or channel_context_data.get(
+            "channel_id", ""
+        )
+        if not channel_id:
+            return
+
+        # Find matching channel
+        channel = next((ch for ch in self.channels if ch.id == channel_id), None)
+        if not channel:
+            if channel_id == "slack":
+                logger.error(
+                    "No channel registered for 'slack'. "
+                    "Set the SLACK_BOT_TOKEN environment variable so the worker "
+                    "can respond to Slack. (execution_id=%s)",
+                    root_execution_id,
+                )
+            else:
+                logger.error(
+                    "No channel registered for '%s'. Register a channel with "
+                    "id '%s' on the worker. (execution_id=%s)",
+                    channel_id,
+                    channel_id,
+                    root_execution_id,
+                )
+            return
+
+        # Check if channel supports send_output (has a non-trivial implementation)
+        if not hasattr(channel, "send_output") or channel.send_output is None:
+            return
+
+        # Determine output mode
+        output_mode: ChannelOutputMode = channel.output_mode or "per_step"
+        if output_mode == "none":
+            return
+
+        self._active_channel_bridges.add(root_execution_id)
+
+        # Build ChannelContext for send_output calls
+        source = channel_context_data.get("source", {})
+        channel_ctx = ChannelContext(channel_id=channel_id, source=source)
+
+        async def _bridge() -> None:
+            try:
+                from ..features.events import stream_workflow
+
+                stream = stream_workflow(
+                    client=self.polos_client,
+                    workflow_id=root_workflow_id,
+                    workflow_run_id=root_execution_id,
+                )
+                async for event in stream:
+                    if cancel_event.is_set():
+                        break
+                    if _should_forward_event(event.event_type, output_mode):
+                        try:
+                            await channel.send_output(channel_ctx, event)
+                        except Exception as send_err:
+                            logger.warning("Channel bridge send_output failed: %s", send_err)
+            except Exception as err:
+                logger.warning(
+                    "Channel bridge error for execution %s: %s",
+                    root_execution_id,
+                    err,
+                )
+            finally:
+                self._active_channel_bridges.discard(root_execution_id)
+
+        asyncio.create_task(_bridge())
 
     def _setup_worker_server(self):
         """Setup FastAPI server for push mode."""

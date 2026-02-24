@@ -31,6 +31,7 @@ sha2 = "0.10"
 hex = "0.4"
 rand = "0.8"
 dirs = "5.0"
+dotenvy = "0.15"
 url = "2.5"
 openssl = { version = "0.10", features = ["vendored"] }
 rustyline = "14.0"

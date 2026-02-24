@@ -978,6 +978,10 @@ async fn main() -> anyhow::Result<()> {
         )
         // Approval endpoints
         .route(
+            "/approve/:execution_id/:step_key",
+            get(api::approvals::approval_page),
+        )
+        .route(
             "/api/v1/approvals/:execution_id/:step_key",
             get(api::approvals::get_approval),
         )

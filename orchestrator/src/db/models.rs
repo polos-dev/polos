@@ -145,6 +145,7 @@ pub struct ExecutionData {
     pub otel_traceparent: Option<String>,
     pub initial_state: Option<serde_json::Value>,
     pub run_timeout_seconds: Option<i32>,
+    pub channel_context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

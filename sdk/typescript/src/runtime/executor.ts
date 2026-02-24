@@ -318,6 +318,7 @@ function createOrchestratorStepHelper(
       waitForSubworkflow: options?.waitForSubworkflow ?? false,
       initialState: options?.initialState,
       runTimeoutSeconds: options?.runTimeoutSeconds,
+      channelContext,
     });
 
     if (options?.waitForSubworkflow) {
@@ -566,6 +567,7 @@ function createOrchestratorStepHelper(
         userId: execCtx.userId,
         waitForSubworkflow: false,
         otelTraceparent: getCurrentTraceparent(),
+        channelContext,
       });
 
       // Save serializable handle data
@@ -662,6 +664,7 @@ function createOrchestratorStepHelper(
         userId: execCtx.userId,
         waitForSubworkflow: true,
         otelTraceparent: getCurrentTraceparent(),
+        channelContext,
       });
 
       // Pause execution — orchestrator resumes when all sub-workflows complete
@@ -932,7 +935,7 @@ function createOrchestratorStepHelper(
         }
 
         // Fire all notifications concurrently — failures logged, never block suspend
-        await Promise.allSettled(
+        const notifyResults = await Promise.allSettled(
           channels.map(async (ch) => {
             try {
               // Per-channel overrides: merge _notify.[channelId] overrides
@@ -945,12 +948,40 @@ function createOrchestratorStepHelper(
                 overrides !== undefined
                   ? { ...notification, channelOverrides: overrides }
                   : notification;
-              await ch.notify(n);
+              const meta = await ch.notify(n);
+              return meta ? { channelId: ch.id, ...meta } : undefined;
             } catch (err) {
               logger.warn(`Channel ${ch.id} notification failed`, { error: String(err) });
+              return undefined;
             }
           })
         );
+
+        // Publish notification metadata so the orchestrator can update
+        // channel messages when approval comes through the UI instead of Slack
+        const metaEntries: Record<string, unknown>[] = [];
+        for (const r of notifyResults) {
+          if (r.status === 'fulfilled' && r.value != null) {
+            metaEntries.push(r.value as Record<string, unknown>);
+          }
+        }
+        if (metaEntries.length > 0) {
+          orchestratorClient
+            .publishEvent({
+              topic,
+              events: [
+                {
+                  eventType: `notification_meta_${key}`,
+                  data: { channels: metaEntries },
+                },
+              ],
+              executionId: execCtx.executionId,
+              rootExecutionId: execCtx.rootExecutionId,
+            })
+            .catch((err: unknown) => {
+              logger.warn('Failed to publish notification metadata', { error: String(err) });
+            });
+        }
       }
 
       throw new WaitError(`Waiting for resume event: ${topic}`, { topic });

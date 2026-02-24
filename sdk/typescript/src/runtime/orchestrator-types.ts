@@ -381,6 +381,7 @@ export interface BatchInvokeWorkflowsRequest {
   rootWorkflowId?: string | undefined;
   waitForSubworkflow?: boolean | undefined;
   otelTraceparent?: string | undefined;
+  channelContext?: { channelId: string; source: Record<string, unknown> } | undefined;
 }
 
 /**

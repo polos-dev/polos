@@ -1,10 +1,15 @@
 """Context classes for workflow and agent execution."""
 
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from ..channels.channel import Channel, ChannelContext
 
 
 class WorkflowContext:
@@ -35,6 +40,8 @@ class WorkflowContext:
         state_schema: type[BaseModel] | None = None,
         initial_state: dict[str, Any] | None = None,
         cancel_event: asyncio.Event | None = None,
+        channels: list[Channel] | None = None,
+        channel_context: ChannelContext | None = None,
     ):
         self.workflow_id = workflow_id
         self.execution_id = execution_id
@@ -50,6 +57,8 @@ class WorkflowContext:
         self.otel_traceparent = otel_traceparent
         self.otel_span_id = otel_span_id
         self.cancel_event = cancel_event
+        self.channels: list[Channel] = channels or []
+        self.channel_context: ChannelContext | None = channel_context
 
         # Initialize typed workflow state if state_schema is provided
         if state_schema:
@@ -106,6 +115,8 @@ class AgentContext(WorkflowContext):
         state_schema: type[BaseModel] | None = None,
         initial_state: dict[str, Any] | None = None,
         cancel_event: asyncio.Event | None = None,
+        channels: list[Channel] | None = None,
+        channel_context: ChannelContext | None = None,
     ):
         # Call parent with required parameters
         super().__init__(
@@ -125,6 +136,8 @@ class AgentContext(WorkflowContext):
             state_schema=state_schema,
             initial_state=initial_state,
             cancel_event=cancel_event,
+            channels=channels,
+            channel_context=channel_context,
         )
         self.agent_id = agent_id
         self.model = model

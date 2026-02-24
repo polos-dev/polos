@@ -375,6 +375,7 @@ class PolosClient:
         otel_traceparent: str | None = None,
         initial_state: dict[str, Any] | None = None,
         run_timeout_seconds: int | None = None,
+        channel_context: dict[str, Any] | None = None,
     ) -> "ExecutionHandle":
         """Submit a workflow and return an execution handle.
 
@@ -440,6 +441,8 @@ class PolosClient:
                 request_json["initial_state"] = initial_state
             if run_timeout_seconds is not None:
                 request_json["run_timeout_seconds"] = run_timeout_seconds
+            if channel_context is not None:
+                request_json["channel_context"] = channel_context
 
             response = await client.post(
                 f"{self.api_url}/api/v1/workflows/{workflow_id}/run",
@@ -485,6 +488,7 @@ class PolosClient:
         user_id: str | None = None,
         wait_for_subworkflow: bool = False,
         otel_traceparent: str | None = None,
+        channel_context: dict[str, Any] | None = None,
     ) -> list["ExecutionHandle"]:
         """Submit multiple workflows in a batch and return execution handles.
 
@@ -536,6 +540,8 @@ class PolosClient:
             request_json["wait_for_subworkflow"] = wait_for_subworkflow
             if otel_traceparent:
                 request_json["otel_traceparent"] = otel_traceparent
+            if channel_context is not None:
+                request_json["channel_context"] = channel_context
 
             response = await client.post(
                 f"{self.api_url}/api/v1/workflows/batch_run",

@@ -1,6 +1,7 @@
 # Version is managed by hatch-vcs from git tags
 __version__ = "0.1.0"  # This will be replaced by hatch-vcs during build
 
+# Channels
 # Core imports
 from .agents.agent import (
     Agent,
@@ -18,6 +19,14 @@ from .agents.stop_conditions import (
     max_steps,
     max_tokens,
     stop_condition,
+)
+from .channels import (
+    Channel,
+    ChannelContext,
+    ChannelOutputMode,
+    SlackChannel,
+    SlackChannelConfig,
+    SuspendNotification,
 )
 from .core.context import AgentContext, WorkflowContext
 from .core.state import WorkflowState
@@ -162,4 +171,11 @@ __all__ = [
     "WebSearchResultItem",
     "WebSearchOptions",
     "WebSearchFunction",
+    # Channels
+    "Channel",
+    "ChannelContext",
+    "ChannelOutputMode",
+    "SuspendNotification",
+    "SlackChannel",
+    "SlackChannelConfig",
 ]

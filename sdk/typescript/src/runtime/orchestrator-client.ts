@@ -723,6 +723,11 @@ export class OrchestratorClient {
     if (request.waitForSubworkflow !== undefined)
       body['wait_for_subworkflow'] = request.waitForSubworkflow;
     if (request.otelTraceparent !== undefined) body['otel_traceparent'] = request.otelTraceparent;
+    if (request.channelContext !== undefined)
+      body['channel_context'] = {
+        channel_id: request.channelContext.channelId,
+        source: request.channelContext.source,
+      };
 
     return this.request<BatchInvokeWorkflowsResponse>('POST', '/api/v1/workflows/batch_run', {
       body,

@@ -46,14 +46,19 @@ export class SlackChannel implements Channel {
     this.config = config;
   }
 
-  async notify(notification: SuspendNotification): Promise<void> {
+  async notify(notification: SuspendNotification): Promise<Record<string, unknown> | undefined> {
     const overrides = notification.channelOverrides;
     const channel = (overrides?.['channel'] as string | undefined) ?? this.config.defaultChannel;
-    const threadTs = overrides?.['thread_ts'] as string | undefined;
+    const threadTs = (overrides?.['thread_ts'] ?? overrides?.['threadTs']) as string | undefined;
     const blocks = this.buildBlocks(notification);
     const text = notification.title ?? 'Agent needs your input';
 
-    await this.postMessage(channel, threadTs, text, blocks);
+    const messageTs = await this.postMessage(channel, threadTs, text, blocks);
+    return {
+      slack_channel: channel,
+      slack_message_ts: messageTs,
+      slack_blocks: blocks,
+    };
   }
 
   async sendOutput(context: ChannelContext, event: StreamEvent): Promise<void> {
@@ -72,7 +77,7 @@ export class SlackChannel implements Channel {
     threadTs: string | undefined,
     text: string,
     blocks?: SlackBlock[]
-  ): Promise<void> {
+  ): Promise<string> {
     const body: Record<string, unknown> = { channel, text };
     if (threadTs) body['thread_ts'] = threadTs;
     if (blocks) body['blocks'] = blocks;
@@ -86,10 +91,11 @@ export class SlackChannel implements Channel {
       body: JSON.stringify(body),
     });
 
-    const data = (await response.json()) as { ok: boolean; error?: string };
+    const data = (await response.json()) as { ok: boolean; error?: string; ts?: string };
     if (!data.ok) {
       throw new Error(`Slack API error: ${data.error ?? 'unknown'}`);
     }
+    return data.ts ?? '';
   }
 
   private formatOutputEvent(event: StreamEvent): string | null {
@@ -97,15 +103,20 @@ export class SlackChannel implements Channel {
 
     if (eventType === 'workflow_finish' || eventType === 'agent_finish') {
       const metadata = event.data['_metadata'] as Record<string, unknown> | undefined;
-      const result = event.data['result'];
+      const rawResult = event.data['result'];
       const error = event.data['error'] as string | undefined;
       const workflowId = metadata?.['workflow_id'] as string | undefined;
       if (error) {
         return `\u274C *${workflowId ?? 'Workflow'} failed:* ${error}`;
       }
+      // Extract the text result — the event data may wrap it in { result, agent_run_id, usage, ... }
+      const result =
+        typeof rawResult === 'object' && rawResult !== null && 'result' in rawResult
+          ? (rawResult as Record<string, unknown>)['result']
+          : rawResult;
       const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       if (resultStr) {
-        return `\u2705 *${workflowId ?? 'Workflow'} finished:*\n${resultStr}`;
+        return resultStr;
       }
       return `\u2705 *${workflowId ?? 'Workflow'} finished*`;
     }

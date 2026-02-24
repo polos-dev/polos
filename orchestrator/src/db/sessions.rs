@@ -223,7 +223,8 @@ impl Database {
         let session_execution_rows = if let Some(ref sid) = session_id {
             sqlx::query(
                 "SELECT e.id, e.workflow_id, e.payload, e.result,
-                        e.created_at, e.started_at, e.completed_at
+                        e.created_at, e.started_at, e.completed_at,
+                        e.root_execution_id
                  FROM workflow_executions e
                  JOIN deployment_workflows dw ON dw.workflow_id = e.workflow_id
                    AND dw.deployment_id = e.deployment_id
@@ -240,7 +241,8 @@ impl Database {
             // No session_id — single execution
             sqlx::query(
                 "SELECT e.id, e.workflow_id, e.payload, e.result,
-                        e.created_at, e.started_at, e.completed_at
+                        e.created_at, e.started_at, e.completed_at,
+                        e.root_execution_id
                  FROM workflow_executions e
                  JOIN deployment_workflows dw ON dw.workflow_id = e.workflow_id
                    AND dw.deployment_id = e.deployment_id
@@ -310,11 +312,16 @@ impl Database {
         let mut tool_call_count: i64 = 0;
 
         for exec_row in &session_execution_rows {
+            let exec_id: Uuid = exec_row.get("id");
+            let exec_root_id: Option<Uuid> = exec_row.get("root_execution_id");
             let exec_payload: serde_json::Value = exec_row.get("payload");
             let exec_result: Option<serde_json::Value> = exec_row.get("result");
             let exec_created: DateTime<Utc> = exec_row.get("created_at");
             let exec_started: Option<DateTime<Utc>> = exec_row.get("started_at");
             let exec_completed: Option<DateTime<Utc>> = exec_row.get("completed_at");
+
+            // Use root_execution_id if present, otherwise fall back to the execution's own id
+            let entry_root_id = exec_root_id.unwrap_or(exec_id).to_string();
 
             // User message from payload
             let user_content = extract_user_input(&exec_payload);
@@ -325,6 +332,7 @@ impl Database {
                     "data": {
                         "role": "user",
                         "content": content,
+                        "root_execution_id": entry_root_id,
                     }
                 }));
             }
@@ -353,6 +361,7 @@ impl Database {
                                 "tool_name": tool_name,
                                 "status": tool_status,
                                 "result": tr.get("result"),
+                                "root_execution_id": entry_root_id,
                             }
                         }));
                     }
@@ -374,6 +383,7 @@ impl Database {
                             "data": {
                                 "role": "assistant",
                                 "content": content,
+                                "root_execution_id": entry_root_id,
                             }
                         }));
                     }

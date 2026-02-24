@@ -203,6 +203,13 @@ export const SessionDetailPage: React.FC = () => {
                   entry={entry}
                   isExpanded={expandedItems.has(index)}
                   onToggle={() => toggleExpanded(index)}
+                  onNavigateToTrace={() => {
+                    const rootExecutionId = entry.data?.root_execution_id;
+                    if (rootExecutionId) {
+                      const traceId = rootExecutionId.replace(/-/g, '');
+                      navigate(`/traces/${traceId}`);
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -245,11 +252,12 @@ const TimelineRow: React.FC<{
   entry: TimelineEntry;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ entry, isExpanded, onToggle }) => {
+  onNavigateToTrace: () => void;
+}> = ({ entry, isExpanded, onToggle, onNavigateToTrace }) => {
   if (entry.entry_type === 'user_message') {
     const text = extractText(entry.data?.content);
     return (
-      <div className="cursor-pointer hover:bg-gray-50" onClick={onToggle}>
+      <div className="cursor-pointer hover:bg-gray-50" onClick={onNavigateToTrace}>
         <div className="flex items-start gap-2 px-4 py-2">
           <User className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -260,9 +268,9 @@ const TimelineRow: React.FC<{
               </span>
               {text.length > 120 &&
                 (isExpanded ? (
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
+                  <ChevronDown className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ) : (
-                  <ChevronRight className="h-3 w-3 text-gray-400" />
+                  <ChevronRight className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ))}
             </div>
             <div
@@ -282,7 +290,7 @@ const TimelineRow: React.FC<{
   if (entry.entry_type === 'assistant_message') {
     const text = extractText(entry.data?.content);
     return (
-      <div className="cursor-pointer hover:bg-gray-50" onClick={onToggle}>
+      <div className="cursor-pointer hover:bg-gray-50" onClick={onNavigateToTrace}>
         <div className="flex items-start gap-2 px-4 py-2">
           <Bot className="h-3.5 w-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -295,9 +303,9 @@ const TimelineRow: React.FC<{
               </span>
               {text.length > 120 &&
                 (isExpanded ? (
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
+                  <ChevronDown className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ) : (
-                  <ChevronRight className="h-3 w-3 text-gray-400" />
+                  <ChevronRight className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ))}
             </div>
             {isExpanded ? (
@@ -319,7 +327,7 @@ const TimelineRow: React.FC<{
     const toolName = entry.data?.tool_name || 'Tool Call';
     const toolStatus = entry.data?.status || 'completed';
     return (
-      <div className="cursor-pointer hover:bg-gray-50" onClick={onToggle}>
+      <div className="cursor-pointer hover:bg-gray-50" onClick={onNavigateToTrace}>
         <div className="flex items-start gap-2 px-4 py-1.5 pl-8">
           <Wrench className="h-3 w-3 text-gray-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -337,9 +345,9 @@ const TimelineRow: React.FC<{
               </span>
               {entry.data?.result != null &&
                 (isExpanded ? (
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
+                  <ChevronDown className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ) : (
-                  <ChevronRight className="h-3 w-3 text-gray-400" />
+                  <ChevronRight className="h-3 w-3 text-gray-400" onClick={(e) => { e.stopPropagation(); onToggle(); }} />
                 ))}
             </div>
             {isExpanded && entry.data?.result != null && (

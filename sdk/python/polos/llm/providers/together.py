@@ -1,22 +1,16 @@
-"""Together provider - routes to OpenAI provider with chat_completions API."""
+"""Together AI provider via LiteLLM."""
+
+import os
 
 from .base import register_provider
-from .openai import OpenAIProvider
+from .litellm_provider import LiteLLMProvider
 
 
 @register_provider("together")
-class TogetherProvider(OpenAIProvider):
-    """Together provider using OpenAI provider with Chat Completions API."""
+class TogetherProvider(LiteLLMProvider):
+    """Together AI provider for open-source models."""
 
-    def __init__(self, api_key=None):
-        """
-        Initialize Together provider.
-
-        Args:
-            api_key: Together API key. If not provided, uses TOGETHER_API_KEY env var.
-        """
-        import os
-
+    def __init__(self, api_key=None, **kwargs):
         together_api_key = api_key or os.getenv("TOGETHER_API_KEY")
         if not together_api_key:
             raise ValueError(
@@ -24,17 +18,4 @@ class TogetherProvider(OpenAIProvider):
                 "or pass api_key parameter."
             )
 
-        try:
-            from openai import AsyncOpenAI  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "OpenAI SDK not installed. Install it with: pip install 'polos[together]'"
-            ) from None
-
-        # Initialize with Together's base URL and chat_completions API version
-        super().__init__(
-            api_key=together_api_key,
-            base_url="https://api.together.xyz/v1",
-            llm_api="chat_completions",
-        )
-        self.supports_structured_output = False
+        super().__init__(provider_prefix="together_ai", api_key=together_api_key, **kwargs)

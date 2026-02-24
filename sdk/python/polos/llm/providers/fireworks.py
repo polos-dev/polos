@@ -1,22 +1,16 @@
-"""Fireworks provider - routes to OpenAI provider with chat_completions API."""
+"""Fireworks AI provider via LiteLLM."""
+
+import os
 
 from .base import register_provider
-from .openai import OpenAIProvider
+from .litellm_provider import LiteLLMProvider
 
 
 @register_provider("fireworks")
-class FireworksProvider(OpenAIProvider):
-    """Fireworks provider using OpenAI provider with Chat Completions API."""
+class FireworksProvider(LiteLLMProvider):
+    """Fireworks AI provider for fast open-source model inference."""
 
-    def __init__(self, api_key=None):
-        """
-        Initialize Fireworks provider.
-
-        Args:
-            api_key: Fireworks API key. If not provided, uses FIREWORKS_API_KEY env var.
-        """
-        import os
-
+    def __init__(self, api_key=None, **kwargs):
         fireworks_api_key = api_key or os.getenv("FIREWORKS_API_KEY")
         if not fireworks_api_key:
             raise ValueError(
@@ -24,18 +18,4 @@ class FireworksProvider(OpenAIProvider):
                 "environment variable or pass api_key parameter."
             )
 
-        try:
-            from openai import AsyncOpenAI  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "OpenAI SDK not installed. Install it with: pip install 'polos[fireworks]'"
-            ) from None
-
-        # Initialize with Fireworks' base URL and chat_completions API version
-        # Fireworks supports structured output
-        super().__init__(
-            api_key=fireworks_api_key,
-            base_url="https://api.fireworks.ai/inference/v1",
-            llm_api="chat_completions",
-        )
-        self.supports_structured_output = True
+        super().__init__(provider_prefix="fireworks_ai", api_key=fireworks_api_key, **kwargs)

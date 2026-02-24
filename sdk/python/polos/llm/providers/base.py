@@ -157,6 +157,8 @@ def get_provider(provider_name: str, **kwargs) -> LLMProvider:
     provider_modules = {
         "openai": ".openai",
         "anthropic": ".anthropic",
+        "litellm": ".litellm_provider",
+        "ollama": ".ollama",
         "gemini": ".gemini",
         "groq": ".groq",
         "fireworks": ".fireworks",
@@ -180,6 +182,10 @@ def get_provider(provider_name: str, **kwargs) -> LLMProvider:
             from . import openai  # noqa: F401
         elif provider_name_lower == "anthropic":
             from . import anthropic  # noqa: F401
+        elif provider_name_lower == "litellm":
+            from . import litellm_provider  # noqa: F401
+        elif provider_name_lower == "ollama":
+            from . import ollama  # noqa: F401
         elif provider_name_lower == "gemini":
             from . import gemini  # noqa: F401
         elif provider_name_lower == "groq":

@@ -7,6 +7,7 @@ pub mod executions;
 pub mod models;
 pub mod projects;
 pub mod schedules;
+pub mod sessions;
 pub mod state;
 pub mod step_outputs;
 pub mod tools;

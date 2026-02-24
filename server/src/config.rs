@@ -13,12 +13,25 @@ pub struct ServerConfig {
     pub ui_port: u16,
     #[serde(default)]
     pub hmac_secret: String,
+    /// Deployment ID used by `polos dev` and all CLI commands.
+    /// Falls back to POLOS_DEPLOYMENT_ID env var, then "v1".
+    #[serde(default)]
+    pub deployment_id: Option<String>,
     /// Extra environment variables passed to the orchestrator process.
     #[serde(default)]
     pub env: HashMap<String, String>,
 }
 
 impl ServerConfig {
+    /// Returns the effective deployment ID: config value > POLOS_DEPLOYMENT_ID env var > "v1"
+    pub fn effective_deployment_id(&self) -> String {
+        self.deployment_id
+            .clone()
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::env::var("POLOS_DEPLOYMENT_ID").ok())
+            .unwrap_or_else(|| "v1".to_string())
+    }
+
     pub fn config_dir() -> Result<PathBuf> {
         let dir = dirs::home_dir()
             .context("Failed to get home directory")?

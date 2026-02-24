@@ -164,3 +164,58 @@ export interface WorkflowRunSummary {
   result?: any;
   error?: string;
 }
+
+// Session types
+export interface SessionListItem {
+  execution_id: string;
+  agent_id: string;
+  session_id?: string;
+  status: string;
+  user_message_preview?: string;
+  created_at: string;
+  total_tokens?: number;
+  tool_call_count: number;
+  approval_count: number;
+  execution_count?: number;
+  error?: string;
+}
+
+export interface TimelineEntry {
+  entry_type:
+    | 'user_message'
+    | 'assistant_message'
+    | 'tool_call'
+    | 'approval_request'
+    | 'approval_response';
+  timestamp: string;
+  data: any;
+}
+
+export interface ApprovalEntry {
+  step_key: string;
+  requested_at: string;
+  resolved_at?: string;
+  status: string;
+  data?: any;
+}
+
+export interface SessionDetail {
+  execution_id: string;
+  agent_id: string;
+  session_id?: string;
+  status: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  error?: string;
+  payload: any;
+  result?: any;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  tool_call_count: number;
+  approval_count: number;
+  timeline: TimelineEntry[];
+  approvals: ApprovalEntry[];
+}

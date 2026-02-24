@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fs;
-use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
@@ -64,38 +63,34 @@ fn stop_process(pid_file: &std::path::Path, name: &str) -> Result<bool> {
 
     #[cfg(unix)]
     {
-        // Check if process is running
-        let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
+        let pid = pid as libc::pid_t;
 
-        if !check.map(|o| o.status.success()).unwrap_or(false) {
+        // Check if process is running (signal 0 = check existence)
+        if unsafe { libc::kill(pid, 0) } != 0 {
             tracing::info!("{} (PID: {}) was not running", name, pid);
             return Ok(false);
         }
 
-        // Send SIGTERM for graceful shutdown
-        tracing::info!("Sending SIGTERM to {} (PID: {})", name, pid);
-        let _ = Command::new("kill")
-            .arg("-TERM")
-            .arg(pid.to_string())
-            .output();
+        // Kill the entire process group (negative PID) so child processes are also killed.
+        // The process was started with process_group(0), so its PID == its PGID.
+        let pgid = -pid;
+
+        // Send SIGTERM to process group for graceful shutdown
+        tracing::info!("Sending SIGTERM to {} process group (PID: {})", name, pid);
+        unsafe { libc::kill(pgid, libc::SIGTERM) };
 
         // Wait up to 5 seconds for graceful shutdown
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
-            let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
-
-            if !check.map(|o| o.status.success()).unwrap_or(false) {
+            if unsafe { libc::kill(pid, 0) } != 0 {
                 tracing::info!("{} stopped gracefully", name);
                 return Ok(true);
             }
         }
 
-        // Force kill if still running
+        // Force kill the entire process group if still running
         tracing::warn!("{} did not stop gracefully, forcing shutdown", name);
-        let _ = Command::new("kill")
-            .arg("-KILL")
-            .arg(pid.to_string())
-            .output();
+        unsafe { libc::kill(pgid, libc::SIGKILL) };
 
         thread::sleep(Duration::from_millis(100));
         return Ok(true);
@@ -103,6 +98,8 @@ fn stop_process(pid_file: &std::path::Path, name: &str) -> Result<bool> {
 
     #[cfg(windows)]
     {
+        use std::process::Command;
+
         // On Windows, use taskkill
         let result = Command::new("taskkill")
             .arg("/PID")

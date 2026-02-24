@@ -13,6 +13,7 @@ def assistant_agent_template(provider: ProviderConfig) -> str:
 sandbox = sandbox_tools(
     SandboxToolsConfig(
         env="local",
+        scope="session",
     )
 )
 

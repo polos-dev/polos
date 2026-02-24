@@ -230,7 +230,10 @@ fn build_worker_env(config: &ServerConfig, worker_port: u16) -> Vec<(String, Str
     );
     env_map.insert("POLOS_PROJECT_ID".to_string(), config.project_id.clone());
     env_map.insert("POLOS_API_KEY".to_string(), config.api_key.clone());
-    env_map.insert("POLOS_DEPLOYMENT_ID".to_string(), "v1".to_string());
+    env_map.insert(
+        "POLOS_DEPLOYMENT_ID".to_string(),
+        config.effective_deployment_id(),
+    );
     env_map.insert("POLOS_WORKER_PORT".to_string(), worker_port.to_string());
 
     env_map.into_iter().collect()

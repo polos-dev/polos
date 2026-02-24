@@ -8,6 +8,7 @@ import {
   Network,
   FileSearch,
   LogOut,
+  MessagesSquare,
   Wrench,
   BookOpen,
   Github,
@@ -131,6 +132,12 @@ export const LeftNavigation: React.FC<LeftNavigationProps> = ({
   ];
 
   const observableItems: NavigationItem[] = [
+    {
+      id: 'sessions',
+      label: 'Sessions',
+      icon: MessagesSquare,
+      href: '/sessions',
+    },
     { id: 'traces', label: 'Traces', icon: FileSearch, href: '/traces' },
   ];
 

@@ -9,6 +9,7 @@ pub mod executions;
 pub mod health;
 pub mod projects;
 pub mod schedules;
+pub mod sessions;
 pub mod slack;
 pub mod state;
 pub mod tools;

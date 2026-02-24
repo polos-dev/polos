@@ -6,6 +6,7 @@ import { defineAgent, maxSteps, sandboxTools } from '@polos/sdk';
 
 const tools = sandboxTools({
   env: 'local',
+  scope: 'session',
 });
 
 export const codingAgent = defineAgent({

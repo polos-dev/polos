@@ -12,7 +12,7 @@ pub async fn run(agent_id: &str, input: Option<String>, file: Option<String>) ->
             "input": prompt,
         }),
         session_id: None,
-        deployment_id: None,
+        deployment_id: Some(orch.deployment_id().to_string()),
     };
 
     let response = orch.submit_workflow(agent_id, &request).await?;

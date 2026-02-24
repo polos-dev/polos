@@ -175,6 +175,19 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Ensure Ctrl+C always terminates the process immediately.
+    // Without this, blocking syscalls (database connects, TLS handshakes) can
+    // swallow SIGINT via SA_RESTART, making the CLI appear frozen.
+    // Skip for commands that register their own graceful shutdown handler.
+    match &cli.command {
+        Commands::Dev { .. } | Commands::ServeUi { .. } => {}
+        _ => {
+            let _ = ctrlc::set_handler(|| {
+                std::process::exit(130);
+            });
+        }
+    }
+
     match cli.command {
         Commands::Server { command } => match command {
             ServerCommands::Start => commands::start::run().await,

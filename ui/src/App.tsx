@@ -13,6 +13,8 @@ import { AccountSettingsPage } from '@/pages/account/Settings';
 import { ProjectSettingsPage } from '@/pages/projects/Settings';
 import { TraceDetailPage } from '@/pages/traces/TraceDetail';
 import { TraceListPage } from '@/pages/traces/TraceList';
+import { SessionListPage } from '@/pages/sessions/SessionList';
+import { SessionDetailPage } from '@/pages/sessions/SessionDetail';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
 import { ApprovePage } from '@/pages/approve/ApprovePage';
@@ -56,6 +58,8 @@ function App() {
         <Route path="tools" element={<ToolsPage />} />
         <Route path="tools/:toolId/run" element={<ToolRunPage />} />
         <Route path="tools/:toolId/traces" element={<ToolTraceListPage />} />
+        <Route path="sessions" element={<SessionListPage />} />
+        <Route path="sessions/:executionId" element={<SessionDetailPage />} />
         <Route path="traces" element={<TraceListPage />} />
         <Route path="traces/:traceId" element={<TraceDetailPage />} />
         <Route path="account/settings" element={<AccountSettingsPage />} />

@@ -10,6 +10,7 @@ import {
 
 const sandbox = sandboxTools({
   env: 'local',
+  scope: 'session',
 });
 
 export const assistantAgent = defineAgent({

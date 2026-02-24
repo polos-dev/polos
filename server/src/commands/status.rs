@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fs;
-use std::process::Command;
 
 use crate::config::ServerConfig;
 
@@ -20,14 +19,19 @@ pub async fn run() -> Result<()> {
     println!("Polos Server Status");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-    // Check orchestrator (uses /health endpoint)
+    // Check orchestrator
     let orchestrator_pid = read_pid(&orchestrator_pid_file);
     let orchestrator_running = orchestrator_pid.map(is_pid_running).unwrap_or(false);
-    let orchestrator_responding = check_http_health(&format!(
-        "http://127.0.0.1:{}/health",
-        config.orchestrator_port
-    ))
-    .await;
+    // Only attempt HTTP health check if the process is actually running
+    let orchestrator_responding = if orchestrator_running {
+        check_http_health(&format!(
+            "http://127.0.0.1:{}/health",
+            config.orchestrator_port
+        ))
+        .await
+    } else {
+        false
+    };
 
     print_service_status(
         "Orchestrator",
@@ -40,7 +44,12 @@ pub async fn run() -> Result<()> {
     // Check UI server
     let ui_pid = read_pid(&ui_pid_file);
     let ui_running = ui_pid.map(is_pid_running).unwrap_or(false);
-    let ui_responding = check_http_health(&format!("http://127.0.0.1:{}", config.ui_port)).await;
+    // Only attempt HTTP health check if the process is actually running
+    let ui_responding = if ui_running {
+        check_http_health(&format!("http://127.0.0.1:{}", config.ui_port)).await
+    } else {
+        false
+    };
 
     print_service_status(
         "UI Server",
@@ -78,8 +87,7 @@ fn read_pid(pid_file: &std::path::Path) -> Option<u32> {
 fn is_pid_running(pid: u32) -> bool {
     #[cfg(unix)]
     {
-        let output = Command::new("kill").arg("-0").arg(pid.to_string()).output();
-        output.map(|o| o.status.success()).unwrap_or(false)
+        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
     }
 
     #[cfg(not(unix))]
@@ -91,9 +99,11 @@ fn is_pid_running(pid: u32) -> bool {
 
 async fn check_http_health(url: &str) -> bool {
     let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
         .timeout(std::time::Duration::from_secs(3))
         .build()
         .unwrap_or_default();
+
     match client.get(url).send().await {
         Ok(resp) => resp.status().is_success() || resp.status() == 404,
         Err(_) => false,

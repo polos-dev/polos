@@ -7,6 +7,7 @@ def coding_agent_template(provider: ProviderConfig) -> str:
 tools = sandbox_tools(
     SandboxToolsConfig(
         env="local",
+        scope="session",
     )
 )
 

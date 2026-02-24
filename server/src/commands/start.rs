@@ -3,6 +3,9 @@ use std::fs;
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 use crate::config::ServerConfig;
 use crate::init;
 use crate::utils;
@@ -82,9 +85,7 @@ fn check_pid_running(pid_file: &std::path::Path) -> bool {
         if let Ok(pid) = pid_str.trim().parse::<u32>() {
             #[cfg(unix)]
             {
-                // Check if process exists by sending signal 0
-                let output = Command::new("kill").arg("-0").arg(pid.to_string()).output();
-                return output.map(|o| o.status.success()).unwrap_or(false);
+                return unsafe { libc::kill(pid as libc::pid_t, 0) } == 0;
             }
             #[cfg(not(unix))]
             {
@@ -149,6 +150,9 @@ async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
         cmd.env(key, value);
     }
 
+    #[cfg(unix)]
+    cmd.process_group(0); // Create its own process group for clean shutdown
+
     let child = cmd
         .stdout(Stdio::from(stdout_log))
         .stderr(Stdio::from(stderr_log))
@@ -162,8 +166,7 @@ async fn start_orchestrator(config: &ServerConfig) -> Result<u32> {
 
     #[cfg(unix)]
     {
-        let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
-        if !check.map(|o| o.status.success()).unwrap_or(false) {
+        if unsafe { libc::kill(pid as libc::pid_t, 0) } != 0 {
             anyhow::bail!(
                 "Orchestrator process exited immediately. Check logs at {:?}",
                 logs_dir.join("orchestrator.log")
@@ -185,14 +188,20 @@ async fn start_ui_server(config: &ServerConfig) -> Result<u32> {
     let stdout_log = fs::File::create(logs_dir.join("ui.log"))?;
     let stderr_log = stdout_log.try_clone()?;
 
-    let child = Command::new(&exe_path)
+    let mut ui_cmd = Command::new(&exe_path);
+    ui_cmd
         .arg("serve-ui")
         .arg("--port")
         .arg(config.ui_port.to_string())
         .arg("--orchestrator-port")
         .arg(config.orchestrator_port.to_string())
         .stdout(Stdio::from(stdout_log))
-        .stderr(Stdio::from(stderr_log))
+        .stderr(Stdio::from(stderr_log));
+
+    #[cfg(unix)]
+    ui_cmd.process_group(0); // Create its own process group for clean shutdown
+
+    let child = ui_cmd
         .spawn()
         .with_context(|| format!("Failed to start UI server: {:?}", exe_path))?;
 
@@ -203,8 +212,7 @@ async fn start_ui_server(config: &ServerConfig) -> Result<u32> {
 
     #[cfg(unix)]
     {
-        let check = Command::new("kill").arg("-0").arg(pid.to_string()).output();
-        if !check.map(|o| o.status.success()).unwrap_or(false) {
+        if unsafe { libc::kill(pid as libc::pid_t, 0) } != 0 {
             let logs_path = ServerConfig::config_dir()?.join("logs").join("ui.log");
             anyhow::bail!(
                 "UI server process exited immediately. Check logs at {:?}",
@@ -262,6 +270,9 @@ pub async fn initialize() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(5173);
 
+    // Read deployment ID from environment if set
+    let deployment_id = std::env::var("POLOS_DEPLOYMENT_ID").ok();
+
     // Save config
     let config = ServerConfig {
         database_url,
@@ -270,6 +281,7 @@ pub async fn initialize() -> Result<()> {
         orchestrator_port,
         ui_port,
         hmac_secret,
+        deployment_id,
         env: Default::default(),
     };
     config.save()?;

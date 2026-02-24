@@ -7,6 +7,8 @@ import {
   type WorkflowRunSummary,
   type Trace,
   type TraceListItem,
+  type SessionListItem,
+  type SessionDetail,
 } from '@/types/models';
 import { type CreateProjectRequest } from '@/types/api';
 
@@ -681,6 +683,40 @@ export const api = {
       );
     }
     return response.json();
+  },
+
+  // Session functions
+  async getSessions(
+    projectId: string,
+    params?: {
+      start_time?: string;
+      end_time?: string;
+      status?: string;
+      agent_id?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ sessions: SessionListItem[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.start_time) queryParams.append('start_time', params.start_time);
+    if (params?.end_time) queryParams.append('end_time', params.end_time);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.agent_id) queryParams.append('agent_id', params.agent_id);
+    if (params?.limit) queryParams.append('limit', String(params.limit));
+    if (params?.offset) queryParams.append('offset', String(params.offset));
+
+    const query = queryParams.toString();
+    return getJSON<{ sessions: SessionListItem[] }>(
+      `/api/v1/sessions${query ? `?${query}` : ''}`,
+      projectId
+    );
+  },
+
+  async getSessionDetail(
+    projectId: string,
+    executionId: string
+  ): Promise<SessionDetail> {
+    return getJSON<SessionDetail>(`/api/v1/sessions/${executionId}`, projectId);
   },
 
   // Trace functions

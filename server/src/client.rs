@@ -10,6 +10,7 @@ pub struct OrchestratorClient {
     base_url: String,
     project_id: String,
     api_key: String,
+    deployment_id: String,
 }
 
 // --- Response types ---
@@ -139,6 +140,7 @@ impl OrchestratorClient {
             base_url,
             project_id: config.project_id.clone(),
             api_key: config.api_key.clone(),
+            deployment_id: config.effective_deployment_id(),
         }
     }
 
@@ -152,6 +154,10 @@ impl OrchestratorClient {
 
     pub fn api_key(&self) -> &str {
         &self.api_key
+    }
+
+    pub fn deployment_id(&self) -> &str {
+        &self.deployment_id
     }
 
     // --- Agent operations ---

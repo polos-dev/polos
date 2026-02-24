@@ -309,6 +309,21 @@ fn verify_slack_signature(headers: &HeaderMap, body: &str) -> Result<(), StatusC
     Ok(())
 }
 
+// ── Slack Thread Context (conversations.replies) ─────────────────────
+
+#[derive(serde::Deserialize)]
+struct SlackConversationsRepliesResponse {
+    ok: bool,
+    messages: Option<Vec<SlackThreadMessage>>,
+}
+
+#[derive(serde::Deserialize)]
+struct SlackThreadMessage {
+    text: Option<String>,
+    ts: String,
+    bot_id: Option<String>,
+}
+
 // ── Slack Events API (app_mention) ────────────────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -379,6 +394,59 @@ fn parse_agent_id(text: &str) -> Option<&str> {
         }
     }
     None
+}
+
+/// Fetch recent thread messages that appeared after the bot's last reply.
+///
+/// Calls Slack `conversations.replies` to get thread messages, finds the last
+/// bot message (identified by `bot_id`), and collects all non-empty messages
+/// between that and `current_ts`. Returns the combined text joined by `\n`,
+/// or `None` if there are no intervening messages or on any failure.
+async fn fetch_recent_thread_context(
+    channel: &str,
+    thread_ts: &str,
+    current_ts: &str,
+) -> Option<String> {
+    let token = std::env::var("SLACK_BOT_TOKEN").ok()?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://slack.com/api/conversations.replies")
+        .bearer_auth(&token)
+        .query(&[("channel", channel), ("ts", thread_ts), ("limit", "30")])
+        .send()
+        .await
+        .ok()?;
+
+    let body: SlackConversationsRepliesResponse = resp.json().await.ok()?;
+
+    if !body.ok {
+        return None;
+    }
+
+    let messages = body.messages?;
+
+    // Find the index of the last bot message in the thread
+    let last_bot_idx = messages.iter().rposition(|m| m.bot_id.is_some());
+
+    // Collect messages after the last bot message, excluding current_ts
+    let start = match last_bot_idx {
+        Some(idx) => idx + 1,
+        None => return None, // No bot message found → nothing to prepend
+    };
+
+    let parts: Vec<&str> = messages[start..]
+        .iter()
+        .filter(|m| m.ts != current_ts)
+        .filter_map(|m| m.text.as_deref())
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    Some(parts.join("\n"))
 }
 
 /// Handle Slack Events API callbacks (e.g., app_mention).
@@ -525,8 +593,21 @@ pub async fn handle_event(
         }
     });
 
+    // Build input text — for follow-ups, prepend any intervening thread messages
+    let input_text = if is_follow_up {
+        if let Some(context) =
+            fetch_recent_thread_context(&event.channel, thread_ts, &event.ts).await
+        {
+            format!("{}\n{}", context, event.text)
+        } else {
+            event.text.clone()
+        }
+    } else {
+        event.text.clone()
+    };
+
     // Create execution
-    let payload = serde_json::json!({ "input": event.text });
+    let payload = serde_json::json!({ "input": input_text });
     let queue_name = agent_id.clone();
 
     let (_execution_id, _created_at) = state
@@ -814,6 +895,50 @@ mod tests {
         let w: SlackEventWrapper = serde_json::from_str(json).unwrap();
         assert_eq!(w.api_app_id, "A12345");
         assert_eq!(w.event.thread_ts.unwrap(), "1234567890.123456");
+    }
+
+    // ── SlackConversationsRepliesResponse / SlackThreadMessage ────────
+
+    #[test]
+    fn conversations_replies_deserializes_ok() {
+        let json = r#"{
+            "ok": true,
+            "messages": [
+                { "text": "hello", "ts": "1.1", "bot_id": "B123" },
+                { "text": "world", "ts": "1.2" }
+            ]
+        }"#;
+        let r: SlackConversationsRepliesResponse = serde_json::from_str(json).unwrap();
+        assert!(r.ok);
+        let msgs = r.messages.unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].bot_id.as_deref(), Some("B123"));
+        assert!(msgs[1].bot_id.is_none());
+    }
+
+    #[test]
+    fn conversations_replies_deserializes_error() {
+        let json = r#"{ "ok": false }"#;
+        let r: SlackConversationsRepliesResponse = serde_json::from_str(json).unwrap();
+        assert!(!r.ok);
+        assert!(r.messages.is_none());
+    }
+
+    #[test]
+    fn thread_message_optional_text() {
+        let json = r#"{ "ts": "1.0" }"#;
+        let m: SlackThreadMessage = serde_json::from_str(json).unwrap();
+        assert!(m.text.is_none());
+        assert_eq!(m.ts, "1.0");
+        assert!(m.bot_id.is_none());
+    }
+
+    #[test]
+    fn conversations_replies_empty_messages() {
+        let json = r#"{ "ok": true, "messages": [] }"#;
+        let r: SlackConversationsRepliesResponse = serde_json::from_str(json).unwrap();
+        assert!(r.ok);
+        assert!(r.messages.unwrap().is_empty());
     }
 
     // ── parse_agent_id ───────────────────────────────────────────────

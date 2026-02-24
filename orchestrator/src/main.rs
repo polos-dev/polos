@@ -918,6 +918,12 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/traces/:trace_id",
             get(api::traces::get_trace_by_id),
         )
+        // Session endpoints
+        .route("/api/v1/sessions", get(api::sessions::get_sessions))
+        .route(
+            "/api/v1/sessions/:execution_id",
+            get(api::sessions::get_session_detail),
+        )
         // Event system endpoints
         .route("/api/v1/events/publish", post(api::events::publish_event))
         .route("/api/v1/events", get(api::events::get_events))

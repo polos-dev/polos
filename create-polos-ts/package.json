@@ -19,6 +19,11 @@
     "scaffolding",
     "cli"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/polos-dev/polos",
+    "directory": "create-polos-ts"
+  },
   "license": "Apache-2.0",
   "dependencies": {
     "@clack/prompts": "^0.9.1"
